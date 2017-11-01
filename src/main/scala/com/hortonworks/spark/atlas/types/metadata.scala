@@ -107,7 +107,7 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef(
       "unsupportedFeatures", new AtlasArrayType(new AtlasStringType)))
 
-  // ========= Table type =========
+  // ========= Process type =========
   val PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
     PROCESS_TYPE_STRING,
     "",

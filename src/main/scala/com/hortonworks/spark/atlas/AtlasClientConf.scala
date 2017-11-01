@@ -46,12 +46,17 @@ class AtlasClientConf(loadFromSysProps: Boolean) {
   }
 
   def setAll(confs: Iterable[(String, String)]): AtlasClientConf = {
-    confs.foreach { case (k, v) => configMap.put(k, v) }
+    confs.foreach { case (k, v) =>
+      configMap.put(k.stripPrefix("spark."), v)
+    }
+
     this
   }
 }
 
 object AtlasClientConf {
+  val ATLAS_REST_ENDPOINT = "atlas.rest.address"
+
   def fromSparkConf(conf: SparkConf): AtlasClientConf = {
     new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))
   }
