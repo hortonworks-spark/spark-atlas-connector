@@ -17,16 +17,50 @@
 
 package com.hortonworks.spark.atlas
 
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
-import org.apache.spark.sql.catalyst.catalog.CreateDatabaseEvent
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
-class SparkEntitiesTracker extends SparkListener {
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.{CreateDatabaseEvent, ExternalCatalog, ExternalCatalogEvent}
+
+import com.hortonworks.spark.atlas.types.AtlasEntityUtil
+import com.hortonworks.spark.atlas.utils.Logging
+
+class SparkEntitiesTracker(atlasClientConf: AtlasClientConf) extends SparkListener with Logging {
+  private val capacity = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
+
+  private val timeout = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
+
+  private lazy val externalCatalog = getExternalCatalog()
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
+      case e: ExternalCatalogEvent =>
+        if (!eventQueue.offer(e, timeout, TimeUnit.MILLISECONDS)) {
+          logError(s"Fail to put event $e into queue, will throw it")
+        }
+    }
+  }
+
+  def eventProcess(): Unit = {
+    Option(eventQueue.poll()).foreach {
       case CreateDatabaseEvent(db) =>
+        val dbDefinition = externalCatalog.getDatabase(db)
+        val entity = AtlasEntityUtil.dbToEntity(dbDefinition)
         ???
     }
-    ???
+  }
+
+  private def getExternalCatalog(): ExternalCatalog = {
+    val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
+    if (session.isEmpty) {
+      throw new IllegalStateException("Cannot find active or default SparkSession in the current" +
+        " context")
+    }
+
+    val catalog = session.get.sharedState.externalCatalog
+    require(catalog != null, "catalog is null")
+    catalog
   }
 }

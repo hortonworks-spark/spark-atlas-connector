@@ -118,7 +118,6 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("physicalPlanDescription", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("sparkPlanInfo", "string"))
+    AtlasTypeUtil.createRequiredAttrDef("physicalPlanDescription", new AtlasStringType))
 }
 

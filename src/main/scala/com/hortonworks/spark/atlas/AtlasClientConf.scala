@@ -17,9 +17,11 @@
 
 package com.hortonworks.spark.atlas
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkConf
 
-import scala.collection.mutable
+import com.hortonworks.spark.atlas.AtlasClientConf.ConfigEntry
 
 class AtlasClientConf(loadFromSysProps: Boolean) {
 
@@ -40,9 +42,16 @@ class AtlasClientConf(loadFromSysProps: Boolean) {
     this
   }
 
-
   def get(key: String, defaultValue: String): String = {
     configMap.getOrElse(key, defaultValue)
+  }
+
+  def getOption(key: String): Option[String] = {
+    configMap.get(key)
+  }
+
+  def get(t: ConfigEntry): String = {
+    configMap.get(t.key).getOrElse(t.defaultValue)
   }
 
   def setAll(confs: Iterable[(String, String)]): AtlasClientConf = {
@@ -55,7 +64,11 @@ class AtlasClientConf(loadFromSysProps: Boolean) {
 }
 
 object AtlasClientConf {
-  val ATLAS_REST_ENDPOINT = "atlas.rest.address"
+  case class ConfigEntry(key: String, defaultValue: String)
+
+  val ATLAS_REST_ENDPOINT = ConfigEntry("atlas.rest.address", "localhost:21000")
+  val BLOCKING_QUEUE_CAPACITY = ConfigEntry("atlas.blockQueue.size", "10000")
+  val BLOCKING_QUEUE_PUT_TIMEOUT = ConfigEntry("atlas.blockQueue.putTimeout.ms", "3000")
 
   def fromSparkConf(conf: SparkConf): AtlasClientConf = {
     new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))
