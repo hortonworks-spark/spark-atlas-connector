@@ -17,19 +17,29 @@
 
 package com.hortonworks.spark.atlas.types
 
+import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
+
 import scala.collection.JavaConverters._
-import org.apache.atlas.AtlasClient
+import org.apache.atlas.{AtlasClient, AtlasClientV2}
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.AtlasEntity.AtlasEntityWithExtInfo
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.types.StructType
 
-object AtlasEntityUtil {
+import scala.util.Try
+import scala.util.control.NonFatal
+
+object AtlasEntityUtils extends Logging {
+
+  def dbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
   def dbToEntity(dbDefinition: CatalogDatabase): AtlasEntity = {
     val entity = new AtlasEntity(metadata.DB_TYPE_STRING)
 
+    entity.setAttribute(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, dbUniqueAttribute(dbDefinition.name))
     entity.setAttribute("name", dbDefinition.name)
     entity.setAttribute("description", dbDefinition.description)
     entity.setAttribute("locationUri", dbDefinition.locationUri.toString)
@@ -37,9 +47,18 @@ object AtlasEntityUtil {
     entity
   }
 
-  def storageFormatToEntity(storageFormat: CatalogStorageFormat): AtlasEntity = {
+  def storageFormatUniqueAttribute(db: String, table: String): String = {
+    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.storageFormat"
+  }
+
+  def storageFormatToEntity(
+      storageFormat: CatalogStorageFormat,
+      db: String,
+      table: String): AtlasEntity = {
     val entity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
 
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      storageFormatUniqueAttribute(db, table))
     storageFormat.locationUri.foreach(entity.setAttribute("locationUri", _))
     storageFormat.inputFormat.foreach(entity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(entity.setAttribute("outputFormat", _))
@@ -49,15 +68,26 @@ object AtlasEntityUtil {
     entity
   }
 
-  def schemaToEntity(schema: StructType): List[AtlasEntity] = {
+  def columnUniqueAttribute(db: String, table: String, col: String): String = {
+    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.col-$col"
+  }
+
+  def schemaToEntity(schema: StructType, db: String, table: String): List[AtlasEntity] = {
     schema.map { struct =>
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
+
+      entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+        columnUniqueAttribute(db, table, struct.name))
       entity.setAttribute("name", struct.name)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("nullable", struct.nullable)
       entity.setAttribute("metadata", struct.metadata.toString())
       entity
     }.toList
+  }
+
+  def tableUniqueAttribute(db: String, table: String): String = {
+    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table"
   }
 
   def tableToEntity(
@@ -67,6 +97,9 @@ object AtlasEntityUtil {
       storageFormat: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      tableUniqueAttribute(tableDefinition.identifier.table,
+        tableDefinition.identifier.database.getOrElse("default")))
     entity.setAttribute("table", tableDefinition.identifier.table)
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, tableDefinition.identifier.table)
     entity.setAttribute("database", AtlasTypeUtil.getAtlasObjectId(db))
@@ -105,5 +138,62 @@ object AtlasEntityUtil {
     entity.setAttribute("inputs", inputs)
     entity.setAttribute("outputs", outputs)
     entity
+  }
+
+  def createEntity(entity: AtlasEntity, atlasClient: AtlasClientV2): Option[String] = {
+    try {
+      val response = atlasClient.createEntity(new AtlasEntityWithExtInfo(entity))
+      val mutatedEntities = response.getMutatedEntities
+
+      if (mutatedEntities.size() > 1) {
+        logWarn(s"Not just one entity is mutated, ${mutatedEntities.asScala.mkString(",")}")
+      } else if (mutatedEntities.size() == 0) {
+        logWarn(s"No entity is mutated")
+      }
+
+      mutatedEntities.asScala.headOption.map { case (_, en) =>
+        logInfo(s"Entity ${en.get(0).getTypeName} : ${en.get(0).getGuid} is created")
+        en.get(0).getGuid
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Fail to create entity: ${entity.getTypeName}", e)
+        None
+    }
+  }
+
+  def deleteEntity(entityType: String, attribute: String, atlasClient: AtlasClientV2): Unit = {
+    try {
+      atlasClient.deleteEntityByAttribute(entityType,
+        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava)
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Fail to delete entity with type $entityType and attribute $attribute")
+    }
+  }
+
+  def getEntity(
+      entityType: String,
+      attribute: String,
+      atlasClient: AtlasClientV2): Option[AtlasEntity] = {
+    Try {
+      atlasClient.getEntityByAttribute(entityType,
+        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava).getEntity
+    }.toOption
+  }
+
+  def updateEntity(
+      entityType: String,
+      attribute: String,
+      entity: AtlasEntity,
+      atlasClient: AtlasClientV2): Unit = {
+    try {
+      atlasClient.updateEntityByAttribute(entityType,
+        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava,
+        new AtlasEntityWithExtInfo(entity))
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Fail to update entity with type $entityType and attribute $attribute")
+    }
   }
 }

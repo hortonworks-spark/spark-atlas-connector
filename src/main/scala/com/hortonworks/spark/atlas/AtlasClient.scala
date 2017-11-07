@@ -17,11 +17,39 @@
 
 package com.hortonworks.spark.atlas
 
+import org.apache.atlas.AtlasClientV2
+import org.apache.atlas.utils.AuthenticationUtil
 import org.apache.spark.SparkEnv
 
 object AtlasClient {
   lazy val atlasClientConf = AtlasClientConf.fromSparkConf(SparkEnv.get.conf)
 
+  @volatile private var client: AtlasClientV2 = null
 
+  def atlasClient(): AtlasClientV2 = {
+    if (client == null) {
+      AtlasClient.synchronized {
+        if (client == null) {
+          if (!AuthenticationUtil.isKerberosAuthenticationEnabled) {
+            val basicAuth = Array(atlasClientConf.get(AtlasClientConf.CLIENT_USERNAME),
+              atlasClientConf.get(AtlasClientConf.CLIENT_PASSWORD))
+            client = new AtlasClientV2(getServerUrl(), basicAuth)
+          } else {
+            client = new AtlasClientV2(getServerUrl(): _*)
+          }
+        }
+      }
+    }
 
+    client
+  }
+
+  private def getServerUrl(): Array[String] = {
+    atlasClientConf.getOption(AtlasClientConf.ATLAS_REST_ENDPOINT.key).map { url =>
+      url.split(",")
+    }.getOrElse {
+      throw new IllegalArgumentException(s"Fail to get atlas.rest.address, please set " +
+        "via spark.atlas.rest.address in SparkConf")
+    }
+  }
 }

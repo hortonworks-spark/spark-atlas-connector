@@ -28,34 +28,47 @@ object classifications {
   val JDBC_CLASSIFICATION = "JdbcAccess"
   val KAFKA_CLASSIFICATION = "KafkaAccess"
   val HBASE_CLASSIFICATION = "HBaseAccess"
+  val STREAM_CLASSIFICATION = "StreamAccess"
 
   val DIMENSION_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
       DIMENSION_CLASSIFICATION,
       "Dimension Classification",
+      metadata.METADATA_VERSION,
       ImmutableSet.of[String]())
 
   val FACT_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     FACT_CLASSIFICATION,
     "Fact Classification",
+    metadata.METADATA_VERSION,
     ImmutableSet.of[String]())
 
   val FS_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     FS_CLASSIFICATION,
     "FileSystem Classification",
+    metadata.METADATA_VERSION,
     ImmutableSet.of[String]())
 
   val JDBC_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     JDBC_CLASSIFICATION,
     "JDBC Classification",
+    metadata.METADATA_VERSION,
     ImmutableSet.of[String]())
 
   val KAFKA_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     KAFKA_CLASSIFICATION,
     "Kafka Classification",
+    metadata.METADATA_VERSION,
     ImmutableSet.of[String]())
 
   val HBASE_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     HBASE_CLASSIFICATION,
     "HBase Classification",
+    metadata.METADATA_VERSION,
+    ImmutableSet.of[String]())
+
+  val STREAM_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
+    STREAM_CLASSIFICATION,
+    "Stream Classification",
+    metadata.METADATA_VERSION,
     ImmutableSet.of[String]())
 }

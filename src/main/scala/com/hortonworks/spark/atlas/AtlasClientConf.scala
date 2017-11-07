@@ -67,8 +67,12 @@ object AtlasClientConf {
   case class ConfigEntry(key: String, defaultValue: String)
 
   val ATLAS_REST_ENDPOINT = ConfigEntry("atlas.rest.address", "localhost:21000")
+
   val BLOCKING_QUEUE_CAPACITY = ConfigEntry("atlas.blockQueue.size", "10000")
   val BLOCKING_QUEUE_PUT_TIMEOUT = ConfigEntry("atlas.blockQueue.putTimeout.ms", "3000")
+
+  val CLIENT_USERNAME = ConfigEntry("atlas.client.username", "admin")
+  val CLIENT_PASSWORD = ConfigEntry("atlas.client.password", "admin")
 
   def fromSparkConf(conf: SparkConf): AtlasClientConf = {
     new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))

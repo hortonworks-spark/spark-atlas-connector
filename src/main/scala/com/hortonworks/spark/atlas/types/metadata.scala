@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.types
 
 import com.google.common.collect.{ImmutableMap, ImmutableSet}
+import org.apache.atlas.AtlasClient
 import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
@@ -36,7 +37,9 @@ object metadata {
     "",
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
-    AtlasTypeUtil.createUniqueRequiredAttrDef("name", new AtlasStringType),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("name", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
@@ -48,6 +51,8 @@ object metadata {
     "",
     METADATA_VERSION,
     ImmutableSet.of("Referenceable"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("inputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("outputFormat", new AtlasStringType),
@@ -67,6 +72,8 @@ object metadata {
     "",
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("name", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("type", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("nullable", new AtlasBooleanType),
@@ -83,6 +90,8 @@ object metadata {
     "",
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("table", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("database", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
