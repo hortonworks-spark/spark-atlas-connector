@@ -20,15 +20,18 @@ package com.hortonworks.spark.atlas
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import scala.util.control.NonFatal
+
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.QueryExecutionListener
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, AtlasTypeUtils, metadata}
+import org.apache.spark.SparkConf
+
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, metadata}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
-    extends SparkListener with QueryExecutionListener with Logging {
+    extends SparkListener with Logging {
 
   case class QueryExecutionDetail(funcName: String, qe: QueryExecution)
 
@@ -36,12 +39,20 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
 
   // A blocking queue for Spark Listener ExternalCatalog related events.
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
-  // A blocking queue for Spark SQL QueryExecution details.
-  private val queryExecutionQueue = new LinkedBlockingQueue[QueryExecutionDetail](capacity)
 
   private val timeout = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
 
   @volatile private var shouldContinue: Boolean = true
+  @volatile private var atlasClient: AtlasClient = null
+
+  val eventProcessThread = new Thread {
+    override def run(): Unit = {
+      eventProcess()
+    }
+  }
+  eventProcessThread.setName("spark-atlas-event-process")
+  eventProcessThread.setDaemon(true)
+  eventProcessThread.start()
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (!shouldContinue) {
@@ -58,23 +69,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     }
   }
 
-  override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-    if (!shouldContinue) {
-      return
-    }
-
-    val qeDetail = QueryExecutionDetail(funcName, qe)
-    if (!queryExecutionQueue.offer(qeDetail, timeout, TimeUnit.MILLISECONDS)) {
-      logError(s"Fail to put query execution $qeDetail into queue within time limit $timeout, " +
-        s"will throw it")
-    }
-  }
-
-  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-    // no-op
-  }
-
-  def eventProcess(): Unit = {
+  private def eventProcess(): Unit = {
     // initialize Atlas client before further processing event.
     if (!initializeAtlasClient()) {
       logError("Fail to initialize Atlas Client, will discard all the received events and stop " +
@@ -92,67 +87,74 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
           case CreateDatabaseEvent(db) =>
             val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
             val entity = AtlasEntityUtils.dbToEntity(dbDefinition)
-            AtlasEntityUtils.createEntity(entity, AtlasClient.atlasClient())
+            atlasClient.createEntity(entity)
             logInfo(s"Created db entity $db")
 
           case DropDatabaseEvent(db) =>
-            AtlasEntityUtils.deleteEntity(
+            atlasClient.deleteEntityWithUniqueAttr(
               metadata.DB_TYPE_STRING,
-              AtlasEntityUtils.dbUniqueAttribute(db),
-              AtlasClient.atlasClient())
+              AtlasEntityUtils.dbUniqueAttribute(db))
             logInfo(s"Deleted db entity $db")
 
           case CreateTableEvent(db, table) =>
             val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+            val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
 
             val schemaEntities = AtlasEntityUtils.schemaToEntity(tableDefinition.schema, db, table)
             schemaEntities.foreach { entity =>
-              AtlasEntityUtils.createEntity(entity, AtlasClient.atlasClient())
+              atlasClient.createEntity(entity)
             }
             val storageFormatEntity =
               AtlasEntityUtils.storageFormatToEntity(tableDefinition.storage, db, table)
 
-            val dbEntity = AtlasEntityUtils.getEntity(
-              metadata.DB_TYPE_STRING,
-              AtlasEntityUtils.dbUniqueAttribute(db),
-              AtlasClient.atlasClient())
+            val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
+            atlasClient.createEntity(dbEntity)
 
-            if (dbEntity.isDefined) {
-              val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity.get,
-                schemaEntities, storageFormatEntity)
-              AtlasEntityUtils.createEntity(tableEntity, AtlasClient.atlasClient())
-              logInfo(s"Created table entity $table")
-            } else {
-              logWarn(s"Failed to create table entity $table because we cannot find db entity $db")
-            }
+            val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
+              schemaEntities, storageFormatEntity)
+            atlasClient.createEntity(tableEntity)
+            logInfo(s"Created table entity $table")
 
           case DropTableEvent(db, table) =>
-            AtlasEntityUtils.deleteEntity(
+            atlasClient.deleteEntityWithUniqueAttr(
               metadata.TABLE_TYPE_STRING,
-              AtlasEntityUtils.tableUniqueAttribute(db, table),
-              AtlasClient.atlasClient())
+              AtlasEntityUtils.tableUniqueAttribute(db, table))
             logInfo(s"Deleted table entity $table")
 
           case RenameTableEvent(db, name, newName) =>
-            val tableEntity = AtlasEntityUtils.getEntity(
+            val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, newName)
+
+            // Update storageFormat's unique attribute
+            val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE)
+            sdEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+              AtlasEntityUtils.storageFormatUniqueAttribute(db, newName))
+            atlasClient.updateEntityWithUniqueAttr(
+              metadata.STORAGEDESC_TYPE_STRING,
+              AtlasEntityUtils.storageFormatUniqueAttribute(db, name),
+              sdEntity)
+
+            // Update column's unique attribute
+            tableDefinition.schema.foreach { sf =>
+              val colEntity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
+              colEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+                AtlasEntityUtils.columnUniqueAttribute(db, newName, sf.name))
+              atlasClient.updateEntityWithUniqueAttr(
+                metadata.COLUMN_TYPE_STRING,
+                AtlasEntityUtils.columnUniqueAttribute(db, name, sf.name),
+                colEntity)
+            }
+
+            // Update Table name and Table's unique attribute
+            val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+            tableEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+              AtlasEntityUtils.tableUniqueAttribute(db, newName))
+            tableEntity.setAttribute("table", newName)
+            atlasClient.updateEntityWithUniqueAttr(
               metadata.TABLE_TYPE_STRING,
               AtlasEntityUtils.tableUniqueAttribute(db, name),
-              AtlasClient.atlasClient())
-            if (tableEntity.isDefined) {
-              tableEntity.get.setAttribute("table", newName)
-              AtlasEntityUtils.updateEntity(
-                metadata.TABLE_TYPE_STRING,
-                AtlasEntityUtils.tableUniqueAttribute(db, name),
-                tableEntity.get,
-                AtlasClient.atlasClient())
+              tableEntity)
 
-              logInfo(s"Rename table entity $name to $newName")
-            }
-        }
-
-        Option(queryExecutionQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach {
-          case QueryExecutionDetail(funcName, qe) =>
-
+            logInfo(s"Rename table entity $name to $newName")
         }
       } catch {
         case _: InterruptedException =>
@@ -165,21 +167,14 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
   private def initializeAtlasClient(): Boolean = {
     try {
       // initialize atlasClient
-      val atlasClient = AtlasClient.atlasClient()
-
-      // try to create all the types if not
-      AtlasTypeUtils.checkAndCreateTypes(atlasClient)
+      val sparkConf = new SparkConf(loadDefaults = true)
+      val atlasConf = AtlasClientConf.fromSparkConf(sparkConf)
+      atlasClient = AtlasClient.atlasClient(atlasConf)
       true
     } catch {
       case NonFatal(e) =>
         logError(s"Fail to initialize Atlas client, stop this listener", e)
         true
     }
-  }
-
-  private def analyzeQueryExecution(func: String, qe: QueryExecution): Unit = {
-//    val inputNodes = new ArrayBuffer[AtlasEntity]()
-//    qe.analyzed.foreach {
-//    }
   }
 }

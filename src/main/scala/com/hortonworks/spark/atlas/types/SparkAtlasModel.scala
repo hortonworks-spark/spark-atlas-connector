@@ -23,12 +23,13 @@ import scala.collection.mutable.ArrayBuffer
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.model.typedef.{AtlasClassificationDef, AtlasEntityDef, AtlasEnumDef, AtlasStructDef}
 import org.apache.atlas.`type`.AtlasTypeUtil
-import org.apache.atlas.AtlasClientV2
 import org.apache.atlas.model.SearchFilter
+import org.apache.spark.SparkConf
 
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.Logging
 
-object AtlasTypeUtils extends Logging {
+object SparkAtlasModel extends Logging {
   import metadata._
   import classifications._
 
@@ -52,7 +53,17 @@ object AtlasTypeUtils extends Logging {
     HBASE_CLASSIFICATION -> HBASE_CLASSIFICATION_DEF,
     STREAM_CLASSIFICATION -> STREAM_CLASSIFICATION_DEF)
 
-  def checkAndCreateTypes(atlasClient: AtlasClientV2): Unit = {
+  def main(args: Array[String]): Unit = {
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val atlasClientConf = AtlasClientConf.fromSparkConf(sparkConf)
+
+    val atlasClient = new RestAtlasClient(atlasClientConf)
+    checkAndCreateTypes(atlasClient)
+
+    logInfo(s"Spark Atlas model is created")
+  }
+
+  def checkAndCreateTypes(atlasClient: AtlasClient): Unit = {
     val groupedTypes = checkAndGroupTypes(atlasClient)
 
     if (groupedTypes.classificationDefsToUpdate.nonEmpty ||
@@ -78,7 +89,7 @@ object AtlasTypeUtils extends Logging {
     }
   }
 
-  private def checkAndGroupTypes(atlasClient: AtlasClientV2): GroupedTypesDef = {
+  private def checkAndGroupTypes(atlasClient: AtlasClient): GroupedTypesDef = {
     val searchParams = new MultivaluedMapImpl()
 
     val classificationDefsToUpdate = new ArrayBuffer[AtlasClassificationDef]
@@ -89,8 +100,7 @@ object AtlasTypeUtils extends Logging {
     allTypes.foreach { case (tpeName, tpeDef) =>
       searchParams.clear()
       searchParams.add(SearchFilter.PARAM_NAME, tpeName)
-      val searchFilter = new SearchFilter(searchParams)
-      val searchDefs = atlasClient.getAllTypeDefs(searchFilter)
+      val searchDefs = atlasClient.getAtlasTypeDefs(searchParams)
       val classificationDefs = searchDefs.getClassificationDefs.asScala.filter(_.getName == tpeName)
       if (classificationDefs.isEmpty) {
         logDebug(s"Classification type: $tpeName is not found in Atlas database")

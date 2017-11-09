@@ -17,19 +17,16 @@
 
 package com.hortonworks.spark.atlas.types
 
-import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
-
 import scala.collection.JavaConverters._
-import org.apache.atlas.{AtlasClient, AtlasClientV2}
+
+import org.apache.atlas.AtlasClient
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.atlas.model.instance.AtlasEntity.AtlasEntityWithExtInfo
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.types.StructType
 
-import scala.util.Try
-import scala.util.control.NonFatal
+import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object AtlasEntityUtils extends Logging {
 
@@ -121,6 +118,10 @@ object AtlasEntityUtils extends Logging {
     entity
   }
 
+  def processUniqueAttribute(executionId: Long): String = {
+    SparkUtils.sparkSession.sparkContext.applicationId + "." + executionId
+  }
+
   def processToEntity(
      sqlExecutionStart: SparkListenerSQLExecutionStart,
      sqlExecutionEnd: SparkListenerSQLExecutionEnd,
@@ -129,7 +130,8 @@ object AtlasEntityUtils extends Logging {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
 
     entity.setAttribute("executionId", sqlExecutionStart.executionId)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, sqlExecutionStart.executionId)
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      processUniqueAttribute(sqlExecutionStart.executionId))
     entity.setAttribute("startTime", sqlExecutionStart.time)
     entity.setAttribute("endTime", sqlExecutionEnd.time)
     entity.setAttribute("description", sqlExecutionStart.description)
@@ -138,62 +140,5 @@ object AtlasEntityUtils extends Logging {
     entity.setAttribute("inputs", inputs)
     entity.setAttribute("outputs", outputs)
     entity
-  }
-
-  def createEntity(entity: AtlasEntity, atlasClient: AtlasClientV2): Option[String] = {
-    try {
-      val response = atlasClient.createEntity(new AtlasEntityWithExtInfo(entity))
-      val mutatedEntities = response.getMutatedEntities
-
-      if (mutatedEntities.size() > 1) {
-        logWarn(s"Not just one entity is mutated, ${mutatedEntities.asScala.mkString(",")}")
-      } else if (mutatedEntities.size() == 0) {
-        logWarn(s"No entity is mutated")
-      }
-
-      mutatedEntities.asScala.headOption.map { case (_, en) =>
-        logInfo(s"Entity ${en.get(0).getTypeName} : ${en.get(0).getGuid} is created")
-        en.get(0).getGuid
-      }
-    } catch {
-      case NonFatal(e) =>
-        logWarn(s"Fail to create entity: ${entity.getTypeName}", e)
-        None
-    }
-  }
-
-  def deleteEntity(entityType: String, attribute: String, atlasClient: AtlasClientV2): Unit = {
-    try {
-      atlasClient.deleteEntityByAttribute(entityType,
-        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava)
-    } catch {
-      case NonFatal(e) =>
-        logWarn(s"Fail to delete entity with type $entityType and attribute $attribute")
-    }
-  }
-
-  def getEntity(
-      entityType: String,
-      attribute: String,
-      atlasClient: AtlasClientV2): Option[AtlasEntity] = {
-    Try {
-      atlasClient.getEntityByAttribute(entityType,
-        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava).getEntity
-    }.toOption
-  }
-
-  def updateEntity(
-      entityType: String,
-      attribute: String,
-      entity: AtlasEntity,
-      atlasClient: AtlasClientV2): Unit = {
-    try {
-      atlasClient.updateEntityByAttribute(entityType,
-        Map(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME -> attribute).asJava,
-        new AtlasEntityWithExtInfo(entity))
-    } catch {
-      case NonFatal(e) =>
-        logWarn(s"Fail to update entity with type $entityType and attribute $attribute")
-    }
   }
 }

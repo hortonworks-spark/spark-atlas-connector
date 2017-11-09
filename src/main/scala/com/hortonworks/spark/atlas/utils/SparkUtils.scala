@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 object SparkUtils extends Logging {
   @volatile private var prefix: String = null
 
-  private lazy val sparkSession = {
+  lazy val sparkSession = {
     val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
     if (session.isEmpty) {
       throw new IllegalStateException("Cannot find active or default SparkSession in the current " +
@@ -37,7 +37,7 @@ object SparkUtils extends Logging {
     session.get
   }
 
-  private lazy val hiveConf: Configuration = {
+  lazy val hiveConf: Configuration = {
     try {
       new HiveConf(sparkSession.sparkContext.hadoopConfiguration, classOf[HiveConf])
     } catch {

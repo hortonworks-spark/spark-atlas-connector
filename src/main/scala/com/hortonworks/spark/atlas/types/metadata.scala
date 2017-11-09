@@ -122,6 +122,8 @@ object metadata {
     "",
     METADATA_VERSION,
     ImmutableSet.of("Process"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),

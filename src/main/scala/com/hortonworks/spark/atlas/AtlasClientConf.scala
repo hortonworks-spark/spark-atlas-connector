@@ -71,8 +71,10 @@ object AtlasClientConf {
   val BLOCKING_QUEUE_CAPACITY = ConfigEntry("atlas.blockQueue.size", "10000")
   val BLOCKING_QUEUE_PUT_TIMEOUT = ConfigEntry("atlas.blockQueue.putTimeout.ms", "3000")
 
+  val CLIENT_TYPE = ConfigEntry("atlas.client.type", "rest")
   val CLIENT_USERNAME = ConfigEntry("atlas.client.username", "admin")
   val CLIENT_PASSWORD = ConfigEntry("atlas.client.password", "admin")
+  val CLIENT_NUM_RETRIES = ConfigEntry("atlas.client.numRetries", "3")
 
   def fromSparkConf(conf: SparkConf): AtlasClientConf = {
     new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))

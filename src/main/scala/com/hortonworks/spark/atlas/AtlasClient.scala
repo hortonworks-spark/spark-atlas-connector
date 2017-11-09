@@ -17,39 +17,71 @@
 
 package com.hortonworks.spark.atlas
 
-import org.apache.atlas.AtlasClientV2
-import org.apache.atlas.utils.AuthenticationUtil
-import org.apache.spark.SparkEnv
+import scala.util.control.NonFatal
 
-object AtlasClient {
-  lazy val atlasClientConf = AtlasClientConf.fromSparkConf(SparkEnv.get.conf)
+import com.sun.jersey.core.util.MultivaluedMapImpl
+import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.typedef.AtlasTypesDef
 
-  @volatile private var client: AtlasClientV2 = null
+import com.hortonworks.spark.atlas.utils.Logging
 
-  def atlasClient(): AtlasClientV2 = {
-    if (client == null) {
-      AtlasClient.synchronized {
-        if (client == null) {
-          if (!AuthenticationUtil.isKerberosAuthenticationEnabled) {
-            val basicAuth = Array(atlasClientConf.get(AtlasClientConf.CLIENT_USERNAME),
-              atlasClientConf.get(AtlasClientConf.CLIENT_PASSWORD))
-            client = new AtlasClientV2(getServerUrl(), basicAuth)
-          } else {
-            client = new AtlasClientV2(getServerUrl(): _*)
-          }
-        }
-      }
+trait AtlasClient extends Logging {
+
+  def createAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
+
+  def getAtlasTypeDefs(searchParams: MultivaluedMapImpl): AtlasTypesDef
+
+  def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
+
+  final def createEntity(entity: AtlasEntity): Unit = {
+    try {
+      doCreateEntity(entity)
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Failed to create entity: ${entity.toString}", e)
     }
-
-    client
   }
 
-  private def getServerUrl(): Array[String] = {
-    atlasClientConf.getOption(AtlasClientConf.ATLAS_REST_ENDPOINT.key).map { url =>
-      url.split(",")
-    }.getOrElse {
-      throw new IllegalArgumentException(s"Fail to get atlas.rest.address, please set " +
-        "via spark.atlas.rest.address in SparkConf")
+  protected def doCreateEntity(entity: AtlasEntity): Unit
+
+  final def deleteEntityWithUniqueAttr(entityType: String, attribute: String): Unit = {
+    try {
+      doDeleteEntityWithUniqueAttr(entityType, attribute)
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Failed to delete entity with type $entityType", e)
+    }
+  }
+
+  protected def doDeleteEntityWithUniqueAttr(entityType: String, attribute: String): Unit
+
+  final def updateEntityWithUniqueAttr(
+      entityType: String,
+      attribute: String,
+      entity: AtlasEntity): Unit = {
+    try {
+      doUpdateEntityWithUniqueAttr(entityType, attribute, entity)
+    } catch {
+      case NonFatal(e) =>
+        logWarn(s"Failed to update entity $entity with type $entityType and attribute " +
+          s"$attribute", e)
+    }
+  }
+
+  protected def doUpdateEntityWithUniqueAttr(
+      entityType: String,
+      attribute: String,
+      entity: AtlasEntity): Unit
+}
+
+object AtlasClient {
+  def atlasClient(conf: AtlasClientConf): AtlasClient = {
+    conf.get(AtlasClientConf.CLIENT_TYPE).toLowerCase().trim match {
+      case "rest" => new RestAtlasClient(conf)
+      case "kafka" => new KafkaAtlasClient(conf)
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown atlas client type")
     }
   }
 }
+
