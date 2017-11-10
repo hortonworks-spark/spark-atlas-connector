@@ -156,6 +156,19 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
 
             logInfo(s"Rename table entity $name to $newName")
 
+          case e if e.getClass.getName ==
+            "org.apache.spark.sql.catalyst.catalog.AlterDatabaseEvent" =>
+            try {
+              val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
+              val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
+              val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
+              atlasClient.createEntity(dbEntity)
+
+              logInfo(s"Updated DB properties")
+            } catch {
+              case NonFatal(t) => logWarn(s"Failed to update DB properties", t)
+            }
+
           case e if e.getClass.getName == "org.apache.spark.sql.catalyst.catalog.AlterTableEvent" =>
             try {
               val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
@@ -202,8 +215,8 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
                   // No op.
               }
             } catch {
-              case NonFatal(e) =>
-                logWarn("Failed to update table entity", e)
+              case NonFatal(t) =>
+                logWarn("Failed to update table entity", t)
             }
 
           case e =>
