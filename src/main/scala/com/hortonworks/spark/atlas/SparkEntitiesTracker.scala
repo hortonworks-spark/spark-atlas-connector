@@ -19,9 +19,11 @@ package com.hortonworks.spark.atlas
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.QueryExecution
@@ -101,9 +103,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
             val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
 
             val schemaEntities = AtlasEntityUtils.schemaToEntity(tableDefinition.schema, db, table)
-            schemaEntities.foreach { entity =>
-              atlasClient.createEntity(entity)
-            }
+            schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
             val storageFormatEntity =
               AtlasEntityUtils.storageFormatToEntity(tableDefinition.storage, db, table)
 
@@ -155,6 +155,59 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
               tableEntity)
 
             logInfo(s"Rename table entity $name to $newName")
+
+          case e if e.getClass.getName == "org.apache.spark.sql.catalyst.catalog.AlterTableEvent" =>
+            try {
+              val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
+              val tableName = e.getClass.getMethod("name").invoke(e).asInstanceOf[String]
+              val kind = e.getClass.getMethod("kind").invoke(e).asInstanceOf[String]
+
+              val tableDefinition = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
+              kind match {
+                case "table" =>
+                  val schemaEntities =
+                    AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
+                  schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
+
+                  val storageFormatEntity = AtlasEntityUtils.storageFormatToEntity(
+                    tableDefinition.storage, dbName, tableName)
+
+                  val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
+                  val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
+                  atlasClient.createEntity(dbEntity)
+
+                  val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
+                    schemaEntities, storageFormatEntity)
+                  atlasClient.createEntity(tableEntity)
+                  logInfo(s"Updated table entity $tableName")
+
+                case "dataSchema" =>
+                  val schemaEntities =
+                    AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
+                  schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
+
+                  val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+                  tableEntity.setAttribute("schema",
+                    AtlasTypeUtil.toObjectIds(schemaEntities.asJava))
+                  atlasClient.updateEntityWithUniqueAttr(
+                    metadata.TABLE_TYPE_STRING,
+                    AtlasEntityUtils.tableUniqueAttribute(dbName, tableName),
+                    tableEntity)
+                  logInfo(s"Updated table schema")
+
+                case "stats" =>
+                  logDebug(s"States update will not be tracked here")
+
+                case _ =>
+                  // No op.
+              }
+            } catch {
+              case NonFatal(e) =>
+                logWarn("Failed to update table entity", e)
+            }
+
+          case e =>
+            logInfo(s"Drop unknown event $e")
         }
       } catch {
         case _: InterruptedException =>

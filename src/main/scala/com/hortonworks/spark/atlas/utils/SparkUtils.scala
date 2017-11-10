@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 object SparkUtils extends Logging {
   @volatile private var prefix: String = null
 
-  lazy val sparkSession = {
+  lazy val sparkSession: SparkSession = {
     val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
     if (session.isEmpty) {
       throw new IllegalStateException("Cannot find active or default SparkSession in the current " +
