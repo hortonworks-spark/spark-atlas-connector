@@ -76,6 +76,8 @@ object AtlasClientConf {
   val CLIENT_PASSWORD = ConfigEntry("atlas.client.password", "admin")
   val CLIENT_NUM_RETRIES = ConfigEntry("atlas.client.numRetries", "3")
 
+  val CHECK_MODEL_IN_START = ConfigEntry("atlas.client.checkModelInStart", "true")
+
   def fromSparkConf(conf: SparkConf): AtlasClientConf = {
     new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))
   }

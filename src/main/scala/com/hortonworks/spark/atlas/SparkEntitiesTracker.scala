@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.SparkConf
 
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, metadata}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
@@ -236,6 +236,20 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
       val sparkConf = new SparkConf(loadDefaults = true)
       val atlasConf = AtlasClientConf.fromSparkConf(sparkConf)
       atlasClient = AtlasClient.atlasClient(atlasConf)
+
+      val checkModelInStart = atlasConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
+      if (checkModelInStart) {
+        val restClient = if (atlasClient.isInstanceOf[KafkaAtlasClient]) {
+          logWarn("Spark Atlas Model check and creation can only work with REST client, so " +
+            "creating a new REST client")
+          new RestAtlasClient(atlasConf)
+        } else {
+          atlasClient
+        }
+
+        SparkAtlasModel.checkAndCreateTypes(restClient)
+      }
+
       true
     } catch {
       case NonFatal(e) =>
