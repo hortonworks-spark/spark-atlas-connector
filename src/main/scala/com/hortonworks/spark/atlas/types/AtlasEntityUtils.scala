@@ -137,8 +137,8 @@ object AtlasEntityUtils extends Logging {
     entity.setAttribute("description", sqlExecutionStart.description)
     entity.setAttribute("details", sqlExecutionStart.details)
     entity.setAttribute("physicalPlanDescription", sqlExecutionStart.physicalPlanDescription)
-    entity.setAttribute("inputs", inputs)
-    entity.setAttribute("outputs", outputs)
+    entity.setAttribute("inputs", AtlasTypeUtil.toObjectIds(inputs.asJava))
+    entity.setAttribute("outputs", AtlasTypeUtil.toObjectIds(outputs.asJava))
     entity
   }
 }

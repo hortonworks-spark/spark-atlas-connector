@@ -17,11 +17,19 @@
 
 package com.hortonworks.spark.atlas
 
+import java.util
+
+import scala.collection.JavaConverters._
+
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.hook.AtlasHook
 import org.apache.atlas.model.typedef.AtlasTypesDef
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
+import org.apache.atlas.notification.hook.HookNotification
+import org.apache.atlas.typesystem.Referenceable
+import org.apache.atlas.typesystem.persistence.Id
+
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import org.apache.atlas.model.instance.AtlasEntity
 
 class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with AtlasClient {
 
@@ -43,14 +51,53 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
     throw new UnsupportedOperationException("Kafka atlas client doesn't support update type defs")
   }
 
-  override protected def doCreateEntity(entity: AtlasEntity): Unit = { }
+  override protected def doCreateEntity(entity: AtlasEntity): Unit = {
+    val createRequest = List(
+      new HookNotification.EntityCreateRequest(
+        user, entityToReferenceable(entity)): HookNotification.HookNotificationMessage)
+    notifyEntities(createRequest.asJava)
+  }
 
   override protected def doDeleteEntityWithUniqueAttr(
       entityType: String,
-      attribute: String): Unit = { }
+      attribute: String): Unit = {
+    val deleteRequest = List(new HookNotification.EntityDeleteRequest(
+      user,
+      entityType,
+      org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      attribute): HookNotification.HookNotificationMessage)
+    notifyEntities(deleteRequest.asJava)
+  }
 
   override protected def doUpdateEntityWithUniqueAttr(
       entityType: String,
       attribute: String,
-      entity: AtlasEntity): Unit = { }
+      entity: AtlasEntity): Unit = {
+    val partialUpdateRequest = List(
+      new HookNotification.EntityPartialUpdateRequest(
+        user,
+        entityType,
+        org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+        attribute,
+        entityToReferenceable(entity)): HookNotification.HookNotificationMessage)
+    notifyEntities(partialUpdateRequest.asJava)
+  }
+
+  private def entityToReferenceable(entity: AtlasEntity): Referenceable = {
+    val attributes = entity.getClassifications.asScala.map(_.getTypeName)
+    val referenceable = new Referenceable(entity.getTypeName, attributes: _*)
+
+    val convertedAttributes = entity.getAttributes.asScala.mapValues {
+      case e: AtlasEntity =>
+        new Id(e.getGuid, 0, e.getTypeName)
+
+      case l: util.Collection[AtlasObjectId] =>
+        l.asScala.map { objectId => new Id(objectId.getGuid, 0, objectId.getTypeName) }.asJava
+
+      case o => o
+    }
+    convertedAttributes.foreach { kv => referenceable.set(kv._1, kv._2) }
+
+    referenceable
+  }
 }

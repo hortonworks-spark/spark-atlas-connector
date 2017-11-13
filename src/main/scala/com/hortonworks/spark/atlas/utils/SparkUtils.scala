@@ -71,7 +71,7 @@ object SparkUtils extends Logging {
             hiveConf.get("javax.jdo.option.ConnectionURL") + "."
           } else {
             // If nothing is configured, which means we're using embedded derby metastore, which
-            // is appliation based, so we should differentiate by app-id.
+            // is application based, so we should differentiate by app-id.
             sparkSession.sparkContext.applicationId + "."
           }
         }
