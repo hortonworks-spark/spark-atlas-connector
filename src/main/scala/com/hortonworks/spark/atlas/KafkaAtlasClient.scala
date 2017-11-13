@@ -91,8 +91,13 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
       case e: AtlasEntity =>
         new Id(e.getGuid, 0, e.getTypeName)
 
-      case l: util.Collection[AtlasObjectId] =>
-        l.asScala.map { objectId => new Id(objectId.getGuid, 0, objectId.getTypeName) }.asJava
+      case l: util.Collection[_] =>
+        l.asScala
+          .filter(_.isInstanceOf[AtlasObjectId])
+          .map { objectId =>
+            new Id(objectId.asInstanceOf[AtlasObjectId].getGuid, 0,
+              objectId.asInstanceOf[AtlasObjectId].getTypeName)
+        }.asJava
 
       case o => o
     }
