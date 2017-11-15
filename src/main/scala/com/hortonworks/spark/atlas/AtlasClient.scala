@@ -76,11 +76,14 @@ trait AtlasClient extends Logging {
 
 object AtlasClient {
   def atlasClient(conf: AtlasClientConf): AtlasClient = {
-    conf.get(AtlasClientConf.CLIENT_TYPE).toLowerCase().trim match {
+    conf.get(AtlasClientConf.CLIENT_TYPE).trim match {
       case "rest" => new RestAtlasClient(conf)
       case "kafka" => new KafkaAtlasClient(conf)
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown atlas client type")
+      case e =>
+        Class.forName(e)
+          .getConstructor(classOf[AtlasClientConf])
+          .newInstance(conf)
+          .asInstanceOf[AtlasClient]
     }
   }
 }

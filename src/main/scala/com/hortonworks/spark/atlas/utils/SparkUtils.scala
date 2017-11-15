@@ -17,17 +17,16 @@
 
 package com.hortonworks.spark.atlas.utils
 
-import org.apache.hadoop.conf.Configuration
-
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 
 object SparkUtils extends Logging {
-  @volatile private var prefix: String = null
 
-  lazy val sparkSession: SparkSession = {
+  def sparkSession: SparkSession = {
     val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
     if (session.isEmpty) {
       throw new IllegalStateException("Cannot find active or default SparkSession in the current " +
@@ -54,31 +53,25 @@ object SparkUtils extends Logging {
    * multiple same-name DBs stored in Atlas, a unique prefix "app-id" is used to differentiate
    * these duplications.
    */
-  def getUniqueQualifiedPrefix(): String = {
-    if (prefix == null) {
-      SparkUtils.synchronized {
-        if (prefix == null) {
-          prefix = if (sparkSession.sparkContext.getConf
-            .get("spark.sql.catalogImplementation", "hive") == "in-memory") {
-            sparkSession.sparkContext.applicationId + "."
-          } else if (hiveConf.getTrimmed("hive.metastore.uris", "").nonEmpty) {
-            // If we're using remote Metastore service, then a unique prefix is identified by
-            // metastore uris.
-            hiveConf.getTrimmed("hive.metastore.uris") + "."
-          } else if (hiveConf.get("javax.jdo.option.ConnectionURL", "").nonEmpty) {
-            // If we're using local metastore, then a unique prefix is identified by the backend
-            // metastore database.
-            hiveConf.get("javax.jdo.option.ConnectionURL") + "."
-          } else {
-            // If nothing is configured, which means we're using embedded derby metastore, which
-            // is application based, so we should differentiate by app-id.
-            sparkSession.sparkContext.applicationId + "."
-          }
-        }
-      }
+  def getUniqueQualifiedPrefix(mockHiveConf: Option[Configuration] = None): String = {
+    val conf = mockHiveConf.getOrElse(hiveConf)
+    if (sparkSession.sparkContext.getConf
+      .get("spark.sql.catalogImplementation", "hive") == "in-memory") {
+      sparkSession.sparkContext.applicationId + "."
+    } else if (conf.getTrimmed("hive.metastore.uris", "").nonEmpty) {
+      // If we're using remote Metastore service, then a unique prefix is identified by
+      // metastore uris.
+      conf.getTrimmed("hive.metastore.uris") + "."
+    } else if (conf.get("javax.jdo.option.ConnectionDriverName", "") ==
+      "org.apache.derby.jdbc.EmbeddedDriver") {
+      // If this is configured, which means we're using embedded derby metastore, which
+      // is application based, so we should differentiate by app-id.
+      sparkSession.sparkContext.applicationId + "."
+    } else {
+      // If we're using local metastore, then a unique prefix is identified by the backend
+      // metastore database.
+      conf.get("javax.jdo.option.ConnectionURL") + "."
     }
-
-    prefix
   }
 
   /**

@@ -19,14 +19,14 @@ package com.hortonworks.spark.atlas
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
+import com.google.common.annotations.VisibleForTesting
+
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.SparkConf
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
@@ -35,17 +35,18 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     extends SparkListener with Logging {
 
-  case class QueryExecutionDetail(funcName: String, qe: QueryExecution)
+  def this() = this(AtlasClientConf.fromSparkConf(new SparkConf()))
 
   private val capacity = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
 
   // A blocking queue for Spark Listener ExternalCatalog related events.
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
+  @VisibleForTesting
+  private[atlas] val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
 
   private val timeout = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
 
-  @volatile private var shouldContinue: Boolean = true
-  @volatile private var atlasClient: AtlasClient = null
+  @volatile private[atlas] var shouldContinue: Boolean = true
+  @volatile private[atlas] var atlasClient: AtlasClient = null
 
   val eventProcessThread = new Thread {
     override def run(): Unit = {
@@ -71,7 +72,8 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     }
   }
 
-  private def eventProcess(): Unit = {
+  @VisibleForTesting
+  private[atlas] def eventProcess(): Unit = {
     // initialize Atlas client before further processing event.
     if (!initializeAtlasClient()) {
       logError("Fail to initialize Atlas Client, will discard all the received events and stop " +
@@ -106,6 +108,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
             schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
             val storageFormatEntity =
               AtlasEntityUtils.storageFormatToEntity(tableDefinition.storage, db, table)
+            atlasClient.createEntity(storageFormatEntity)
 
             val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
             atlasClient.createEntity(dbEntity)
@@ -116,6 +119,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
             logInfo(s"Created table entity $table")
 
           case DropTableEvent(db, table) =>
+            // TODO. we should also drop columns and storage format related to that table
             atlasClient.deleteEntityWithUniqueAttr(
               metadata.TABLE_TYPE_STRING,
               AtlasEntityUtils.tableUniqueAttribute(db, table))
@@ -184,6 +188,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
 
                   val storageFormatEntity = AtlasEntityUtils.storageFormatToEntity(
                     tableDefinition.storage, dbName, tableName)
+                  atlasClient.createEntity(storageFormatEntity)
 
                   val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
                   val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
@@ -209,7 +214,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
                   logInfo(s"Updated table schema")
 
                 case "stats" =>
-                  logDebug(s"States update will not be tracked here")
+                  logDebug(s"Stats update will not be tracked here")
 
                 case _ =>
                   // No op.
@@ -233,16 +238,14 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
   private def initializeAtlasClient(): Boolean = {
     try {
       // initialize atlasClient
-      val sparkConf = new SparkConf(loadDefaults = true)
-      val atlasConf = AtlasClientConf.fromSparkConf(sparkConf)
-      atlasClient = AtlasClient.atlasClient(atlasConf)
+      atlasClient = AtlasClient.atlasClient(atlasClientConf)
 
-      val checkModelInStart = atlasConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
+      val checkModelInStart = atlasClientConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
       if (checkModelInStart) {
         val restClient = if (atlasClient.isInstanceOf[KafkaAtlasClient]) {
           logWarn("Spark Atlas Model check and creation can only work with REST client, so " +
             "creating a new REST client")
-          new RestAtlasClient(atlasConf)
+          new RestAtlasClient(atlasClientConf)
         } else {
           atlasClient
         }
@@ -254,7 +257,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     } catch {
       case NonFatal(e) =>
         logError(s"Fail to initialize Atlas client, stop this listener", e)
-        true
+        false
     }
   }
 }
