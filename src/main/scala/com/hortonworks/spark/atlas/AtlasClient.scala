@@ -33,16 +33,16 @@ trait AtlasClient extends Logging {
 
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
-  final def createEntity(entity: AtlasEntity): Unit = {
+  final def createEntities(entities: Seq[AtlasEntity]): Unit = {
     try {
-      doCreateEntity(entity)
+      doCreateEntities(entities)
     } catch {
       case NonFatal(e) =>
-        logWarn(s"Failed to create entity: ${entity.toString}", e)
+        logWarn(s"Failed to create entities", e)
     }
   }
 
-  protected def doCreateEntity(entity: AtlasEntity): Unit
+  protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit
 
   final def deleteEntityWithUniqueAttr(entityType: String, attribute: String): Unit = {
     try {

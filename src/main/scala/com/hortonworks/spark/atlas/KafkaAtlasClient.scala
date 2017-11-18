@@ -51,11 +51,13 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
     throw new UnsupportedOperationException("Kafka atlas client doesn't support update type defs")
   }
 
-  override protected def doCreateEntity(entity: AtlasEntity): Unit = {
-    val createRequest = List(
+  override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
+    val createRequests = entities.map { e =>
       new HookNotification.EntityCreateRequest(
-        user, entityToReferenceable(entity)): HookNotification.HookNotificationMessage)
-    notifyEntities(createRequest.asJava)
+        user, entityToReferenceable(e)): HookNotification.HookNotificationMessage
+    }.toList.asJava
+
+    notifyEntities(createRequests)
   }
 
   override protected def doDeleteEntityWithUniqueAttr(
@@ -89,14 +91,13 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
 
     val convertedAttributes = entity.getAttributes.asScala.mapValues {
       case e: AtlasEntity =>
-        new Id(e.getGuid, 0, e.getTypeName)
+        entityToReferenceable(e)
 
       case l: util.Collection[_] =>
         l.asScala
-          .filter(_.isInstanceOf[AtlasObjectId])
-          .map { objectId =>
-            new Id(objectId.asInstanceOf[AtlasObjectId].getGuid, 0,
-              objectId.asInstanceOf[AtlasObjectId].getTypeName)
+          .filter(_.isInstanceOf[AtlasEntity])
+          .map { e =>
+            entityToReferenceable(e.asInstanceOf[AtlasEntity])
         }.asJava
 
       case o => o

@@ -33,7 +33,7 @@ object SparkAtlasModel extends Logging {
   import metadata._
   import classifications._
 
-  private case class GroupedTypesDef(
+  private[atlas] case class GroupedTypesDef(
       classificationDefsToUpdate: List[AtlasClassificationDef],
       classificationDefsToCreate: List[AtlasClassificationDef],
       entityDefsToUpdate: List[AtlasEntityDef],
@@ -54,8 +54,7 @@ object SparkAtlasModel extends Logging {
     STREAM_CLASSIFICATION -> STREAM_CLASSIFICATION_DEF)
 
   def main(args: Array[String]): Unit = {
-    val sparkConf = new SparkConf(loadDefaults = true)
-    val atlasClientConf = AtlasClientConf.fromSparkConf(sparkConf)
+    val atlasClientConf = new AtlasClientConf
 
     val atlasClient = new RestAtlasClient(atlasClientConf)
     checkAndCreateTypes(atlasClient)
@@ -89,7 +88,7 @@ object SparkAtlasModel extends Logging {
     }
   }
 
-  private def checkAndGroupTypes(atlasClient: AtlasClient): GroupedTypesDef = {
+  private[atlas] def checkAndGroupTypes(atlasClient: AtlasClient): GroupedTypesDef = {
     val searchParams = new MultivaluedMapImpl()
 
     val classificationDefsToUpdate = new ArrayBuffer[AtlasClassificationDef]
@@ -101,26 +100,30 @@ object SparkAtlasModel extends Logging {
       searchParams.clear()
       searchParams.add(SearchFilter.PARAM_NAME, tpeName)
       val searchDefs = atlasClient.getAtlasTypeDefs(searchParams)
-      val classificationDefs = searchDefs.getClassificationDefs.asScala.filter(_.getName == tpeName)
-      if (classificationDefs.isEmpty) {
-        logDebug(s"Classification type: $tpeName is not found in Atlas database")
-        classificationDefsToCreate.append(tpeDef.asInstanceOf[AtlasClassificationDef])
-      }
-      if (classificationDefs.forall(_.getTypeVersion.toDouble < METADATA_VERSION.toDouble)) {
-        logDebug(s"Classification type: $tpeName found in Atlas database is older than the " +
-          "defined one")
-        classificationDefsToUpdate.append(tpeDef.asInstanceOf[AtlasClassificationDef])
-      }
 
-      val entityDefs = searchDefs.getEntityDefs.asScala.filter(_.getName == tpeName)
-      if (entityDefs.isEmpty) {
-        logDebug(s"Entity type: $tpeName is not found in Atlas database")
-        entityDefsToCreate.append(tpeDef.asInstanceOf[AtlasEntityDef])
-      }
-      if (entityDefs.forall(_.getTypeVersion.toDouble < METADATA_VERSION.toDouble)) {
-        logDebug(s"Entity type: $tpeName found in Atlas database is older than the " +
-          "defined one")
-        entityDefsToUpdate.append(tpeDef.asInstanceOf[AtlasEntityDef])
+      tpeDef match {
+        case i: AtlasClassificationDef =>
+          val classificationDefs =
+            searchDefs.getClassificationDefs.asScala.filter(_.getName == tpeName)
+          if (classificationDefs.isEmpty) {
+            logDebug(s"Classification type: $tpeName is not found in Atlas database")
+            classificationDefsToCreate.append(i)
+          } else if (classificationDefs.forall(_.getTypeVersion.toDouble <
+            METADATA_VERSION.toDouble)) {
+            logDebug(s"Classification type: $tpeName is not found in Atlas database")
+            classificationDefsToUpdate.append(i)
+          }
+
+        case e: AtlasEntityDef =>
+          val entityDefs = searchDefs.getEntityDefs.asScala.filter(_.getName == tpeName)
+          if (entityDefs.isEmpty) {
+            logDebug(s"Entity type: $tpeName is not found in Atlas database")
+            entityDefsToCreate.append(e)
+          } else if (entityDefs.forall(_.getTypeVersion.toDouble < METADATA_VERSION.toDouble)) {
+            logDebug(s"Entity type: $tpeName found in Atlas database is older than the " +
+              "defined one")
+            entityDefsToUpdate.append(e)
+          }
       }
     }
 

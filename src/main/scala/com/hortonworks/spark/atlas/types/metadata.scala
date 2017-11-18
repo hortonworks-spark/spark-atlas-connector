@@ -39,7 +39,6 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("name", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
@@ -74,7 +73,6 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("name", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("type", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("nullable", new AtlasBooleanType),
     AtlasTypeUtil.createOptionalAttrDef("metadata", new AtlasStringType),
@@ -92,7 +90,6 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("table", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("database", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(

@@ -17,49 +17,29 @@
 
 package com.hortonworks.spark.atlas
 
-import scala.collection.mutable
-
-import org.apache.spark.SparkConf
+import org.apache.atlas.ApplicationProperties
 
 import com.hortonworks.spark.atlas.AtlasClientConf.ConfigEntry
 
-class AtlasClientConf(loadFromSysProps: Boolean) {
+class AtlasClientConf {
 
-  def this() = this(loadFromSysProps = true)
-
-  private val configMap = new mutable.HashMap[String, String]()
-
-  if (loadFromSysProps) {
-    sys.props.foreach { case (k, v) =>
-      if (k.startsWith("spark.atlas")) {
-        configMap.put(k.stripPrefix("spark."), v)
-      }
-    }
-  }
+  private val configuration = ApplicationProperties.get()
 
   def set(key: String, value: String): AtlasClientConf = {
-    configMap.put(key, value)
+    configuration.setProperty(key, value)
     this
   }
 
   def get(key: String, defaultValue: String): String = {
-    configMap.getOrElse(key, defaultValue)
+    Option(configuration.getProperty(key).asInstanceOf[String]).getOrElse(defaultValue)
   }
 
   def getOption(key: String): Option[String] = {
-    configMap.get(key)
+    Option(configuration.getProperty(key).asInstanceOf[String])
   }
 
   def get(t: ConfigEntry): String = {
-    configMap.get(t.key).getOrElse(t.defaultValue)
-  }
-
-  def setAll(confs: Iterable[(String, String)]): AtlasClientConf = {
-    confs.foreach { case (k, v) =>
-      configMap.put(k.stripPrefix("spark."), v)
-    }
-
-    this
+    Option(configuration.getProperty(t.key).asInstanceOf[String]).getOrElse(t.defaultValue)
   }
 }
 
@@ -77,8 +57,4 @@ object AtlasClientConf {
   val CLIENT_NUM_RETRIES = ConfigEntry("atlas.client.numRetries", "3")
 
   val CHECK_MODEL_IN_START = ConfigEntry("atlas.client.checkModelInStart", "true")
-
-  def fromSparkConf(conf: SparkConf): AtlasClientConf = {
-    new AtlasClientConf(false).setAll(conf.getAll.filter(_._1.startsWith("spark.atlas")))
-  }
 }

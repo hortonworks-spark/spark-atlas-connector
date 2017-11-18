@@ -151,10 +151,12 @@ class FirehoseAtlasClient(conf: AtlasClientConf) extends AtlasClient {
     new AtlasTypesDef()
   }
 
-  override protected def doCreateEntity(entity: AtlasEntity): Unit = {
-    createEntityCall(entity.getTypeName) =
-      createEntityCall.getOrElseUpdate(entity.getTypeName, 0) + 1
-    processedEntity = entity
+  override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
+    entities.foreach { e =>
+      createEntityCall(e.getTypeName) =
+        createEntityCall.getOrElseUpdate(e.getTypeName, 0) + 1
+      processedEntity = e
+    }
   }
 
   override protected def doUpdateEntityWithUniqueAttr(

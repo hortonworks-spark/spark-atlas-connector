@@ -108,10 +108,10 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity, schemaEntities, sdEntity)
 
     tableEntity.getTypeName should be (metadata.TABLE_TYPE_STRING)
-    tableEntity.getAttribute("table") should be ("tbl1")
-    tableEntity.getAttribute("database") should be (AtlasTypeUtil.getAtlasObjectId(dbEntity))
-    tableEntity.getAttribute("storage") should be (AtlasTypeUtil.getAtlasObjectId(sdEntity))
-    tableEntity.getAttribute("schema") should be (AtlasTypeUtil.toObjectIds(schemaEntities.asJava))
+    tableEntity.getAttribute("name") should be ("tbl1")
+    tableEntity.getAttribute("database") should be (dbEntity)
+    tableEntity.getAttribute("storage") should be (sdEntity)
+    tableEntity.getAttribute("schema") should be (schemaEntities.asJava)
   }
 }
 

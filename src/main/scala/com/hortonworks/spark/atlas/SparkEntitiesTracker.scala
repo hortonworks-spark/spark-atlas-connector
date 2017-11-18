@@ -35,7 +35,7 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     extends SparkListener with Logging {
 
-  def this() = this(AtlasClientConf.fromSparkConf(new SparkConf()))
+  def this() = this(new AtlasClientConf)
 
   private val capacity = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
 
@@ -91,7 +91,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
           case CreateDatabaseEvent(db) =>
             val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
             val entity = AtlasEntityUtils.dbToEntity(dbDefinition)
-            atlasClient.createEntity(entity)
+            atlasClient.createEntities(Seq(entity))
             logInfo(s"Created db entity $db")
 
           case DropDatabaseEvent(db) =>
@@ -105,17 +105,15 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
             val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
 
             val schemaEntities = AtlasEntityUtils.schemaToEntity(tableDefinition.schema, db, table)
-            schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
             val storageFormatEntity =
               AtlasEntityUtils.storageFormatToEntity(tableDefinition.storage, db, table)
-            atlasClient.createEntity(storageFormatEntity)
 
             val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-            atlasClient.createEntity(dbEntity)
 
             val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
               schemaEntities, storageFormatEntity)
-            atlasClient.createEntity(tableEntity)
+            atlasClient.createEntities(
+              Seq(dbEntity, storageFormatEntity, tableEntity) ++ schemaEntities)
             logInfo(s"Created table entity $table")
 
           case DropTableEvent(db, table) =>
@@ -166,8 +164,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
               val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
               val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
               val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-              atlasClient.createEntity(dbEntity)
-
+              atlasClient.createEntities(Seq(dbEntity))
               logInfo(s"Updated DB properties")
             } catch {
               case NonFatal(t) => logWarn(s"Failed to update DB properties", t)
@@ -184,25 +181,24 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
                 case "table" =>
                   val schemaEntities =
                     AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
-                  schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
 
                   val storageFormatEntity = AtlasEntityUtils.storageFormatToEntity(
                     tableDefinition.storage, dbName, tableName)
-                  atlasClient.createEntity(storageFormatEntity)
 
                   val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
                   val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-                  atlasClient.createEntity(dbEntity)
 
                   val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
                     schemaEntities, storageFormatEntity)
-                  atlasClient.createEntity(tableEntity)
+
+                  atlasClient.createEntities(
+                    Seq(dbEntity, storageFormatEntity, tableEntity) ++ schemaEntities)
                   logInfo(s"Updated table entity $tableName")
 
                 case "dataSchema" =>
                   val schemaEntities =
                     AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
-                  schemaEntities.foreach { entity => atlasClient.createEntity(entity) }
+                  atlasClient.createEntities(schemaEntities)
 
                   val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
                   tableEntity.setAttribute("schema",

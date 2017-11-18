@@ -23,7 +23,7 @@ import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.AtlasClientV2
 import org.apache.atlas.model.SearchFilter
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.atlas.model.instance.AtlasEntity.AtlasEntityWithExtInfo
+import org.apache.atlas.model.instance.AtlasEntity.{AtlasEntitiesWithExtInfo, AtlasEntityWithExtInfo}
 import org.apache.atlas.model.typedef.AtlasTypesDef
 import org.apache.atlas.utils.AuthenticationUtil
 
@@ -41,10 +41,9 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
 
   private def getServerUrl(): Array[String] = {
     atlasClientConf.getOption(AtlasClientConf.ATLAS_REST_ENDPOINT.key).map { url =>
-      url.split(",")
+      Array(url)
     }.getOrElse {
-      throw new IllegalArgumentException(s"Fail to get atlas.rest.address, please set " +
-        "via spark.atlas.rest.address in SparkConf")
+      throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
     }
   }
 
@@ -61,19 +60,12 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
     client.updateAtlasTypeDefs(typeDefs)
   }
 
-  override protected def doCreateEntity(entity: AtlasEntity): Unit = {
-    val response = client.createEntity(new AtlasEntityWithExtInfo(entity))
-    val mutatedEntities = response.getMutatedEntities
-
-    if (mutatedEntities.size() > 1) {
-      logWarn(s"Not just one entity is mutated, ${mutatedEntities.asScala.mkString(",")}")
-    } else if (mutatedEntities.size() == 0) {
-      logWarn(s"No entity is mutated")
-    }
-
-    mutatedEntities.asScala.headOption.foreach { case (_, en) =>
-      logInfo(s"Entity ${en.get(0).getTypeName} : ${en.get(0).getGuid} is created")
-    }
+  override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
+    val entitesWithExtInfo = new AtlasEntitiesWithExtInfo()
+    entities.foreach(entitesWithExtInfo.addEntity)
+    val response = client.createEntities(entitesWithExtInfo)
+    logInfo(s"Entities ${response.getCreatedEntities.asScala.map(_.getGuid).mkString(", ")} " +
+      s"created")
   }
 
   override protected def doDeleteEntityWithUniqueAttr(

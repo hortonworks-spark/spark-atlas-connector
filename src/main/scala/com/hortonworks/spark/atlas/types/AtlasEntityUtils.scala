@@ -95,14 +95,13 @@ object AtlasEntityUtils extends Logging {
     val entity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      tableUniqueAttribute(tableDefinition.identifier.table,
-        tableDefinition.identifier.database.getOrElse("default")))
-    entity.setAttribute("table", tableDefinition.identifier.table)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, tableDefinition.identifier.table)
-    entity.setAttribute("database", AtlasTypeUtil.getAtlasObjectId(db))
+      tableUniqueAttribute(tableDefinition.identifier.database.getOrElse("default"),
+        tableDefinition.identifier.table))
+    entity.setAttribute("name", tableDefinition.identifier.table)
+    entity.setAttribute("database", db)
     entity.setAttribute("tableType", tableDefinition.tableType.name)
-    entity.setAttribute("storage", AtlasTypeUtil.getAtlasObjectId(storageFormat))
-    entity.setAttribute("schema", AtlasTypeUtil.toObjectIds(schema.asJava))
+    entity.setAttribute("storage", storageFormat)
+    entity.setAttribute("schema", schema.asJava)
     tableDefinition.provider.foreach(entity.setAttribute("provider", _))
     entity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(

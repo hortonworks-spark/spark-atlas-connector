@@ -21,9 +21,17 @@
     <test.redirectToFile>true</test.redirectToFile>
     <scalatest.version>2.2.4</scalatest.version>
     <mockito.version>1.9.5</mockito.version>
+    <integration.test.enabled>false</integration.test.enabled>
+    <jersey.version>1.19</jersey.version>
   </properties>
 
   <dependencies>
+
+    <dependency>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-json</artifactId>
+      <version>${jersey.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -225,6 +233,9 @@
           <artifactId>scalatest-maven-plugin</artifactId>
           <version>1.0</version>
           <configuration>
+            <environmentVariables>
+              <ATLAS_INTEGRATION_TEST>${integration.test.enabled}</ATLAS_INTEGRATION_TEST>
+            </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
               <java.io.tmpdir>${project.build.directory}/tmp</java.io.tmpdir>
@@ -361,5 +372,21 @@
 
     </plugins>
   </build>
+
+  <profiles>
+
+    <profile>
+      <id>integration-test</id>
+      <activation>
+        <property>
+          <name>integration-test</name>
+        </property>
+      </activation>
+      <properties>
+        <integration.test.enabled>true</integration.test.enabled>
+      </properties>
+    </profile>
+
+  </profiles>
 
 </project>
