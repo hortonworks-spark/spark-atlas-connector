@@ -28,12 +28,10 @@ import com.hortonworks.spark.atlas.types.SparkAtlasModel
 class SparkAtlasModelIT extends BaseResourceIT with Matchers with BeforeAndAfter {
   private var client: AtlasClient = _
 
-  atlasClientConf
-    .set(AtlasClientConf.CLIENT_TYPE.key, "rest")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://localhost:21000")
 
   before(
     if (client == null) {
+      atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "rest")
       client = AtlasClient.atlasClient(atlasClientConf)
     }
   )

@@ -27,7 +27,6 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.SparkConf
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
@@ -150,7 +149,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
             val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
             tableEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
               AtlasEntityUtils.tableUniqueAttribute(db, newName))
-            tableEntity.setAttribute("table", newName)
+            tableEntity.setAttribute("name", newName)
             atlasClient.updateEntityWithUniqueAttr(
               metadata.TABLE_TYPE_STRING,
               AtlasEntityUtils.tableUniqueAttribute(db, name),

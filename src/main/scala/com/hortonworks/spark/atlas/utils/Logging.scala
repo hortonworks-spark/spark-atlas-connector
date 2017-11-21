@@ -44,6 +44,10 @@ trait Logging {
     logger.warn(message.toString)
   }
 
+  def logWarn(message: => Any, t: Throwable): Unit = {
+    logger.warn(message.toString, t)
+  }
+
   def logError(message: => Any, t: Throwable): Unit = {
     logger.error(message.toString, t)
   }

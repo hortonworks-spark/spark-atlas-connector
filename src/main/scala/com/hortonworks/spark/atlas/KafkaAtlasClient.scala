@@ -86,19 +86,23 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
   }
 
   private def entityToReferenceable(entity: AtlasEntity): Referenceable = {
-    val attributes = entity.getClassifications.asScala.map(_.getTypeName)
-    val referenceable = new Referenceable(entity.getTypeName, attributes: _*)
+    val classifications = Option(entity.getClassifications).map { s =>
+      s.asScala.map(_.getTypeName)
+    }.getOrElse(List.empty)
+
+    val referenceable = new Referenceable(entity.getTypeName, classifications: _*)
 
     val convertedAttributes = entity.getAttributes.asScala.mapValues {
       case e: AtlasEntity =>
         entityToReferenceable(e)
 
       case l: util.Collection[_] =>
-        l.asScala
-          .filter(_.isInstanceOf[AtlasEntity])
-          .map { e =>
-            entityToReferenceable(e.asInstanceOf[AtlasEntity])
-        }.asJava
+        val list = new util.ArrayList[Referenceable]()
+        l.asScala.foreach {
+          case e: AtlasEntity =>
+            list.add(entityToReferenceable(e))
+        }
+        list
 
       case o => o
     }
