@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas
+package com.hortonworks.spark.atlas.types
 
 import scala.collection.JavaConverters._
 
@@ -23,7 +23,7 @@ import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.typedef.{AtlasClassificationDef, AtlasEntityDef, AtlasEnumDef, AtlasStructDef}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
-import com.hortonworks.spark.atlas.types.SparkAtlasModel
+import com.hortonworks.spark.atlas.{AtlasClient, BaseResourceIT, RestAtlasClient}
 
 class SparkAtlasModelIT extends BaseResourceIT with Matchers with BeforeAndAfter {
   private var client: AtlasClient = _
@@ -31,8 +31,7 @@ class SparkAtlasModelIT extends BaseResourceIT with Matchers with BeforeAndAfter
 
   before(
     if (client == null) {
-      atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "rest")
-      client = AtlasClient.atlasClient(atlasClientConf)
+      client = new RestAtlasClient(atlasClientConf)
     }
   )
 

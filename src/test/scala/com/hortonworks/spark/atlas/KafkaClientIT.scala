@@ -27,9 +27,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
-import org.scalatest. Matchers
+import org.scalatest.Matchers
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, metadata}
+import com.hortonworks.spark.atlas.sql.SparkCatalogEventTracker
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class KafkaClientIT extends BaseResourceIT with Matchers {
@@ -37,7 +38,7 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
 
   private var sparkSession: SparkSession = _
 
-  private var tracker: SparkEntitiesTracker = _
+  private var tracker: SparkCatalogEventTracker = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -47,15 +48,14 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
       .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
 
-    atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "kafka")
-    tracker = new SparkEntitiesTracker(atlasClientConf)
+    tracker =
+      new SparkCatalogEventTracker(new KafkaAtlasClient(atlasClientConf), atlasClientConf)
   }
 
   override def afterAll(): Unit = {
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
-    atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "kafka")
 
     super.afterAll()
   }

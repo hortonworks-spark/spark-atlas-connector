@@ -15,29 +15,30 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas
+package com.hortonworks.spark.atlas.sql
 
 import java.nio.file.Files
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.Matchers
-import org.scalatest.concurrent.Eventually._
 import org.apache.atlas.AtlasServiceException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient, TestUtils}
 
 class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
   import TestUtils._
 
   private var sparkSession: SparkSession = _
 
-  private var tracker: SparkEntitiesTracker = _
+  private var tracker: SparkCatalogEventTracker = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -45,8 +46,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
       .master("local")
       .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
-    atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "rest")
-    tracker = new SparkEntitiesTracker(atlasClientConf)
+    tracker = new SparkCatalogEventTracker(new RestAtlasClient(atlasClientConf), atlasClientConf)
   }
 
   override def afterAll(): Unit = {

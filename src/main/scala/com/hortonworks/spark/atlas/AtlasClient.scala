@@ -75,16 +75,28 @@ trait AtlasClient extends Logging {
 }
 
 object AtlasClient {
+  @volatile private var client: AtlasClient = null
+
   def atlasClient(conf: AtlasClientConf): AtlasClient = {
-    conf.get(AtlasClientConf.CLIENT_TYPE).trim match {
-      case "rest" => new RestAtlasClient(conf)
-      case "kafka" => new KafkaAtlasClient(conf)
-      case e =>
-        Class.forName(e)
-          .getConstructor(classOf[AtlasClientConf])
-          .newInstance(conf)
-          .asInstanceOf[AtlasClient]
+    if (client == null) {
+      AtlasClient.synchronized {
+        if (client == null) {
+          conf.get(AtlasClientConf.CLIENT_TYPE).trim match {
+            case "rest" =>
+              client = new RestAtlasClient(conf)
+            case "kafka" =>
+              client = new KafkaAtlasClient(conf)
+            case e =>
+              client = Class.forName(e)
+                .getConstructor(classOf[AtlasClientConf])
+                .newInstance(conf)
+                .asInstanceOf[AtlasClient]
+          }
+        }
+      }
     }
+
+    client
   }
 }
 

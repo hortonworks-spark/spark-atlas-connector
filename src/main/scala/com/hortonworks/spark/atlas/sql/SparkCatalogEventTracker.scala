@@ -15,37 +15,40 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas
+package com.hortonworks.spark.atlas.sql
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
-import com.google.common.annotations.VisibleForTesting
-
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
-import org.apache.atlas.model.instance.AtlasEntity
+
+import com.google.common.annotations.VisibleForTesting
 import org.apache.atlas.`type`.AtlasTypeUtil
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, KafkaAtlasClient, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
-class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
-    extends SparkListener with Logging {
+class SparkCatalogEventTracker(
+    private[atlas] val atlasClient: AtlasClient,
+    private val conf: AtlasClientConf) extends SparkListener with Logging {
 
-  def this() = this(new AtlasClientConf)
+  def this(atlasClientConf: AtlasClientConf) = {
+    this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
+  }
 
-  private val capacity = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
+  private val capacity = conf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
 
   // A blocking queue for Spark Listener ExternalCatalog related events.
   @VisibleForTesting
   private[atlas] val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
 
-  private val timeout = atlasClientConf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
+  private val timeout = conf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
 
   @volatile private[atlas] var shouldContinue: Boolean = true
-  @volatile private[atlas] var atlasClient: AtlasClient = null
 
   val eventProcessThread = new Thread {
     override def run(): Unit = {
@@ -74,7 +77,7 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
   @VisibleForTesting
   private[atlas] def eventProcess(): Unit = {
     // initialize Atlas client before further processing event.
-    if (!initializeAtlasClient()) {
+    if (!initializeSparkModel()) {
       logError("Fail to initialize Atlas Client, will discard all the received events and stop " +
         "working")
 
@@ -230,17 +233,14 @@ class SparkEntitiesTracker(atlasClientConf: AtlasClientConf)
     }
   }
 
-  private def initializeAtlasClient(): Boolean = {
+  private def initializeSparkModel(): Boolean = {
     try {
-      // initialize atlasClient
-      atlasClient = AtlasClient.atlasClient(atlasClientConf)
-
-      val checkModelInStart = atlasClientConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
+      val checkModelInStart = conf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
       if (checkModelInStart) {
         val restClient = if (atlasClient.isInstanceOf[KafkaAtlasClient]) {
           logWarn("Spark Atlas Model check and creation can only work with REST client, so " +
             "creating a new REST client")
-          new RestAtlasClient(atlasClientConf)
+          new RestAtlasClient(conf)
         } else {
           atlasClient
         }

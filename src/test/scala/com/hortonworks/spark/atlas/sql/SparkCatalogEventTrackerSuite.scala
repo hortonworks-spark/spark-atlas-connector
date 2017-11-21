@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas
+package com.hortonworks.spark.atlas.sql
 
 import java.nio.file.Files
 
@@ -24,18 +24,19 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.sun.jersey.core.util.MultivaluedMapImpl
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.model.typedef.AtlasTypesDef
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.types.{LongType, StructType}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, TestUtils}
 import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
-class SparkEntitiesTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   import TestUtils._
 
   private var sparkSession: SparkSession = _
@@ -57,26 +58,9 @@ class SparkEntitiesTrackerSuite extends FunSuite with Matchers with BeforeAndAft
     sparkSession = null
   }
 
-  test("fail to initialize AtlasClient") {
-    atlasClientConf.set(AtlasClientConf.CLIENT_TYPE.key, "non-exist.class")
-
-    val tracker = new SparkEntitiesTracker(atlasClientConf)
-    tracker.onOtherEvent(CreateDatabaseEvent("db1"))
-    tracker.onOtherEvent(DropDatabaseEvent("db1"))
-
-    // Because we failed to initialize client, so all the pushed events should be discarded
-    // immediately.
-    eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      tracker.eventQueue.size() should be (0)
-      tracker.shouldContinue should be (false)
-    }
-  }
-
   test("correctly handle DB related events") {
-    atlasClientConf.set(
-      AtlasClientConf.CLIENT_TYPE.key, classOf[FirehoseAtlasClient].getName)
-
-    val tracker = new SparkEntitiesTracker(atlasClientConf)
+    val tracker =
+      new SparkCatalogEventTracker(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
     var atlasClient: FirehoseAtlasClient = null
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       tracker.atlasClient should not be (null)
@@ -100,10 +84,8 @@ class SparkEntitiesTrackerSuite extends FunSuite with Matchers with BeforeAndAft
   }
 
   test("correctly handle table related events") {
-    atlasClientConf.set(
-      AtlasClientConf.CLIENT_TYPE.key, classOf[FirehoseAtlasClient].getName)
-
-    val tracker = new SparkEntitiesTracker(atlasClientConf)
+    val tracker =
+      new SparkCatalogEventTracker(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
     var atlasClient: FirehoseAtlasClient = null
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       tracker.atlasClient should not be (null)
