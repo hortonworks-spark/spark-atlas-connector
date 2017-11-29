@@ -19,5 +19,5 @@ package com.hortonworks.spark.atlas.ml
 
 class MLPipelineTracker {
 
-  // Skeleon to track ML pipeline
+  // Skeleton to track ML pipeline
 }

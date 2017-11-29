@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
 
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, KafkaAtlasClient, RestAtlasClient}
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventTracker(
@@ -38,6 +38,10 @@ class SparkCatalogEventTracker(
 
   def this(atlasClientConf: AtlasClientConf) = {
     this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
+  }
+
+  def this() {
+    this(new AtlasClientConf)
   }
 
   private val capacity = conf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
@@ -50,7 +54,7 @@ class SparkCatalogEventTracker(
 
   @volatile private[atlas] var shouldContinue: Boolean = true
 
-  val eventProcessThread = new Thread {
+  private val eventProcessThread = new Thread {
     override def run(): Unit = {
       eventProcess()
     }
@@ -237,7 +241,7 @@ class SparkCatalogEventTracker(
     try {
       val checkModelInStart = conf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
       if (checkModelInStart) {
-        val restClient = if (atlasClient.isInstanceOf[KafkaAtlasClient]) {
+        val restClient = if (!atlasClient.isInstanceOf[RestAtlasClient]) {
           logWarn("Spark Atlas Model check and creation can only work with REST client, so " +
             "creating a new REST client")
           new RestAtlasClient(conf)

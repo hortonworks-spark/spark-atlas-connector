@@ -30,6 +30,11 @@ class AtlasClientConf {
     this
   }
 
+  def set(key: ConfigEntry, value: String): AtlasClientConf = {
+    configuration.setProperty(key.key, value)
+    this
+  }
+
   def get(key: String, defaultValue: String): String = {
     Option(configuration.getProperty(key).asInstanceOf[String]).getOrElse(defaultValue)
   }

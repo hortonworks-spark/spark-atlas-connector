@@ -24,10 +24,9 @@ import scala.collection.JavaConverters._
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.hook.AtlasHook
 import org.apache.atlas.model.typedef.AtlasTypesDef
-import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.notification.hook.HookNotification
 import org.apache.atlas.typesystem.Referenceable
-import org.apache.atlas.typesystem.persistence.Id
 
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
