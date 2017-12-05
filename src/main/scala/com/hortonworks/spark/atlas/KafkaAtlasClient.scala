@@ -32,8 +32,6 @@ import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with AtlasClient {
 
-  private lazy val user = SparkUtils.sparkSession.sparkContext.sparkUser
-
   override protected def getNumberOfRetriesPropertyKey: String = {
     AtlasClientConf.CLIENT_NUM_RETRIES.key
   }
@@ -53,7 +51,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     val createRequests = entities.map { e =>
       new HookNotification.EntityCreateRequest(
-        user, entityToReferenceable(e)): HookNotification.HookNotificationMessage
+        SparkUtils.currUser(), entityToReferenceable(e)): HookNotification.HookNotificationMessage
     }.toList.asJava
 
     notifyEntities(createRequests)
@@ -63,7 +61,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
       entityType: String,
       attribute: String): Unit = {
     val deleteRequest = List(new HookNotification.EntityDeleteRequest(
-      user,
+      SparkUtils.currUser(),
       entityType,
       org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
       attribute): HookNotification.HookNotificationMessage)
@@ -76,7 +74,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
       entity: AtlasEntity): Unit = {
     val partialUpdateRequest = List(
       new HookNotification.EntityPartialUpdateRequest(
-        user,
+        SparkUtils.currUser(),
         entityType,
         org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
         attribute,

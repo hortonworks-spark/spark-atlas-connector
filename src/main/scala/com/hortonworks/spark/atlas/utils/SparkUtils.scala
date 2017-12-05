@@ -21,6 +21,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 
@@ -81,5 +83,10 @@ object SparkUtils extends Logging {
     val catalog = sparkSession.sharedState.externalCatalog
     require(catalog != null, "catalog is null")
     catalog
+  }
+
+  // Get the user name of current context.
+  def currUser(): String = {
+    UserGroupInformation.getCurrentUser.getUserName
   }
 }
