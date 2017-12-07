@@ -110,7 +110,8 @@ object SparkAtlasModel extends Logging {
             classificationDefsToCreate.append(i)
           } else if (classificationDefs.forall(_.getTypeVersion.toDouble <
             METADATA_VERSION.toDouble)) {
-            logDebug(s"Classification type: $tpeName is not found in Atlas database")
+            logDebug(s"Classification type: $tpeName found in Atlas database is older than the " +
+              "defined one")
             classificationDefsToUpdate.append(i)
           }
 

@@ -25,6 +25,8 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 
 object SparkUtils extends Logging {
 
@@ -88,5 +90,30 @@ object SparkUtils extends Logging {
   // Get the user name of current context.
   def currUser(): String = {
     UserGroupInformation.getCurrentUser.getUserName
+  }
+
+  // Get session user name, this is only available for Spark ThriftServer scenario, we should
+  // figure out a proper session user name based on connected beeline.
+  //
+  // Note. This is a hacky way, we cannot guarantee the consistency between Spark versions.
+  def currSessionUser(qe: QueryExecution): String = {
+    val thriftServerListener = Option(HiveThriftServer2.listener)
+
+    thriftServerListener match {
+      case Some(listener) =>
+        val qeString = qe.toString()
+        // Based on the QueryExecution to find out the session id. This is quite cost, but
+        // currently it is the way to correlate query plan to session.
+        val sessId = listener.getExecutionList.reverseIterator
+          .find(_.executePlan == qeString)
+          .map(_.sessionId)
+        sessId.flatMap { id =>
+          listener.getSessionList.reverseIterator.find(_.sessionId == id)
+        }
+          .map(_.userName)
+          .getOrElse(currUser())
+
+      case None => currUser()
+    }
   }
 }

@@ -122,7 +122,8 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("user", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
