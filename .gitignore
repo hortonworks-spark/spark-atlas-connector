@@ -3,3 +3,4 @@
 .idea
 *.iml
 target
+metastore_db
