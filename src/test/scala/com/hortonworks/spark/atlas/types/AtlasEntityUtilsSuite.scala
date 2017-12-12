@@ -20,7 +20,6 @@ package com.hortonworks.spark.atlas.types
 import scala.collection.JavaConverters._
 
 import org.apache.atlas.AtlasClient
-import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
@@ -49,19 +48,25 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
 
   test("convert catalog db to entity") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
-    val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
+    val dbEntities = AtlasEntityUtils.dbToEntities(dbDefinition)
 
+    val dbEntity = dbEntities.head
+    val pathEntity = dbEntities.tail.head
     dbEntity.getTypeName should be (metadata.DB_TYPE_STRING)
     dbEntity.getAttribute("name") should be ("db1")
-    dbEntity.getAttribute("locationUri") should be ("hdfs:///test/db/db1")
+    dbEntity.getAttribute("locationUri") should be (pathEntity)
+    pathEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+      "hdfs:///test/db/db1")
+    pathEntity.getAttribute(AtlasClient.NAME) should be ("/test/db/db1")
     dbEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       sparkSession.sparkContext.applicationId + ".db1")
   }
 
   test("convert catalog storage format to entity") {
     val storageFormat = createStorageFormat()
-    val sdEntity = AtlasEntityUtils.storageFormatToEntity(storageFormat, "db1", "tbl1")
+    val sdEntities = AtlasEntityUtils.storageFormatToEntities(storageFormat, "db1", "tbl1")
 
+    val sdEntity = sdEntities.head
     sdEntity.getTypeName should be (metadata.STORAGEDESC_TYPE_STRING)
     sdEntity.getAttribute("locationUri") should be (null)
     sdEntity.getAttribute("inputFormat") should be (null)
@@ -77,7 +82,7 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       .add("user", StringType, false)
       .add("age", IntegerType, true)
 
-    val schemaEntities = AtlasEntityUtils.schemaToEntity(schema, "db1", "tbl1")
+    val schemaEntities = AtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1")
     schemaEntities.length should be (2)
 
     schemaEntities(0).getAttribute("name") should be ("user")
@@ -101,11 +106,12 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", "tbl1", schema, sd)
 
-    val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-    val sdEntity = AtlasEntityUtils.storageFormatToEntity(sd, "db1", "tbl1")
-    val schemaEntities = AtlasEntityUtils.schemaToEntity(schema, "db1", "tbl1")
-    val tableEntity =
-      AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity, schemaEntities, sdEntity)
+    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntity = tableEntities.head
+
+    val dbEntity = tableEntities.find(_.getTypeName == metadata.DB_TYPE_STRING).get
+    val sdEntity = tableEntities.find(_.getTypeName == metadata.STORAGEDESC_TYPE_STRING).get
+    val schemaEntities = tableEntities.filter(_.getTypeName == metadata.COLUMN_TYPE_STRING)
 
     tableEntity.getTypeName should be (metadata.TABLE_TYPE_STRING)
     tableEntity.getAttribute("name") should be ("tbl1")

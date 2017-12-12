@@ -17,11 +17,14 @@
 
 package com.hortonworks.spark.atlas.types
 
+import java.io.File
+import java.net.{URI, URISyntaxException}
+
 import scala.collection.JavaConverters._
 
-import org.apache.atlas.AtlasClient
-import org.apache.atlas.`type`.AtlasTypeUtil
+import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.types.StructType
@@ -32,44 +35,49 @@ object AtlasEntityUtils extends Logging {
 
   def dbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
-  def dbToEntity(dbDefinition: CatalogDatabase): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.DB_TYPE_STRING)
+  def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
+    val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
+    val pathEntity = pathToEntity(dbDefinition.locationUri.toString)
 
-    entity.setAttribute(
+    dbEntity.setAttribute(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, dbUniqueAttribute(dbDefinition.name))
-    entity.setAttribute("name", dbDefinition.name)
-    entity.setAttribute("description", dbDefinition.description)
-    entity.setAttribute("locationUri", dbDefinition.locationUri.toString)
-    entity.setAttribute("properties", dbDefinition.properties.asJava)
-    entity
+    dbEntity.setAttribute("name", dbDefinition.name)
+    dbEntity.setAttribute("description", dbDefinition.description)
+    dbEntity.setAttribute("locationUri", pathEntity)
+    dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
+    Seq(dbEntity, pathEntity)
   }
 
   def storageFormatUniqueAttribute(db: String, table: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.storageFormat"
   }
 
-  def storageFormatToEntity(
+  def storageFormatToEntities(
       storageFormat: CatalogStorageFormat,
       db: String,
-      table: String): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
+      table: String): Seq[AtlasEntity] = {
+    val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
+    val pathEntity = storageFormat.locationUri.map { u => pathToEntity(u.toString) }
 
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    sdEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
       storageFormatUniqueAttribute(db, table))
-    storageFormat.locationUri.foreach(entity.setAttribute("locationUri", _))
-    storageFormat.inputFormat.foreach(entity.setAttribute("inputFormat", _))
-    storageFormat.outputFormat.foreach(entity.setAttribute("outputFormat", _))
-    storageFormat.serde.foreach(entity.setAttribute("serde", _))
-    entity.setAttribute("compressed", storageFormat.compressed)
-    entity.setAttribute("properties", storageFormat.properties.asJava)
-    entity
+    pathEntity.foreach { e => sdEntity.setAttribute("locationUri", e) }
+    storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
+    storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
+    storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
+    sdEntity.setAttribute("compressed", storageFormat.compressed)
+    sdEntity.setAttribute("properties", storageFormat.properties.asJava)
+
+    Seq(Some(sdEntity), pathEntity)
+      .filter(_.isDefined)
+      .flatten
   }
 
   def columnUniqueAttribute(db: String, table: String, col: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.col-$col"
   }
 
-  def schemaToEntity(schema: StructType, db: String, table: String): List[AtlasEntity] = {
+  def schemaToEntities(schema: StructType, db: String, table: String): List[AtlasEntity] = {
     schema.map { struct =>
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
 
@@ -87,34 +95,41 @@ object AtlasEntityUtils extends Logging {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table"
   }
 
-  def tableToEntity(
+  def tableToEntities(
       tableDefinition: CatalogTable,
-      db: AtlasEntity,
-      schema: List[AtlasEntity],
-      storageFormat: AtlasEntity): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val db = tableDefinition.identifier.database.getOrElse("default")
+    val dbDefinition = mockDbDefinition
+      .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      tableUniqueAttribute(tableDefinition.identifier.database.getOrElse("default"),
-        tableDefinition.identifier.table))
-    entity.setAttribute("name", tableDefinition.identifier.table)
-    entity.setAttribute("database", db)
-    entity.setAttribute("tableType", tableDefinition.tableType.name)
-    entity.setAttribute("storage", storageFormat)
-    entity.setAttribute("schema", schema.asJava)
-    tableDefinition.provider.foreach(entity.setAttribute("provider", _))
-    entity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
+    val dbEntities = dbToEntities(dbDefinition)
+    val sdEntities =
+      storageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
+    val schemaEntities =
+      schemaToEntities(tableDefinition.schema, db, tableDefinition.identifier.table)
+
+    val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+
+    tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      tableUniqueAttribute(db, tableDefinition.identifier.table))
+    tblEntity.setAttribute("name", tableDefinition.identifier.table)
+    tblEntity.setAttribute("database", dbEntities.head)
+    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
+    tblEntity.setAttribute("storage", sdEntities.head)
+    tblEntity.setAttribute("schema", schemaEntities.asJava)
+    tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
+    tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
-      b => entity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
-    entity.setAttribute("owner", tableDefinition.owner)
-    entity.setAttribute("createTime", tableDefinition.createTime)
-    entity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
-    entity.setAttribute("properties", tableDefinition.properties.asJava)
-    tableDefinition.viewText.foreach(entity.setAttribute("viewText", _))
-    tableDefinition.comment.foreach(entity.setAttribute("comment", _))
-    entity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
+      b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
+    tblEntity.setAttribute("owner", tableDefinition.owner)
+    tblEntity.setAttribute("createTime", tableDefinition.createTime)
+    tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
+    tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
+    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewText", _))
+    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
+    tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
-    entity
+    Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
   }
 
   def processUniqueAttribute(executionId: Long): String = {
@@ -143,5 +158,44 @@ object AtlasEntityUtils extends Logging {
     entity.setAttribute("inputs", inputs.asJava)
     entity.setAttribute("outputs", outputs.asJava)
     entity
+  }
+
+  def pathToEntity(path: String): AtlasEntity = {
+    val uri = resolveURI(path)
+    val entity = if (uri.getScheme == "hfds") {
+      new AtlasEntity(metadata.HDFS_PATH_TYPE_STRING)
+    } else {
+      new AtlasEntity(metadata.FS_PATH_TYPE_STRING)
+    }
+
+    val fsPath = new Path(uri)
+    entity.setAttribute(AtlasClient.NAME,
+      Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+    entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uri.toString)
+    if (uri.getScheme == "hdfs") {
+      entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
+    }
+
+    entity
+  }
+
+  def resolveURI(path: String): URI = {
+    try {
+      val uri = new URI(path)
+      if (uri.getScheme() != null) {
+        return uri
+      }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
+    } catch {
+      case e: URISyntaxException =>
+    }
+    new File(path).getAbsoluteFile().toURI()
   }
 }

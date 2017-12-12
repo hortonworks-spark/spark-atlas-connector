@@ -31,6 +31,10 @@ object metadata {
   val TABLE_TYPE_STRING = "spark_table"
   val PROCESS_TYPE_STRING = "spark_process"
 
+  // External metadata types used to link with external entities
+  val FS_PATH_TYPE_STRING = "fs_path"
+  val HDFS_PATH_TYPE_STRING = "hdfs_path"
+
   // ========= DB type =========
   val DB_TYPE = AtlasTypeUtil.createClassTypeDef(
     DB_TYPE_STRING,
@@ -40,7 +44,7 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("locationUri", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef(
       "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)))
 
@@ -52,7 +56,7 @@ object metadata {
     ImmutableSet.of("Referenceable"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("locationUri", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("inputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("outputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("serde", new AtlasStringType),

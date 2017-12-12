@@ -20,10 +20,10 @@ package com.hortonworks.spark.atlas.sql
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.annotations.VisibleForTesting
-import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
@@ -34,7 +34,8 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventTracker(
     private[atlas] val atlasClient: AtlasClient,
-    private val conf: AtlasClientConf) extends SparkListener with Logging {
+    private val conf: AtlasClientConf) extends SparkListener with AbstractService with Logging {
+  import AtlasEntityUtils._
 
   def this(atlasClientConf: AtlasClientConf) = {
     this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
@@ -52,16 +53,10 @@ class SparkCatalogEventTracker(
 
   private val timeout = conf.get(AtlasClientConf.BLOCKING_QUEUE_PUT_TIMEOUT).toInt
 
+  @VisibleForTesting
   @volatile private[atlas] var shouldContinue: Boolean = true
 
-  private val eventProcessThread = new Thread {
-    override def run(): Unit = {
-      eventProcess()
-    }
-  }
-  eventProcessThread.setName("spark-atlas-event-process")
-  eventProcessThread.setDaemon(true)
-  eventProcessThread.start()
+  private val cachedObject = new mutable.WeakHashMap[String, Object]
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (!shouldContinue) {
@@ -79,7 +74,7 @@ class SparkCatalogEventTracker(
   }
 
   @VisibleForTesting
-  private[atlas] def eventProcess(): Unit = {
+  protected[atlas] override def eventProcess(): Unit = {
     // initialize Atlas client before further processing event.
     if (!initializeSparkModel()) {
       logError("Fail to initialize Atlas Client, will discard all the received events and stop " +
@@ -96,37 +91,52 @@ class SparkCatalogEventTracker(
         Option(eventQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach {
           case CreateDatabaseEvent(db) =>
             val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
-            val entity = AtlasEntityUtils.dbToEntity(dbDefinition)
-            atlasClient.createEntities(Seq(entity))
+            val entities = dbToEntities(dbDefinition)
+            atlasClient.createEntities(entities)
             logInfo(s"Created db entity $db")
 
+          case DropDatabasePreEvent(db) =>
+            cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
+
           case DropDatabaseEvent(db) =>
-            atlasClient.deleteEntityWithUniqueAttr(
-              metadata.DB_TYPE_STRING,
-              AtlasEntityUtils.dbUniqueAttribute(db))
+            atlasClient.deleteEntityWithUniqueAttr(metadata.DB_TYPE_STRING, dbUniqueAttribute(db))
+
+            cachedObject.remove(dbUniqueAttribute(db)).foreach { o =>
+              val dbDef = o.asInstanceOf[CatalogDatabase]
+              val path = dbDef.locationUri.toString
+              val pathEntity = AtlasEntityUtils.pathToEntity(path)
+              atlasClient.deleteEntityWithUniqueAttr(pathEntity.getTypeName, path)
+            }
+
             logInfo(s"Deleted db entity $db")
 
           case CreateTableEvent(db, table) =>
             val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-            val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
-
-            val schemaEntities = AtlasEntityUtils.schemaToEntity(tableDefinition.schema, db, table)
-            val storageFormatEntity =
-              AtlasEntityUtils.storageFormatToEntity(tableDefinition.storage, db, table)
-
-            val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-
-            val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
-              schemaEntities, storageFormatEntity)
-            atlasClient.createEntities(
-              Seq(dbEntity, storageFormatEntity, tableEntity) ++ schemaEntities)
+            val tableEntities = tableToEntities(tableDefinition)
+            atlasClient.createEntities(tableEntities)
             logInfo(s"Created table entity $table")
 
+          case DropTablePreEvent(db, table) =>
+            val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+            cachedObject.put(tableUniqueAttribute(db, table), tableDefinition)
+
           case DropTableEvent(db, table) =>
-            // TODO. we should also drop columns and storage format related to that table
             atlasClient.deleteEntityWithUniqueAttr(
-              metadata.TABLE_TYPE_STRING,
-              AtlasEntityUtils.tableUniqueAttribute(db, table))
+              metadata.TABLE_TYPE_STRING, tableUniqueAttribute(db, table))
+
+            cachedObject.remove(tableUniqueAttribute(db, table)).foreach { o =>
+              val tblDef = o.asInstanceOf[CatalogTable]
+              atlasClient.deleteEntityWithUniqueAttr(
+                metadata.STORAGEDESC_TYPE_STRING,
+                storageFormatUniqueAttribute(db, table))
+              tblDef.schema.foreach { f =>
+                atlasClient.deleteEntityWithUniqueAttr(
+                  metadata.COLUMN_TYPE_STRING,
+                  columnUniqueAttribute(db, table, f.name)
+                )
+              }
+            }
+
             logInfo(s"Deleted table entity $table")
 
           case RenameTableEvent(db, name, newName) =>
@@ -135,31 +145,31 @@ class SparkCatalogEventTracker(
             // Update storageFormat's unique attribute
             val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE)
             sdEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-              AtlasEntityUtils.storageFormatUniqueAttribute(db, newName))
+              storageFormatUniqueAttribute(db, newName))
             atlasClient.updateEntityWithUniqueAttr(
               metadata.STORAGEDESC_TYPE_STRING,
-              AtlasEntityUtils.storageFormatUniqueAttribute(db, name),
+              storageFormatUniqueAttribute(db, name),
               sdEntity)
 
             // Update column's unique attribute
             tableDefinition.schema.foreach { sf =>
               val colEntity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
               colEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-                AtlasEntityUtils.columnUniqueAttribute(db, newName, sf.name))
+                columnUniqueAttribute(db, newName, sf.name))
               atlasClient.updateEntityWithUniqueAttr(
                 metadata.COLUMN_TYPE_STRING,
-                AtlasEntityUtils.columnUniqueAttribute(db, name, sf.name),
+                columnUniqueAttribute(db, name, sf.name),
                 colEntity)
             }
 
             // Update Table name and Table's unique attribute
             val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
             tableEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-              AtlasEntityUtils.tableUniqueAttribute(db, newName))
+              tableUniqueAttribute(db, newName))
             tableEntity.setAttribute("name", newName)
             atlasClient.updateEntityWithUniqueAttr(
               metadata.TABLE_TYPE_STRING,
-              AtlasEntityUtils.tableUniqueAttribute(db, name),
+              tableUniqueAttribute(db, name),
               tableEntity)
 
             logInfo(s"Rename table entity $name to $newName")
@@ -169,8 +179,8 @@ class SparkCatalogEventTracker(
             try {
               val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
               val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
-              val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-              atlasClient.createEntities(Seq(dbEntity))
+              val dbEntities = dbToEntities(dbDefinition)
+              atlasClient.createEntities(dbEntities)
               logInfo(s"Updated DB properties")
             } catch {
               case NonFatal(t) => logWarn(s"Failed to update DB properties", t)
@@ -185,33 +195,19 @@ class SparkCatalogEventTracker(
               val tableDefinition = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
               kind match {
                 case "table" =>
-                  val schemaEntities =
-                    AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
-
-                  val storageFormatEntity = AtlasEntityUtils.storageFormatToEntity(
-                    tableDefinition.storage, dbName, tableName)
-
-                  val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
-                  val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-
-                  val tableEntity = AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity,
-                    schemaEntities, storageFormatEntity)
-
-                  atlasClient.createEntities(
-                    Seq(dbEntity, storageFormatEntity, tableEntity) ++ schemaEntities)
+                  val tableEntities = tableToEntities(tableDefinition)
+                  atlasClient.createEntities(tableEntities)
                   logInfo(s"Updated table entity $tableName")
 
                 case "dataSchema" =>
-                  val schemaEntities =
-                    AtlasEntityUtils.schemaToEntity(tableDefinition.schema, dbName, tableName)
+                  val schemaEntities = schemaToEntities(tableDefinition.schema, dbName, tableName)
                   atlasClient.createEntities(schemaEntities)
 
                   val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
-                  tableEntity.setAttribute("schema",
-                    AtlasTypeUtil.toObjectIds(schemaEntities.asJava))
+                  tableEntity.setAttribute("schema", schemaEntities.asJava)
                   atlasClient.updateEntityWithUniqueAttr(
                     metadata.TABLE_TYPE_STRING,
-                    AtlasEntityUtils.tableUniqueAttribute(dbName, tableName),
+                    tableUniqueAttribute(dbName, tableName),
                     tableEntity)
                   logInfo(s"Updated table schema")
 

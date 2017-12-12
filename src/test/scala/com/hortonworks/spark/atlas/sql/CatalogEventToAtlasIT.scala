@@ -77,7 +77,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     }
   }
 
-  it("catalog table event to Atlas entites") {
+  it("catalog table event to Atlas entities") {
     val tempDbPath = Files.createTempDirectory("db_")
     val dbDefinition = createDB("db2", tempDbPath.normalize().toUri.toString)
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
