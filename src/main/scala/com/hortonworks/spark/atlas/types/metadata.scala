@@ -30,6 +30,11 @@ object metadata {
   val COLUMN_TYPE_STRING = "spark_column"
   val TABLE_TYPE_STRING = "spark_table"
   val PROCESS_TYPE_STRING = "spark_process"
+  val ML_DIRECTORY_TYPE_STRING = "ml_directory"
+  val ML_PIPELINE_TYPE_STRING = "ml_pipeline"
+  val ML_MODEL_TYPE_STRING = "ml_model"
+  val ML_FIT_PROCESS_TYPE_STRING = "ml_fit_process"
+  val ML_TRANSFORM_PROCESS_TYPE_STRING = "ml_transform_process"
 
   // External metadata types used to link with external entities
   val FS_PATH_TYPE_STRING = "fs_path"
@@ -134,4 +139,68 @@ object metadata {
     // AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
+
+  // ========== ML directory type ==========
+  val ML_DIRECTORY_TYPE = AtlasTypeUtil.createClassTypeDef(
+    ML_DIRECTORY_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("Referenceable"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("uri", new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("directory", new AtlasStringType))
+
+  // ========== ML pipeline type ==========
+  val ML_PIPELINE_TYPE = AtlasTypeUtil.createClassTypeDef(
+    ML_PIPELINE_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("DataSet"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
+
+  // ========== ML model type ==========
+  val ML_MODEL_TYPE = AtlasTypeUtil.createClassTypeDef(
+    ML_MODEL_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("DataSet"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("pid", new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
+
+  // ========== ML Fit Process type ==========
+  val ML_FIT_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
+    ML_FIT_PROCESS_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("Process"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("pipeline", ML_PIPELINE_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
+
+  // ========== ML Fit Process type ==========
+  val ML_TRANSFORM_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
+    ML_TRANSFORM_PROCESS_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("Process"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("model", ML_MODEL_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 }
