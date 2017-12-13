@@ -4,3 +4,4 @@
 *.iml
 target
 metastore_db
+tmp
