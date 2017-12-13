@@ -171,7 +171,6 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("pid", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))

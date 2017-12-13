@@ -224,7 +224,6 @@ object AtlasEntityUtils extends Logging {
 
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, model.uid)
     entity.setAttribute("name", model.uid)
-    entity.setAttribute("pid", model.parent.uid)
     entity.setAttribute("directory", directory)
     entity
   }
@@ -237,8 +236,10 @@ object AtlasEntityUtils extends Logging {
       input: AtlasEntity,
       output: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, pipeline.uid)
-    entity.setAttribute("name", pipeline.uid)
+
+    val uid = s"${pipeline.uid}_$startTime"
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
     entity.setAttribute("startTime", startTime)
     entity.setAttribute("endTime", endTime)
@@ -255,8 +256,10 @@ object AtlasEntityUtils extends Logging {
       input: AtlasEntity,
       output: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, pipelineModel.uid)
-    entity.setAttribute("name", pipelineModel.uid)
+
+    val uid = s"${pipelineModel.uid}_$startTime"
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
     entity.setAttribute("startTime", startTime)
     entity.setAttribute("endTime", endTime)
