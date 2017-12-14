@@ -96,13 +96,13 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     val inputEntity1 = getTableEntity("tbl1")
     val inputEntity2 = getTableEntity("tbl2")
     val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
-      pipeline, pipelineDirEntity, fitStartTime, fitEndTime, inputEntity1, modelEntity)
+      pipeline, pipelineEntity, fitStartTime, fitEndTime, List(inputEntity1), List(modelEntity))
 
     val fitName = s"${pipeline.uid}_$fitStartTime"
     fitEntity.getTypeName should be (metadata.ML_FIT_PROCESS_TYPE_STRING)
     fitEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (fitName)
     fitEntity.getAttribute("name") should be (fitName)
-    fitEntity.getAttribute("directory") should be (pipelineDirEntity)
+    fitEntity.getAttribute("pipeline") should be (pipelineEntity)
     fitEntity.getAttribute("startTime") should be (fitStartTime)
     fitEntity.getAttribute("endTime") should be (fitEndTime)
 
@@ -114,13 +114,13 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     val transformEndTime = System.nanoTime()
 
     val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
-      model, modelDirEntity, transformStartTime, transformEndTime, inputEntity1, inputEntity2)
+      model, modelEntity, transformStartTime, transformEndTime, List(inputEntity1), List(inputEntity2))
 
     val transformName = s"${model.uid}_$transformStartTime"
     transformEntity.getTypeName should be (metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
     transformEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (transformName)
     transformEntity.getAttribute("name") should be (transformName)
-    transformEntity.getAttribute("directory") should be (modelDirEntity)
+    transformEntity.getAttribute("model") should be (modelEntity)
     transformEntity.getAttribute("startTime") should be (transformStartTime)
     transformEntity.getAttribute("endTime") should be (transformEndTime)
   }

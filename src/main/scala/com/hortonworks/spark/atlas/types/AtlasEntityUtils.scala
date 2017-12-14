@@ -230,41 +230,41 @@ object AtlasEntityUtils extends Logging {
 
   def MLFitProcessToEntity(
       pipeline: Pipeline,
-      directory: AtlasEntity,
+      pipelineEntity: AtlasEntity,
       startTime: Long,
       endTime: Long,
-      input: AtlasEntity,
-      output: AtlasEntity): AtlasEntity = {
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
 
     val uid = s"${pipeline.uid}_$startTime"
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
-    entity.setAttribute("directory", directory)
+    entity.setAttribute("pipeline", pipelineEntity)
     entity.setAttribute("startTime", startTime)
     entity.setAttribute("endTime", endTime)
-    entity.setAttribute("inputs", List(input).asJava)  // Dataset entity
-    entity.setAttribute("outputs", List(output).asJava)  // ML model entity
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset entity
+    entity.setAttribute("outputs", outputs.asJava)  // ML model entity
     entity
   }
 
   def MLTransformProcessToEntity(
       pipelineModel: PipelineModel,
-      directory: AtlasEntity,
+      modelEntity: AtlasEntity,
       startTime: Long,
       endTime: Long,
-      input: AtlasEntity,
-      output: AtlasEntity): AtlasEntity = {
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
 
     val uid = s"${pipelineModel.uid}_$startTime"
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
-    entity.setAttribute("directory", directory)
+    entity.setAttribute("model", modelEntity)
     entity.setAttribute("startTime", startTime)
     entity.setAttribute("endTime", endTime)
-    entity.setAttribute("inputs", List(input).asJava)  // Dataset entity
-    entity.setAttribute("outputs", List(output).asJava)  // Dataset entity
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset entity
+    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
     entity
   }
 }
