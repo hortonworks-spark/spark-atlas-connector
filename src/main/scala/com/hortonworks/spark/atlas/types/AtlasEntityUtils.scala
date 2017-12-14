@@ -222,8 +222,9 @@ object AtlasEntityUtils extends Logging {
       directory: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
 
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, model.uid)
-    entity.setAttribute("name", model.uid)
+    val uid = model.uid.replaceAll("pipeline", "pipeline_model")
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
     entity
   }

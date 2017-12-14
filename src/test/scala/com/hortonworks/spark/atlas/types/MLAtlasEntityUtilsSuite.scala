@@ -48,7 +48,7 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     tableEntity
   }
 
-  test("pipeline and pipeline model") {
+  test("pipeline, pipeline model, fit and transform") {
     val uri = "/"
     val pipelineDir = "tmp/pipeline"
     val modelDir = "tmp/model"
@@ -88,9 +88,10 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     pipelineEntity.getAttribute("directory") should be (pipelineDirEntity)
 
     val modelEntity = AtlasEntityUtils.MLModelToEntity(model, modelDirEntity)
+    val modelUid = model.uid.replaceAll("pipeline", "pipeline_model")
     modelEntity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
-    modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (model.uid)
-    modelEntity.getAttribute("name") should be (model.uid)
+    modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
+    modelEntity.getAttribute("name") should be (modelUid)
     modelEntity.getAttribute("directory") should be (modelDirEntity)
 
     val inputEntity1 = getTableEntity("tbl1")

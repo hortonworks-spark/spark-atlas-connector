@@ -26,7 +26,7 @@ import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 import org.scalatest.Matchers
 
 class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
@@ -34,8 +34,8 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
   private var sparkSession: SparkSession = _
   private val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.65.212:21000")
-  private val altasClient = new RestAtlasClient(atlasClientConf)
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.56.211:21000")
+  private val atlasClient = new RestAtlasClient(atlasClientConf)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -52,11 +52,12 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
     sparkSession = null
   }
 
-  def getTableEntity(tableName: String): (AtlasEntity, List[AtlasEntity], AtlasEntity, AtlasEntity) = {
+  def getTableEntity(tableName: String): (
+    AtlasEntity, List[AtlasEntity], AtlasEntity, AtlasEntity) = {
     val dbDefinition = createDB("db1", "hdfs:///test/db/yliang")
     val sd = createStorageFormat()
     val schema = new StructType()
-      .add("features", StringType, false)
+      .add("features", DoubleType, false)
       .add("label", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
 
@@ -70,7 +71,7 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
 
   test("pipeline and pipeline model") {
 
-    SparkAtlasModel.checkAndCreateTypes(altasClient)
+    SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
     val uri = "/"
     val pipelineDir = "tmp/pipeline"
@@ -79,10 +80,7 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
     val pipelineDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, pipelineDir)
     val modelDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, modelDir)
 
-//    println(pipelineDirEntity.getGuid)
-//    println(modelDirEntity.getGuid)
-//    println("-------")
-    altasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
 
     val df = sparkSession.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
@@ -106,38 +104,26 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
 
     val pipelineEntity = AtlasEntityUtils.MLPipelineToEntity(pipeline, pipelineDirEntity)
 
-//    println(pipelineEntity.getGuid)
-//    println("-------")
-    altasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
+    atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
 
     val modelEntity = AtlasEntityUtils.MLModelToEntity(model, modelDirEntity)
 
-//    println(modelEntity.getGuid)
-//    println("-------")
-    altasClient.createEntities(Seq(modelDirEntity, modelEntity))
+    atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
 
-    val (dbEntity1, schemaEntities1, sdEntity1, tableEntity1) = getTableEntity("yliang1")
-    val (dbEntity2, schemaEntities2, sdEntity2, tableEntity2) = getTableEntity("yliang2")
+    val (dbEntity1, schemaEntities1, sdEntity1, tableEntity1) = getTableEntity("yliang-tbl1")
+    val (dbEntity2, schemaEntities2, sdEntity2, tableEntity2) = getTableEntity("yliang-tbl2")
 
-//    println(dbEntity1.getGuid)
-//    println(sdEntity1.getGuid)
-//    println(tableEntity1.getGuid)
-//    println(schemaEntities1.map(_.getGuid))
-//    println("-------")
+    val tableEntities1 = Seq(dbEntity1, sdEntity1, tableEntity1) ++ schemaEntities1
+    val tableEntities2 = Seq(dbEntity2, sdEntity2, tableEntity2) ++ schemaEntities2
 
-    altasClient.createEntities(Seq(dbEntity1, sdEntity1, tableEntity1) ++ schemaEntities1)
-    altasClient.createEntities(Seq(dbEntity2, sdEntity2, tableEntity2) ++ schemaEntities2)
+    atlasClient.createEntities(tableEntities1)
+    atlasClient.createEntities(tableEntities2)
 
     val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
       pipeline, pipelineEntity, fitStartTime, fitEndTime, List(tableEntity1), List(modelEntity))
 
-//    println(pipelineEntity.getGuid)
-//    println(modelEntity.getGuid)
-//    println(fitEntity.getGuid)
-//    println("-------")
-
-    altasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity, pipelineEntity, modelEntity,
-      dbEntity1, sdEntity1, tableEntity1, fitEntity) ++ schemaEntities1)
+    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity, pipelineEntity,
+      modelEntity, fitEntity) ++ tableEntities1)
 
     model.write.overwrite().save(modelDir)
 
@@ -149,8 +135,7 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
     val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
       model, modelEntity, transformStartTime, transformEndTime, List(tableEntity1), List(tableEntity2))
 
-
-    altasClient.createEntities(Seq(modelDirEntity, modelEntity, dbEntity1, sdEntity1, tableEntity1,
-      dbEntity2, sdEntity2, tableEntity2, transformEntity) ++ schemaEntities1 ++ schemaEntities2)
+    atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
+      ++ tableEntities1 ++ tableEntities2)
   }
 }
