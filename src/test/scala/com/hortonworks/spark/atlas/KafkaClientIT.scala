@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.Matchers
 
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, metadata}
 import com.hortonworks.spark.atlas.sql.SparkCatalogEventTracker
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
@@ -67,7 +66,7 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
     tracker.onOtherEvent(CreateDatabaseEvent("db2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val entity = getEntity(metadata.DB_TYPE_STRING, AtlasEntityUtils.dbUniqueAttribute("db2"))
+      val entity = getEntity(tracker.dbType, tracker.dbUniqueAttribute("db2"))
       entity should not be (null)
       entity.getAttribute("name") should be ("db2")
     }
@@ -78,23 +77,25 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
       .add("age", IntegerType)
     val sd = CatalogStorageFormat.empty
     val tableDefinition = createTable("db2", "tbl1", schema, sd)
+    val isHiveTbl = tracker.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     tracker.onOtherEvent(CreateTableEvent("db2", "tbl1"))
+
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val sdEntity = getEntity(metadata.STORAGEDESC_TYPE_STRING,
-        AtlasEntityUtils.storageFormatUniqueAttribute("db2", "tbl1"))
+      val sdEntity = getEntity(tracker.storageFormatType(isHiveTbl),
+        tracker.storageFormatUniqueAttribute("db2", "tbl1", isHiveTbl))
       sdEntity should not be (null)
 
       schema.foreach { s =>
-        val colEntity = getEntity(metadata.COLUMN_TYPE_STRING,
-          AtlasEntityUtils.columnUniqueAttribute("db2", "tbl1", s.name))
+        val colEntity = getEntity(tracker.columnType(isHiveTbl),
+          tracker.columnUniqueAttribute("db2", "tbl1", s.name, isHiveTbl))
         colEntity should not be (null)
         colEntity.getAttribute("name") should be (s.name)
         colEntity.getAttribute("type") should be (s.dataType.typeName)
       }
 
-      val tblEntity = getEntity(metadata.TABLE_TYPE_STRING,
-        AtlasEntityUtils.tableUniqueAttribute("db2", "tbl1"))
+      val tblEntity = getEntity(tracker.tableType(isHiveTbl),
+        tracker.tableUniqueAttribute("db2", "tbl1", isHiveTbl))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be ("tbl1")
     }
@@ -108,34 +109,41 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
     // Rename table
     SparkUtils.getExternalCatalog().renameTable("db2", "tbl1", "tbl3")
     tracker.onOtherEvent(RenameTableEvent("db2", "tbl1", "tbl3"))
+    val newTblDef = SparkUtils.getExternalCatalog().getTable("db2", "tbl3")
+    val isHiveTbl = tracker.isHiveTable(newTblDef)
+
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val tblEntity = getEntity(metadata.TABLE_TYPE_STRING,
-        AtlasEntityUtils.tableUniqueAttribute("db2", "tbl3"))
+      val tblEntity = getEntity(tracker.tableType(isHiveTbl),
+        tracker.tableUniqueAttribute("db2", "tbl3", isHiveTbl))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be ("tbl3")
 
       schema.foreach { s =>
-        val colEntity = getEntity(metadata.COLUMN_TYPE_STRING,
-          AtlasEntityUtils.columnUniqueAttribute("db2", "tbl3", s.name))
+        val colEntity = getEntity(tracker.columnType(isHiveTbl),
+          tracker.columnUniqueAttribute("db2", "tbl3", s.name, isHiveTbl))
         colEntity should not be (null)
         colEntity.getAttribute("name") should be (s.name)
         colEntity.getAttribute("type") should be (s.dataType.typeName)
       }
 
-      val sdEntity = getEntity(metadata.STORAGEDESC_TYPE_STRING,
-        AtlasEntityUtils.storageFormatUniqueAttribute("db2", "tbl3"))
+      val sdEntity = getEntity(tracker.storageFormatType(isHiveTbl),
+        tracker.storageFormatUniqueAttribute("db2", "tbl3", isHiveTbl))
       sdEntity should not be (null)
     }
   }
 
   it("remove entities") {
     // Drop table
+    val tblDef = SparkUtils.getExternalCatalog().getTable("db2", "tbl3")
+    val isHiveTbl = tracker.isHiveTable(tblDef)
+    tracker.onOtherEvent(DropTablePreEvent("db2", "tbl3"))
     SparkUtils.getExternalCatalog().dropTable(
-      "db2", "tbl2", ignoreIfNotExists = true, purge = false)
-    tracker.onOtherEvent(DropTableEvent("db2", "tbl2"))
+      "db2", "tbl3", ignoreIfNotExists = true, purge = false)
+    tracker.onOtherEvent(DropTableEvent("db2", "tbl3"))
+
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      intercept[AtlasServiceException](getEntity(metadata.TABLE_TYPE_STRING,
-        AtlasEntityUtils.tableUniqueAttribute("db2", "tbl2")))
+      intercept[AtlasServiceException](getEntity(tracker.tableType(isHiveTbl),
+        tracker.tableUniqueAttribute("db2", "tbl3", isHiveTbl)))
     }
   }
 }

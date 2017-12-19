@@ -42,11 +42,13 @@ object TestUtils {
       db: String,
       table: String,
       schema: StructType,
-      storage: CatalogStorageFormat): CatalogTable = {
+      storage: CatalogStorageFormat,
+      isHiveTable: Boolean = false): CatalogTable = {
     CatalogTable(
       TableIdentifier(table, Some(db)),
       CatalogTableType.MANAGED,
       storage,
-      schema)
+      schema,
+      provider = if (isHiveTable) Some("hive") else None)
   }
 }

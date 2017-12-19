@@ -60,7 +60,7 @@ class SparkAtlasModelIT extends BaseResourceIT with Matchers with BeforeAndAfter
     try {
       deleteTypesDef(typesDef)
     } catch {
-      case _ => // No op
+      case _: Throwable => // No op
     }
 
     // Create new Spark Atlas model

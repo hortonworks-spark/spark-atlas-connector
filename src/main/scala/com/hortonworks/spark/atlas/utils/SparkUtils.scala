@@ -17,12 +17,12 @@
 
 package com.hortonworks.spark.atlas.utils
 
-import scala.util.control.NonFatal
+import com.hortonworks.spark.atlas.AtlasClientConf
 
+import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 import org.apache.spark.sql.execution.QueryExecution
@@ -50,6 +50,10 @@ object SparkUtils extends Logging {
     }
   }
 
+  def isHiveEnabled(): Boolean = {
+    sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "hive") == "hive"
+  }
+
   /**
    * Identify a unique qualified prefix based on how catalog is used. This is to differentiate
    * multiple same-name DBs/tables in Atlas graph store when we have multiple catalogs/metastores.
@@ -59,8 +63,7 @@ object SparkUtils extends Logging {
    */
   def getUniqueQualifiedPrefix(mockHiveConf: Option[Configuration] = None): String = {
     val conf = mockHiveConf.getOrElse(hiveConf)
-    if (sparkSession.sparkContext.getConf
-      .get("spark.sql.catalogImplementation", "hive") == "in-memory") {
+    if (!isHiveEnabled()) {
       sparkSession.sparkContext.applicationId + "."
     } else if (conf.getTrimmed("hive.metastore.uris", "").nonEmpty) {
       // If we're using remote Metastore service, then a unique prefix is identified by

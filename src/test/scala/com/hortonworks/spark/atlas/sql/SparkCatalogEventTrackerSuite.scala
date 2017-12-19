@@ -33,7 +33,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, TestUtils}
-import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
@@ -73,13 +72,13 @@ class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAn
     tracker.onOtherEvent(CreateDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall.size > 0)
-      assert(atlasClient.createEntityCall(metadata.DB_TYPE_STRING) == 1)
+      assert(atlasClient.createEntityCall(tracker.dbType) == 1)
     }
 
     tracker.onOtherEvent(DropDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.deleteEntityCall.size > 0)
-      assert(atlasClient.deleteEntityCall(metadata.DB_TYPE_STRING) == 1)
+      assert(atlasClient.deleteEntityCall(tracker.dbType) == 1)
     }
   }
 
@@ -94,26 +93,30 @@ class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAn
 
     val tableDefinition =
       createTable("db1", "tbl1", new StructType().add("id", LongType), CatalogStorageFormat.empty)
+    val isHiveTbl = tracker.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     tracker.onOtherEvent(CreateTableEvent("db1", "tbl1"))
-    eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.createEntityCall(metadata.DB_TYPE_STRING) == 1)
-      assert(atlasClient.createEntityCall(metadata.TABLE_TYPE_STRING) == 1)
-      assert(atlasClient.createEntityCall(metadata.COLUMN_TYPE_STRING) == 1)
-      assert(atlasClient.createEntityCall(metadata.STORAGEDESC_TYPE_STRING) == 1)
-    }
 
-    tracker.onOtherEvent(DropTableEvent("db1", "tbl1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.deleteEntityCall(metadata.TABLE_TYPE_STRING) == 1)
+      assert(atlasClient.createEntityCall(tracker.dbType) == 1)
+      assert(atlasClient.createEntityCall(tracker.tableType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(tracker.columnType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(tracker.storageFormatType(isHiveTbl)) == 1)
     }
 
     SparkUtils.getExternalCatalog().renameTable("db1", "tbl1", "tbl2")
     tracker.onOtherEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.updateEntityCall(metadata.STORAGEDESC_TYPE_STRING) == 1)
-      assert(atlasClient.updateEntityCall(metadata.COLUMN_TYPE_STRING) == 1)
-      assert(atlasClient.updateEntityCall(metadata.TABLE_TYPE_STRING) == 1)
+      assert(atlasClient.updateEntityCall(tracker.storageFormatType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(tracker.columnType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(tracker.tableType(isHiveTbl)) == 1)
+    }
+
+    tracker.onOtherEvent(DropTablePreEvent("db1", "tbl2"))
+    SparkUtils.getExternalCatalog().dropTable("db1", "tbl2", true, true)
+    tracker.onOtherEvent(DropTableEvent("db1", "tbl2"))
+    eventually(timeout(30 seconds), interval(100 milliseconds)) {
+      assert(atlasClient.deleteEntityCall(tracker.tableType(isHiveTbl)) == 1)
     }
   }
 }

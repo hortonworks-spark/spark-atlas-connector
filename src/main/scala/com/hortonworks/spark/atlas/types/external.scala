@@ -1,0 +1,208 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.hortonworks.spark.atlas.types
+
+import java.io.File
+import java.net.{URI, URISyntaxException}
+import java.util.Date
+
+import com.hortonworks.spark.atlas.utils.SparkUtils
+
+import scala.collection.JavaConverters._
+
+import org.apache.atlas.{AtlasClient, AtlasConstants}
+import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.commons.lang.RandomStringUtils
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.types.StructType
+
+object external {
+  // External metadata types used to link with external entities
+
+  // ================ File system entities ======================
+  val FS_PATH_TYPE_STRING = "fs_path"
+  val HDFS_PATH_TYPE_STRING = "hdfs_path"
+
+  def pathToEntity(path: String): AtlasEntity = {
+    val uri = resolveURI(path)
+    val entity = if (uri.getScheme == "hfds") {
+      new AtlasEntity(HDFS_PATH_TYPE_STRING)
+    } else {
+      new AtlasEntity(FS_PATH_TYPE_STRING)
+    }
+
+    val fsPath = new Path(uri)
+    entity.setAttribute(AtlasClient.NAME,
+      Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+    entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uri.toString)
+    if (uri.getScheme == "hdfs") {
+      entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
+    }
+
+    entity
+  }
+
+  def resolveURI(path: String): URI = {
+    try {
+      val uri = new URI(path)
+      if (uri.getScheme() != null) {
+        return uri
+      }
+      // make sure to handle if the path has a fragment (applies to yarn
+      // distributed cache)
+      if (uri.getFragment() != null) {
+        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
+        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+          uri.getFragment())
+      }
+    } catch {
+      case e: URISyntaxException =>
+    }
+    new File(path).getAbsoluteFile().toURI()
+  }
+
+  // ================== Hive entities =====================
+  val HIVE_DB_TYPE_STRING = "hive_db"
+  val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
+  val HIVE_COLUMN_TYPE_STRING = "hive_column"
+  val HIVE_TABLE_TYPE_STRING = "hive_table"
+
+  def hiveDbUniqueAttribute(cluster: String, db: String) = s"${db.toLowerCase}@$cluster"
+
+  def hiveDbToEntities(dbDefinition: CatalogDatabase, cluster: String): Seq[AtlasEntity] = {
+    val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
+
+    dbEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
+    dbEntity.setAttribute(AtlasClient.NAME, dbDefinition.name.toLowerCase)
+    dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
+    dbEntity.setAttribute("description", dbDefinition.description)
+    dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
+    dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
+    Seq(dbEntity)
+  }
+
+  def hiveStorageDescUniqueAttribute(
+      cluster: String,
+      db: String,
+      table: String,
+      isTempTable: Boolean = false): String = {
+    hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
+  }
+
+    def hiveStorageDescToEntities(
+      storageFormat: CatalogStorageFormat,
+      cluster: String,
+      db: String,
+      table: String,
+      isTempTable: Boolean = false): Seq[AtlasEntity] = {
+    val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
+    sdEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
+    storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
+    storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
+    sdEntity.setAttribute("compressed", storageFormat.compressed)
+    sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
+    storageFormat.serde.foreach(sdEntity.setAttribute(AtlasClient.NAME, _))
+    storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
+    Seq(sdEntity)
+  }
+
+  def hiveColumnUniqueAttribute(
+      cluster: String,
+      db: String,
+      table: String,
+      column: String,
+      isTempTable: Boolean = false): String = {
+    val tableName = hiveTableUniqueAttribute(cluster, db, table, isTempTable)
+    val parts = tableName.split("@")
+    s"${parts(0)}.${column.toLowerCase}@${parts(1)}"
+  }
+
+  def hiveSchemaToEntities(
+      schema: StructType,
+      cluster: String,
+      db: String,
+      table: String,
+      isTempTable: Boolean = false): List[AtlasEntity] = {
+    schema.map { struct =>
+      val entity = new AtlasEntity(HIVE_COLUMN_TYPE_STRING)
+
+      entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+        hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
+      entity.setAttribute(AtlasClient.NAME, struct.name)
+      entity.setAttribute("type", struct.dataType.typeName)
+      entity.setAttribute("comment", struct.getComment())
+      entity
+    }.toList
+  }
+
+  def hiveTableUniqueAttribute(
+      cluster: String,
+      db: String,
+      table: String,
+      isTemporary: Boolean = false): String  = {
+    val tableName = if (isTemporary) {
+      if (SessionState.get() != null && SessionState.get().getSessionId != null) {
+        s"${table}_temp-${SessionState.get().getSessionId}"
+      } else {
+        s"${table}_temp-${RandomStringUtils.random(10)}"
+      }
+    } else {
+      table
+    }
+
+    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
+  }
+
+  def hiveTableToEntities(
+      tableDefinition: CatalogTable,
+      cluster: String,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val db = tableDefinition.identifier.database.getOrElse("default")
+    val table = tableDefinition.identifier.table
+    val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
+
+    val dbEntities = hiveDbToEntities(dbDefinition, cluster)
+    val sdEntities = hiveStorageDescToEntities(
+      tableDefinition.storage, cluster, db, table
+      /* isTempTable = false  Spark doesn't support temp table*/)
+    val schemaEntities = hiveSchemaToEntities(
+      tableDefinition.schema, cluster, db, table /*, isTempTable = false */)
+
+    val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
+    tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
+    tblEntity.setAttribute(AtlasClient.NAME, table)
+    tblEntity.setAttribute(AtlasClient.OWNER, tableDefinition.owner)
+    tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
+    tblEntity.setAttribute("lastAccessTime", new Date(tableDefinition.lastAccessTime))
+    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
+    tblEntity.setAttribute("db", dbEntities.head)
+    tblEntity.setAttribute("sd", sdEntities.head)
+    tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
+    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
+    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
+    tblEntity.setAttribute("columns", schemaEntities.asJava)
+
+    Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+}

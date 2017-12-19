@@ -36,9 +36,7 @@ object metadata {
   val ML_FIT_PROCESS_TYPE_STRING = "ml_fit_process"
   val ML_TRANSFORM_PROCESS_TYPE_STRING = "ml_transform_process"
 
-  // External metadata types used to link with external entities
-  val FS_PATH_TYPE_STRING = "fs_path"
-  val HDFS_PATH_TYPE_STRING = "hdfs_path"
+  import external._
 
   // ========= DB type =========
   val DB_TYPE = AtlasTypeUtil.createClassTypeDef(

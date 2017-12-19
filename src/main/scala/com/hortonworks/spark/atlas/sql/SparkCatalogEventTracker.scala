@@ -28,14 +28,14 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
 
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, metadata}
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventTracker(
     private[atlas] val atlasClient: AtlasClient,
-    private val conf: AtlasClientConf) extends SparkListener with AbstractService with Logging {
-  import AtlasEntityUtils._
+    override val conf: AtlasClientConf)
+  extends SparkListener with AbstractService with AtlasEntityUtils with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
     this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
@@ -99,12 +99,12 @@ class SparkCatalogEventTracker(
             cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
 
           case DropDatabaseEvent(db) =>
-            atlasClient.deleteEntityWithUniqueAttr(metadata.DB_TYPE_STRING, dbUniqueAttribute(db))
+            atlasClient.deleteEntityWithUniqueAttr(dbType, dbUniqueAttribute(db))
 
             cachedObject.remove(dbUniqueAttribute(db)).foreach { o =>
               val dbDef = o.asInstanceOf[CatalogDatabase]
               val path = dbDef.locationUri.toString
-              val pathEntity = AtlasEntityUtils.pathToEntity(path)
+              val pathEntity = external.pathToEntity(path)
               atlasClient.deleteEntityWithUniqueAttr(pathEntity.getTypeName, path)
             }
 
@@ -118,58 +118,59 @@ class SparkCatalogEventTracker(
 
           case DropTablePreEvent(db, table) =>
             val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-            cachedObject.put(tableUniqueAttribute(db, table), tableDefinition)
+            cachedObject.put(
+              tableUniqueAttribute(db, table, isHiveTable(tableDefinition)), tableDefinition)
 
           case DropTableEvent(db, table) =>
-            atlasClient.deleteEntityWithUniqueAttr(
-              metadata.TABLE_TYPE_STRING, tableUniqueAttribute(db, table))
+            cachedObject.remove(tableUniqueAttribute(db, table, isHiveTable = true))
+              .orElse(cachedObject.remove(tableUniqueAttribute(db, table, isHiveTable = false)))
+              .foreach { o =>
+                val tblDef = o.asInstanceOf[CatalogTable]
+                val isHiveTbl = isHiveTable(tblDef)
 
-            cachedObject.remove(tableUniqueAttribute(db, table)).foreach { o =>
-              val tblDef = o.asInstanceOf[CatalogTable]
-              atlasClient.deleteEntityWithUniqueAttr(
-                metadata.STORAGEDESC_TYPE_STRING,
-                storageFormatUniqueAttribute(db, table))
-              tblDef.schema.foreach { f =>
                 atlasClient.deleteEntityWithUniqueAttr(
-                  metadata.COLUMN_TYPE_STRING,
-                  columnUniqueAttribute(db, table, f.name)
-                )
+                  tableType(isHiveTbl), tableUniqueAttribute(db, table, isHiveTbl))
+                atlasClient.deleteEntityWithUniqueAttr(
+                  storageFormatType(isHiveTbl), storageFormatUniqueAttribute(db, table, isHiveTbl))
+                tblDef.schema.foreach { f =>
+                  atlasClient.deleteEntityWithUniqueAttr(
+                    columnType(isHiveTbl), columnUniqueAttribute(db, table, f.name, isHiveTbl))
+                }
               }
-            }
-
             logInfo(s"Deleted table entity $table")
 
           case RenameTableEvent(db, name, newName) =>
             val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, newName)
+            val isHiveTbl = isHiveTable(tableDefinition)
 
             // Update storageFormat's unique attribute
-            val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE)
+            val sdEntity = new AtlasEntity(storageFormatType(isHiveTbl))
             sdEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-              storageFormatUniqueAttribute(db, newName))
+              storageFormatUniqueAttribute(db, newName, isHiveTbl))
             atlasClient.updateEntityWithUniqueAttr(
-              metadata.STORAGEDESC_TYPE_STRING,
-              storageFormatUniqueAttribute(db, name),
+              storageFormatType(isHiveTbl),
+              storageFormatUniqueAttribute(db, name, isHiveTbl),
               sdEntity)
 
             // Update column's unique attribute
             tableDefinition.schema.foreach { sf =>
-              val colEntity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
+              val colEntity = new AtlasEntity(columnType(isHiveTbl))
               colEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-                columnUniqueAttribute(db, newName, sf.name))
+                columnUniqueAttribute(db, newName, sf.name, isHiveTbl))
               atlasClient.updateEntityWithUniqueAttr(
-                metadata.COLUMN_TYPE_STRING,
-                columnUniqueAttribute(db, name, sf.name),
+                columnType(isHiveTbl),
+                columnUniqueAttribute(db, name, sf.name, isHiveTbl),
                 colEntity)
             }
 
             // Update Table name and Table's unique attribute
-            val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+            val tableEntity = new AtlasEntity(tableType(isHiveTbl))
             tableEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-              tableUniqueAttribute(db, newName))
+              tableUniqueAttribute(db, newName, isHiveTbl))
             tableEntity.setAttribute("name", newName)
             atlasClient.updateEntityWithUniqueAttr(
-              metadata.TABLE_TYPE_STRING,
-              tableUniqueAttribute(db, name),
+              tableType(isHiveTbl),
+              tableUniqueAttribute(db, name, isHiveTbl),
               tableEntity)
 
             logInfo(s"Rename table entity $name to $newName")
@@ -200,14 +201,16 @@ class SparkCatalogEventTracker(
                   logInfo(s"Updated table entity $tableName")
 
                 case "dataSchema" =>
-                  val schemaEntities = schemaToEntities(tableDefinition.schema, dbName, tableName)
+                  val isHiveTbl = isHiveTable(tableDefinition)
+                  val schemaEntities =
+                    schemaToEntities(tableDefinition.schema, dbName, tableName, isHiveTbl)
                   atlasClient.createEntities(schemaEntities)
 
-                  val tableEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
+                  val tableEntity = new AtlasEntity(tableType(isHiveTbl))
                   tableEntity.setAttribute("schema", schemaEntities.asJava)
                   atlasClient.updateEntityWithUniqueAttr(
-                    metadata.TABLE_TYPE_STRING,
-                    tableUniqueAttribute(dbName, tableName),
+                    tableType(isHiveTbl),
+                    tableUniqueAttribute(dbName, tableName, isHiveTbl),
                     tableEntity)
                   logInfo(s"Updated table schema")
 

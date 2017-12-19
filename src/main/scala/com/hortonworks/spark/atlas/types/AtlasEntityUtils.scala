@@ -17,6 +17,7 @@
 
 package com.hortonworks.spark.atlas.types
 
+<<<<<<< HEAD
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
@@ -29,34 +30,56 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
+=======
+import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.utils.SparkUtils
+import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
+>>>>>>> Add Hive support and refactor the code
 import org.apache.spark.sql.types.StructType
 
-import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
+trait AtlasEntityUtils {
 
-object AtlasEntityUtils extends Logging {
+  def conf: AtlasClientConf
 
-  def dbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
+  def clusterName: String = conf.get(AtlasClientConf.CLUSTER_NAME)
 
-  def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
-    val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
-    val pathEntity = pathToEntity(dbDefinition.locationUri.toString)
-
-    dbEntity.setAttribute(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, dbUniqueAttribute(dbDefinition.name))
-    dbEntity.setAttribute("name", dbDefinition.name)
-    dbEntity.setAttribute("description", dbDefinition.description)
-    dbEntity.setAttribute("locationUri", pathEntity)
-    dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
-    Seq(dbEntity, pathEntity)
+  def dbType: String = {
+    if (SparkUtils.isHiveEnabled()) {
+      external.HIVE_DB_TYPE_STRING
+    } else {
+      metadata.DB_TYPE_STRING
+    }
   }
 
-  def storageFormatUniqueAttribute(db: String, table: String): String = {
-    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.storageFormat"
+  def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
+    if (SparkUtils.isHiveEnabled()) {
+      external.hiveDbToEntities(dbDefinition, clusterName)
+    } else {
+      internal.sparkDbToEntities(dbDefinition)
+    }
+  }
+
+  def dbUniqueAttribute(db: String): String = {
+    if (SparkUtils.isHiveEnabled()) {
+      external.hiveDbUniqueAttribute(clusterName, db)
+    } else {
+      internal.sparkDbUniqueAttribute(db)
+    }
+  }
+
+  def storageFormatType(isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.HIVE_STORAGEDESC_TYPE_STRING
+    } else {
+      metadata.DB_TYPE_STRING
+    }
   }
 
   def storageFormatToEntities(
       storageFormat: CatalogStorageFormat,
       db: String,
+<<<<<<< HEAD
       table: String): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
     val pathEntity = storageFormat.locationUri.map { u => pathToEntity(u.toString) }
@@ -74,71 +97,66 @@ object AtlasEntityUtils extends Logging {
     Seq(Some(sdEntity), pathEntity)
       .filter(_.isDefined)
       .flatten
+=======
+      table: String,
+      isHiveTable: Boolean): Seq[AtlasEntity] = {
+    if (isHiveTable) {
+      external.hiveStorageDescToEntities(storageFormat, clusterName, db, table)
+    } else {
+      internal.sparkStorageFormatToEntities(storageFormat, db, table)
+    }
+>>>>>>> Add Hive support and refactor the code
   }
 
-  def columnUniqueAttribute(db: String, table: String, col: String): String = {
-    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.col-$col"
+  def storageFormatUniqueAttribute(db: String, table: String, isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.hiveStorageDescUniqueAttribute(clusterName, db, table)
+    } else {
+      internal.sparkStorageFormatUniqueAttribute(db, table)
+    }
   }
 
-  def schemaToEntities(schema: StructType, db: String, table: String): List[AtlasEntity] = {
-    schema.map { struct =>
-      val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
-
-      entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-        columnUniqueAttribute(db, table, struct.name))
-      entity.setAttribute("name", struct.name)
-      entity.setAttribute("type", struct.dataType.typeName)
-      entity.setAttribute("nullable", struct.nullable)
-      entity.setAttribute("metadata", struct.metadata.toString())
-      entity
-    }.toList
+  def columnType(isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.HIVE_COLUMN_TYPE_STRING
+    } else {
+      metadata.COLUMN_TYPE_STRING
+    }
   }
 
-  def tableUniqueAttribute(db: String, table: String): String = {
-    SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table"
+  def schemaToEntities(
+      schema: StructType,
+      db: String,
+      table: String,
+      isHiveTable: Boolean): List[AtlasEntity] = {
+    if (isHiveTable) {
+      external.hiveSchemaToEntities(schema, clusterName, db, table)
+    } else {
+      internal.sparkSchemaToEntities(schema, db, table)
+    }
   }
 
-  def tableToEntities(
-      tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val db = tableDefinition.identifier.database.getOrElse("default")
-    val dbDefinition = mockDbDefinition
-      .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
-
-    val dbEntities = dbToEntities(dbDefinition)
-    val sdEntities =
-      storageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
-    val schemaEntities =
-      schemaToEntities(tableDefinition.schema, db, tableDefinition.identifier.table)
-
-    val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
-
-    tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      tableUniqueAttribute(db, tableDefinition.identifier.table))
-    tblEntity.setAttribute("name", tableDefinition.identifier.table)
-    tblEntity.setAttribute("database", dbEntities.head)
-    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("storage", sdEntities.head)
-    tblEntity.setAttribute("schema", schemaEntities.asJava)
-    tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
-    tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
-    tableDefinition.bucketSpec.foreach(
-      b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
-    tblEntity.setAttribute("owner", tableDefinition.owner)
-    tblEntity.setAttribute("createTime", tableDefinition.createTime)
-    tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
-    tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
-    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewText", _))
-    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
-    tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
-
-    Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  def columnUniqueAttribute(
+      db: String,
+      table: String,
+      col: String,
+      isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.hiveColumnUniqueAttribute(clusterName, db, table, col)
+    } else {
+      internal.sparkColumnUniqueAttribute(db, table, col)
+    }
   }
 
-  def processUniqueAttribute(executionId: Long): String = {
-    SparkUtils.sparkSession.sparkContext.applicationId + "." + executionId
+  def tableType(isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.HIVE_TABLE_TYPE_STRING
+    } else {
+      metadata.TABLE_TYPE_STRING
+    }
   }
 
+<<<<<<< HEAD
   def processToEntity(qe: QueryExecution,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
@@ -155,44 +173,27 @@ object AtlasEntityUtils extends Logging {
     entity.setAttribute("sparkPlanDescription", qe.sparkPlan.toString())
     entity
   }
+=======
+  def isHiveTable(tableDefinition: CatalogTable): Boolean =
+    tableDefinition.provider.contains("hive")
+>>>>>>> Add Hive support and refactor the code
 
-  def pathToEntity(path: String): AtlasEntity = {
-    val uri = resolveURI(path)
-    val entity = if (uri.getScheme == "hfds") {
-      new AtlasEntity(metadata.HDFS_PATH_TYPE_STRING)
+  def tableToEntities(
+      tableDefinition: CatalogTable,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    if (isHiveTable(tableDefinition)) {
+      external.hiveTableToEntities(tableDefinition, clusterName, mockDbDefinition)
     } else {
-      new AtlasEntity(metadata.FS_PATH_TYPE_STRING)
+      internal.sparkTableToEntities(tableDefinition, mockDbDefinition)
     }
-
-    val fsPath = new Path(uri)
-    entity.setAttribute(AtlasClient.NAME,
-      Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uri.toString)
-    if (uri.getScheme == "hdfs") {
-      entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
-    }
-
-    entity
   }
 
-  def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
-      // make sure to handle if the path has a fragment (applies to yarn
-      // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
-          uri.getFragment())
-      }
-    } catch {
-      case e: URISyntaxException =>
+  def tableUniqueAttribute(db: String, table: String, isHiveTable: Boolean): String = {
+    if (isHiveTable) {
+      external.hiveTableUniqueAttribute(clusterName, db, table)
+    } else {
+      internal.sparkTableUniqueAttribute(db, table)
     }
-    new File(path).getAbsoluteFile().toURI()
   }
 
   def MLDirectoryToEntity(

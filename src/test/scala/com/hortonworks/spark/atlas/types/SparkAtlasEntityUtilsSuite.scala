@@ -23,13 +23,14 @@ import org.apache.atlas.AtlasClient
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
 
-import com.hortonworks.spark.atlas.TestUtils
-
-class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   import TestUtils._
 
   private var sparkSession: SparkSession = _
+
+  private var sparkAtlasEntityUtils: AtlasEntityUtils = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -37,6 +38,10 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       .master("local")
       .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
+
+    sparkAtlasEntityUtils = new AtlasEntityUtils {
+      override def conf: AtlasClientConf = new AtlasClientConf
+    }
   }
 
   override def afterAll(): Unit = {
@@ -44,11 +49,12 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     sparkSession = null
+    sparkAtlasEntityUtils = null
   }
 
   test("convert catalog db to entity") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
-    val dbEntities = AtlasEntityUtils.dbToEntities(dbDefinition)
+    val dbEntities = sparkAtlasEntityUtils.dbToEntities(dbDefinition)
 
     val dbEntity = dbEntities.head
     val pathEntity = dbEntities.tail.head
@@ -64,7 +70,8 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
 
   test("convert catalog storage format to entity") {
     val storageFormat = createStorageFormat()
-    val sdEntities = AtlasEntityUtils.storageFormatToEntities(storageFormat, "db1", "tbl1")
+    val sdEntities =
+      sparkAtlasEntityUtils.storageFormatToEntities(storageFormat, "db1", "tbl1", false)
 
     val sdEntity = sdEntities.head
     sdEntity.getTypeName should be (metadata.STORAGEDESC_TYPE_STRING)
@@ -82,7 +89,7 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       .add("user", StringType, false)
       .add("age", IntegerType, true)
 
-    val schemaEntities = AtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1")
+    val schemaEntities = sparkAtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1", false)
     schemaEntities.length should be (2)
 
     schemaEntities(0).getAttribute("name") should be ("user")
@@ -106,7 +113,7 @@ class AtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAl
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", "tbl1", schema, sd)
 
-    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntities = sparkAtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
     val tableEntity = tableEntities.head
 
     val dbEntity = tableEntities.find(_.getTypeName == metadata.DB_TYPE_STRING).get
