@@ -64,8 +64,12 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
     val entitesWithExtInfo = new AtlasEntitiesWithExtInfo()
     entities.foreach(entitesWithExtInfo.addEntity)
     val response = client.createEntities(entitesWithExtInfo)
-    logInfo(s"Entities ${response.getCreatedEntities.asScala.map(_.getGuid).mkString(", ")} " +
-      s"created")
+    try {
+      logInfo(s"Entities ${response.getCreatedEntities.asScala.map(_.getGuid).mkString(", ")} " +
+        s"created")
+    } catch {
+      case _ =>
+    }
   }
 
   override protected def doDeleteEntityWithUniqueAttr(
