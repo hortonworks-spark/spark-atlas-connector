@@ -17,6 +17,7 @@
 
 package com.hortonworks.spark.atlas.types
 
+
 import java.io.File
 import java.net.{URI, URISyntaxException}
 
@@ -26,7 +27,7 @@ import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
 
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
@@ -67,6 +68,7 @@ object AtlasEntityUtils extends Logging {
     storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("properties", storageFormat.properties.asJava)
+    sdEntity.setAttribute("name", storageFormat.toString())
 
     Seq(Some(sdEntity), pathEntity)
       .filter(_.isDefined)
@@ -136,27 +138,20 @@ object AtlasEntityUtils extends Logging {
     SparkUtils.sparkSession.sparkContext.applicationId + "." + executionId
   }
 
-  def processToEntity(
-     currUser: String,
-     remoteUser: String,
-     sqlExecutionStart: SparkListenerSQLExecutionStart,
-     sqlExecutionEnd: SparkListenerSQLExecutionEnd,
-     inputs: List[AtlasEntity],
-     outputs: List[AtlasEntity]): AtlasEntity = {
+  def processToEntity(qe: QueryExecution,
+                      inputs: List[AtlasEntity],
+                      outputs: List[AtlasEntity],
+                      inputTables: List[String],
+                      outputTables: List[String]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
-
-    entity.setAttribute("currUser", currUser)
-    entity.setAttribute("remoteUser", remoteUser)
-    entity.setAttribute("executionId", sqlExecutionStart.executionId)
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      processUniqueAttribute(sqlExecutionStart.executionId))
-    entity.setAttribute("startTime", sqlExecutionStart.time)
-    entity.setAttribute("endTime", sqlExecutionEnd.time)
-    entity.setAttribute("description", sqlExecutionStart.description)
-    entity.setAttribute("details", sqlExecutionStart.details)
-    entity.setAttribute("physicalPlanDescription", sqlExecutionStart.physicalPlanDescription)
+      SparkUtils.sparkSession.sparkContext.applicationId + "."
+        + inputTables.toString() + "." + outputTables.toString())
+    entity.setAttribute("name", inputTables.toString() + "." + outputTables.toString())
     entity.setAttribute("inputs", inputs.asJava)
     entity.setAttribute("outputs", outputs.asJava)
+    entity.setAttribute("details", qe.toString())
+    entity.setAttribute("sparkPlanDescription", qe.sparkPlan.toString())
     entity
   }
 

@@ -53,7 +53,7 @@ object metadata {
     STORAGEDESC_TYPE_STRING,
     "",
     METADATA_VERSION,
-    ImmutableSet.of("Referenceable"),
+    ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
@@ -125,13 +125,13 @@ object metadata {
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    // TODO
+    // AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
+    // AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
+    // AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
+    // AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
+    // AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
+    // AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("physicalPlanDescription", new AtlasStringType))
+    AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
 }
-
