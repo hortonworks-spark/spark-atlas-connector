@@ -139,14 +139,14 @@ object AtlasEntityUtils extends Logging {
   }
 
   def processToEntity(qe: QueryExecution,
-                      inputs: List[AtlasEntity],
-                      outputs: List[AtlasEntity],
-                      inputTables: List[String],
-                      outputTables: List[String]): AtlasEntity = {
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity],
+      inputTables: List[String],
+      outputTables: List[String]): AtlasEntity = {
+    println(qe.toString())
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      SparkUtils.sparkSession.sparkContext.applicationId + "."
-        + inputTables.toString() + "." + outputTables.toString())
+      qe.toString() + "." + inputTables.toString() + "." + outputTables.toString())
     entity.setAttribute("name", inputTables.toString() + "." + outputTables.toString())
     entity.setAttribute("inputs", inputs.asJava)
     entity.setAttribute("outputs", outputs.asJava)
