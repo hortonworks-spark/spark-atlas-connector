@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.hadoop.fs.Path
+import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
@@ -192,5 +193,71 @@ object AtlasEntityUtils extends Logging {
       case e: URISyntaxException =>
     }
     new File(path).getAbsoluteFile().toURI()
+  }
+
+  def MLDirectoryToEntity(
+      uri: String,
+      directory: String): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_DIRECTORY_TYPE_STRING)
+
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, s"$uri.$directory")
+    entity.setAttribute("uri", uri)
+    entity.setAttribute("directory", directory)
+    entity
+  }
+
+  def MLPipelineToEntity(
+      pipeline: Pipeline,
+      directory: AtlasEntity): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_PIPELINE_TYPE_STRING)
+
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, pipeline.uid)
+    entity.setAttribute("name", pipeline.uid)
+    entity.setAttribute("directory", directory)
+    entity
+  }
+
+  def MLModelToEntity(
+      model: PipelineModel,
+      directory: AtlasEntity): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
+
+    val uid = model.uid.replaceAll("pipeline", "model")
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
+    entity.setAttribute("directory", directory)
+    entity
+  }
+
+  def MLFitProcessToEntity(
+      pipeline: Pipeline,
+      pipelineEntity: AtlasEntity,
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity]): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
+
+    val uid = pipeline.uid.replaceAll("pipeline", "fit_process")
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
+    entity.setAttribute("pipeline", pipelineEntity)
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Pipeline entity
+    entity.setAttribute("outputs", outputs.asJava)  // ML model entity
+    entity
+  }
+
+  def MLTransformProcessToEntity(
+      model: PipelineModel,
+      modelEntity: AtlasEntity,
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity]): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
+
+    val uid = model.uid.replaceAll("pipeline", "transform_process")
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("name", uid)
+    entity.setAttribute("model", modelEntity)
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
+    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
+    entity
   }
 }

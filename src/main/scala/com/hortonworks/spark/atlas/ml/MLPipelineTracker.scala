@@ -17,7 +17,19 @@
 
 package com.hortonworks.spark.atlas.ml
 
-class MLPipelineTracker {
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
+
+class MLPipelineTracker(
+    val atlasClient: AtlasClient,
+    val conf: AtlasClientConf) {
+
+  def this(atlasClientConf: AtlasClientConf) = {
+    this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
+  }
+
+  def this() {
+    this(new AtlasClientConf)
+  }
 
   // Skeleton to track ML pipeline
 }
