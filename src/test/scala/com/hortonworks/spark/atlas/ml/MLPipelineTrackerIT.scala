@@ -28,9 +28,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
-class MLPipelineTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
   private var sparkSession: SparkSession = _
+  // The IP and port should be configured to point to your own Atlas cluster.
   private val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
     .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.14.91:21000")
@@ -66,7 +67,8 @@ class MLPipelineTrackerSuite extends FunSuite with Matchers with BeforeAndAfterA
     tableEntities
   }
 
-  test("pipeline and pipeline model") {
+  // Enable it to run integrated test.
+  ignore("pipeline and pipeline model") {
 
     SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
