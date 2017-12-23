@@ -20,17 +20,31 @@ package com.hortonworks.spark.atlas.types
 import com.hortonworks.spark.atlas.TestUtils._
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
-class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTestSparkContext {
+class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
-  import testImplicits._
+  private var sparkSession: SparkSession = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sparkSession = SparkSession.builder()
+      .master("local")
+      .config("spark.sql.catalogImplementation", "in-memory")
+      .getOrCreate()
+  }
+
+  override def afterAll(): Unit = {
+    sparkSession.stop()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    sparkSession = null
+  }
 
   def getTableEntity(tableName: String): AtlasEntity = {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
@@ -40,11 +54,9 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
 
-    val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-    val sdEntity = AtlasEntityUtils.storageFormatToEntity(sd, "db1", s"$tableName")
-    val schemaEntities = AtlasEntityUtils.schemaToEntity(schema, "db1", s"$tableName")
-    val tableEntity =
-      AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity, schemaEntities, sdEntity)
+    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntity = tableEntities.head
+
     tableEntity
   }
 
@@ -61,12 +73,12 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     modelDirEntity.getAttribute("uri") should be (uri)
     modelDirEntity.getAttribute("directory") should be (modelDir)
 
-    val df = Seq(
+    val df = sparkSession.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
       (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
       (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
       (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
-    ).toDF("id", "features", "label")
+    )).toDF("id", "features", "label")
 
     val scaler = new MinMaxScaler()
       .setInputCol("features")
@@ -75,9 +87,7 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
       .setMax(3.0)
     val pipeline = new Pipeline().setStages(Array(scaler))
 
-    val fitStartTime = System.nanoTime()
     val model = pipeline.fit(df)
-    val fitEndTime = System.nanoTime()
 
     pipeline.write.overwrite().save(pipelineDir)
 
@@ -88,7 +98,7 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     pipelineEntity.getAttribute("directory") should be (pipelineDirEntity)
 
     val modelEntity = AtlasEntityUtils.MLModelToEntity(model, modelDirEntity)
-    val modelUid = model.uid.replaceAll("pipeline", "pipeline_model")
+    val modelUid = model.uid.replaceAll("pipeline", "model")
     modelEntity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
     modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
     modelEntity.getAttribute("name") should be (modelUid)
@@ -97,32 +107,26 @@ class MLAtlasEntityUtilsSuite extends SparkFunSuite with Matchers with MLlibTest
     val inputEntity1 = getTableEntity("tbl1")
     val inputEntity2 = getTableEntity("tbl2")
     val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
-      pipeline, pipelineEntity, fitStartTime, fitEndTime, List(inputEntity1), List(modelEntity))
+      pipeline, pipelineEntity, List(inputEntity1, pipelineEntity), List(modelEntity))
 
-    val fitName = s"${pipeline.uid}_$fitStartTime"
+    val fitName = pipeline.uid.replaceAll("pipeline", "fit_process")
     fitEntity.getTypeName should be (metadata.ML_FIT_PROCESS_TYPE_STRING)
     fitEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (fitName)
     fitEntity.getAttribute("name") should be (fitName)
     fitEntity.getAttribute("pipeline") should be (pipelineEntity)
-    fitEntity.getAttribute("startTime") should be (fitStartTime)
-    fitEntity.getAttribute("endTime") should be (fitEndTime)
 
     model.write.overwrite().save(modelDir)
 
-    val transformStartTime = System.nanoTime()
     val df2 = model.transform(df)
     df2.collect()
-    val transformEndTime = System.nanoTime()
 
     val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
-      model, modelEntity, transformStartTime, transformEndTime, List(inputEntity1), List(inputEntity2))
+      model, modelEntity, List(inputEntity1, modelEntity), List(inputEntity2))
 
-    val transformName = s"${model.uid}_$transformStartTime"
+    val transformName = model.uid.replaceAll("pipeline", "transform_process")
     transformEntity.getTypeName should be (metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
     transformEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (transformName)
     transformEntity.getAttribute("name") should be (transformName)
     transformEntity.getAttribute("model") should be (modelEntity)
-    transformEntity.getAttribute("startTime") should be (transformStartTime)
-    transformEntity.getAttribute("endTime") should be (transformEndTime)
   }
 }

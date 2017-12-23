@@ -222,7 +222,7 @@ object AtlasEntityUtils extends Logging {
       directory: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
 
-    val uid = model.uid.replaceAll("pipeline", "pipeline_model")
+    val uid = model.uid.replaceAll("pipeline", "model")
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
@@ -232,39 +232,31 @@ object AtlasEntityUtils extends Logging {
   def MLFitProcessToEntity(
       pipeline: Pipeline,
       pipelineEntity: AtlasEntity,
-      startTime: Long,
-      endTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
 
-    val uid = s"${pipeline.uid}_$startTime"
+    val uid = pipeline.uid.replaceAll("pipeline", "fit_process")
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("pipeline", pipelineEntity)
-    entity.setAttribute("startTime", startTime)
-    entity.setAttribute("endTime", endTime)
-    entity.setAttribute("inputs", inputs.asJava)  // Dataset entity
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Pipeline entity
     entity.setAttribute("outputs", outputs.asJava)  // ML model entity
     entity
   }
 
   def MLTransformProcessToEntity(
-      pipelineModel: PipelineModel,
+      model: PipelineModel,
       modelEntity: AtlasEntity,
-      startTime: Long,
-      endTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
 
-    val uid = s"${pipelineModel.uid}_$startTime"
+    val uid = model.uid.replaceAll("pipeline", "transform_process")
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("model", modelEntity)
-    entity.setAttribute("startTime", startTime)
-    entity.setAttribute("endTime", endTime)
-    entity.setAttribute("inputs", inputs.asJava)  // Dataset entity
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
     entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
     entity
   }

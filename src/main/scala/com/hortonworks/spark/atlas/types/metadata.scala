@@ -145,7 +145,7 @@ object metadata {
     ML_DIRECTORY_TYPE_STRING,
     "",
     METADATA_VERSION,
-    ImmutableSet.of("Referenceable"),
+    ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("uri", new AtlasStringType),
@@ -184,8 +184,8 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("pipeline", ML_PIPELINE_TYPE_STRING),
-    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
+//    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
+//    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 
@@ -198,8 +198,8 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("model", ML_MODEL_TYPE_STRING),
-    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
+//    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
+//    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 }

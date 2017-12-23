@@ -21,20 +21,19 @@ import com.hortonworks.spark.atlas.{AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
-import org.scalatest.Matchers
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
-class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
+class MLPipelineTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
   private var sparkSession: SparkSession = _
   private val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.56.211:21000")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.14.91:21000")
   private val atlasClient = new RestAtlasClient(atlasClientConf)
 
   override def beforeAll(): Unit = {
@@ -52,28 +51,26 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
     sparkSession = null
   }
 
-  def getTableEntity(tableName: String): (
-    AtlasEntity, List[AtlasEntity], AtlasEntity, AtlasEntity) = {
-    val dbDefinition = createDB("db1", "hdfs:///test/db/yliang")
+  // Return table related entities as a Sequence.
+  // The first one is table entity, followed by
+  // db entity, storage entity and schema entities.
+  def getTableEntities(tableName: String): Seq[AtlasEntity] = {
+    val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
     val schema = new StructType()
-      .add("features", DoubleType, false)
-      .add("label", IntegerType, true)
+      .add("user", StringType, false)
+      .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
+    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
 
-    val dbEntity = AtlasEntityUtils.dbToEntity(dbDefinition)
-    val sdEntity = AtlasEntityUtils.storageFormatToEntity(sd, "db1", s"$tableName")
-    val schemaEntities = AtlasEntityUtils.schemaToEntity(schema, "db1", s"$tableName")
-    val tableEntity =
-      AtlasEntityUtils.tableToEntity(tableDefinition, dbEntity, schemaEntities, sdEntity)
-    (dbEntity, schemaEntities, sdEntity, tableEntity)
+    tableEntities
   }
 
   test("pipeline and pipeline model") {
 
     SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
-    val uri = "/"
+    val uri = "hdfs://"
     val pipelineDir = "tmp/pipeline"
     val modelDir = "tmp/model"
 
@@ -96,9 +93,7 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
       .setMax(3.0)
     val pipeline = new Pipeline().setStages(Array(scaler))
 
-    val fitStartTime = System.nanoTime()
     val model = pipeline.fit(df)
-    val fitEndTime = System.nanoTime()
 
     pipeline.write.overwrite().save(pipelineDir)
 
@@ -110,30 +105,31 @@ class MLPipelineTrackerSuite extends SparkFunSuite with Matchers {
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
 
-    val (dbEntity1, schemaEntities1, sdEntity1, tableEntity1) = getTableEntity("yliang-tbl1")
-    val (dbEntity2, schemaEntities2, sdEntity2, tableEntity2) = getTableEntity("yliang-tbl2")
-
-    val tableEntities1 = Seq(dbEntity1, sdEntity1, tableEntity1) ++ schemaEntities1
-    val tableEntities2 = Seq(dbEntity2, sdEntity2, tableEntity2) ++ schemaEntities2
+    val tableEntities1 = getTableEntities("chris1")
+    val tableEntities2 = getTableEntities("chris2")
 
     atlasClient.createEntities(tableEntities1)
     atlasClient.createEntities(tableEntities2)
 
     val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
-      pipeline, pipelineEntity, fitStartTime, fitEndTime, List(tableEntity1), List(modelEntity))
+      pipeline,
+      pipelineEntity,
+      List(pipelineEntity, tableEntities1.head),
+      List(modelEntity))
 
-    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity, pipelineEntity,
-      modelEntity, fitEntity) ++ tableEntities1)
+    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
+      pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
 
     model.write.overwrite().save(modelDir)
 
-    val transformStartTime = System.nanoTime()
     val df2 = model.transform(df)
     df2.collect()
-    val transformEndTime = System.nanoTime()
 
     val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
-      model, modelEntity, transformStartTime, transformEndTime, List(tableEntity1), List(tableEntity2))
+      model,
+      modelEntity,
+      List(modelEntity, tableEntities1.head),
+      List(tableEntities2.head))
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
       ++ tableEntities1 ++ tableEntities2)
