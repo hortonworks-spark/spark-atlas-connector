@@ -34,7 +34,7 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventTracker(
     private[atlas] val atlasClient: AtlasClient,
-    override val conf: AtlasClientConf)
+    val conf: AtlasClientConf)
   extends SparkListener with AbstractService with AtlasEntityUtils with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
@@ -58,13 +58,15 @@ class SparkCatalogEventTracker(
 
   private val cachedObject = new mutable.WeakHashMap[String, Object]
 
+  startThread()
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (!shouldContinue) {
       // No op if our tracker is failed to initialize itself
       return
     }
 
-    // We only care SQL related events.
+    // We only care about SQL related events.
     event match {
       case e: ExternalCatalogEvent =>
         if (!eventQueue.offer(e, timeout, TimeUnit.MILLISECONDS)) {
@@ -231,7 +233,7 @@ class SparkCatalogEventTracker(
       } catch {
         case _: InterruptedException =>
           logDebug(s"Thread is interrupted")
-          stopped = false
+          stopped = true
       }
     }
   }

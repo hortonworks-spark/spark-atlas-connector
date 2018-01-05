@@ -17,24 +17,20 @@
 
 package com.hortonworks.spark.atlas.ml
 
-import com.hortonworks.spark.atlas.{AtlasClientConf, RestAtlasClient}
-import com.hortonworks.spark.atlas.types._
-import com.hortonworks.spark.atlas.TestUtils._
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
-class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll {
+import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient}
+import com.hortonworks.spark.atlas.types._
+import com.hortonworks.spark.atlas.TestUtils._
 
+class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAfterAll {
   private var sparkSession: SparkSession = _
-  // The IP and port should be configured to point to your own Atlas cluster.
-  private val atlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.14.91:21000")
   private val atlasClient = new RestAtlasClient(atlasClientConf)
 
   override def beforeAll(): Unit = {
@@ -62,22 +58,21 @@ class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll 
       .add("user", StringType, false)
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
-    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntities = internal.sparkTableToEntities(tableDefinition, Some(dbDefinition))
 
     tableEntities
   }
 
   // Enable it to run integrated test.
-  ignore("pipeline and pipeline model") {
-
+  it("pipeline and pipeline model") {
     SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
     val uri = "hdfs://"
     val pipelineDir = "tmp/pipeline"
     val modelDir = "tmp/model"
 
-    val pipelineDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, pipelineDir)
-    val modelDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, modelDir)
+    val pipelineDirEntity = internal.mlDirectoryToEntity(uri, pipelineDir)
+    val modelDirEntity = internal.mlDirectoryToEntity(uri, modelDir)
 
     atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
 
@@ -99,11 +94,11 @@ class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll 
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = AtlasEntityUtils.MLPipelineToEntity(pipeline, pipelineDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
 
     atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
 
-    val modelEntity = AtlasEntityUtils.MLModelToEntity(model, modelDirEntity)
+    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
 
@@ -113,7 +108,7 @@ class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll 
     atlasClient.createEntities(tableEntities1)
     atlasClient.createEntities(tableEntities2)
 
-    val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
+    val fitEntity = internal.mlFitProcessToEntity(
       pipeline,
       pipelineEntity,
       List(pipelineEntity, tableEntities1.head),
@@ -127,7 +122,7 @@ class MLPipelineTrackerIT extends FunSuite with Matchers with BeforeAndAfterAll 
     val df2 = model.transform(df)
     df2.collect()
 
-    val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
+    val transformEntity = internal.mlTransformProcessToEntity(
       model,
       modelEntity,
       List(modelEntity, tableEntities1.head),

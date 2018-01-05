@@ -113,7 +113,6 @@ class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAn
     }
 
     tracker.onOtherEvent(DropTablePreEvent("db1", "tbl2"))
-    SparkUtils.getExternalCatalog().dropTable("db1", "tbl2", true, true)
     tracker.onOtherEvent(DropTableEvent("db1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.deleteEntityCall(tracker.tableType(isHiveTbl)) == 1)

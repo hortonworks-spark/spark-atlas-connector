@@ -34,6 +34,10 @@ trait AtlasClient extends Logging {
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
   final def createEntities(entities: Seq[AtlasEntity]): Unit = {
+    if (entities.isEmpty) {
+      return
+    }
+
     try {
       doCreateEntities(entities)
     } catch {

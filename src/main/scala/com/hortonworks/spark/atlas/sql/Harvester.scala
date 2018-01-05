@@ -17,19 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql
 
-trait AbstractService {
+import org.apache.atlas.model.instance.AtlasEntity
 
-  private val eventProcessThread = new Thread {
-    override def run(): Unit = {
-      eventProcess()
-    }
-  }
-
-  protected def startThread(): Unit = {
-    eventProcessThread.setName(this.getClass.getSimpleName + "-thread")
-    eventProcessThread.setDaemon(true)
-    eventProcessThread.start()
-  }
-
-  protected def eventProcess(): Unit
+trait Harvester[T] {
+  def harvest(node: T, qd: QueryDetail): Seq[AtlasEntity]
 }

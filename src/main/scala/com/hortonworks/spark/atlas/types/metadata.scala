@@ -30,11 +30,11 @@ object metadata {
   val COLUMN_TYPE_STRING = "spark_column"
   val TABLE_TYPE_STRING = "spark_table"
   val PROCESS_TYPE_STRING = "spark_process"
-  val ML_DIRECTORY_TYPE_STRING = "ml_directory"
-  val ML_PIPELINE_TYPE_STRING = "ml_pipeline"
-  val ML_MODEL_TYPE_STRING = "ml_model"
-  val ML_FIT_PROCESS_TYPE_STRING = "ml_fit_process"
-  val ML_TRANSFORM_PROCESS_TYPE_STRING = "ml_transform_process"
+  val ML_DIRECTORY_TYPE_STRING = "spark_ml_directory"
+  val ML_PIPELINE_TYPE_STRING = "spark_ml_pipeline"
+  val ML_MODEL_TYPE_STRING = "spark_ml_model"
+  val ML_FIT_PROCESS_TYPE_STRING = "spark_ml_fit_process"
+  val ML_TRANSFORM_PROCESS_TYPE_STRING = "spark_ml_transform_process"
 
   import external._
 
@@ -128,13 +128,10 @@ object metadata {
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    // TODO
-    // AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
-    // AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
-    // AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
-    // AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-    // AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
-    // AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
 

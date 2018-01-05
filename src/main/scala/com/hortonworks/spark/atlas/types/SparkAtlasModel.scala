@@ -24,7 +24,6 @@ import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.model.typedef.{AtlasClassificationDef, AtlasEntityDef, AtlasEnumDef, AtlasStructDef}
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.SearchFilter
-import org.apache.spark.SparkConf
 
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.Logging
@@ -45,18 +44,18 @@ object SparkAtlasModel extends Logging {
     COLUMN_TYPE_STRING -> COLUMN_TYPE,
     TABLE_TYPE_STRING -> TABLE_TYPE,
     PROCESS_TYPE_STRING -> PROCESS_TYPE,
+    ML_DIRECTORY_TYPE_STRING -> ML_DIRECTORY_TYPE,
+    ML_PIPELINE_TYPE_STRING -> ML_PIPELINE_TYPE,
+    ML_MODEL_TYPE_STRING -> ML_MODEL_TYPE,
+    ML_FIT_PROCESS_TYPE_STRING -> ML_FIT_PROCESS_TYPE,
+    ML_TRANSFORM_PROCESS_TYPE_STRING -> ML_TRANSFORM_PROCESS_TYPE,
     DIMENSION_CLASSIFICATION -> DIMENSION_CLASSIFICATION_DEF,
     FACT_CLASSIFICATION -> FACT_CLASSIFICATION_DEF,
     FS_CLASSIFICATION -> FS_CLASSIFICATION_DEF,
     JDBC_CLASSIFICATION -> JDBC_CLASSIFICATION_DEF,
     KAFKA_CLASSIFICATION -> KAFKA_CLASSIFICATION_DEF,
     HBASE_CLASSIFICATION -> HBASE_CLASSIFICATION_DEF,
-    STREAM_CLASSIFICATION -> STREAM_CLASSIFICATION_DEF,
-    ML_DIRECTORY_TYPE_STRING -> ML_DIRECTORY_TYPE,
-    ML_PIPELINE_TYPE_STRING -> ML_PIPELINE_TYPE,
-    ML_MODEL_TYPE_STRING -> ML_MODEL_TYPE,
-    ML_FIT_PROCESS_TYPE_STRING -> ML_FIT_PROCESS_TYPE,
-    ML_TRANSFORM_PROCESS_TYPE_STRING -> ML_TRANSFORM_PROCESS_TYPE)
+    STREAM_CLASSIFICATION -> STREAM_CLASSIFICATION_DEF)
 
   def main(args: Array[String]): Unit = {
     val atlasClientConf = new AtlasClientConf

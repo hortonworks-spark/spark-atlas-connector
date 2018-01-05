@@ -111,7 +111,6 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with BeforeAn
 
     val tableEntities = hiveAtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
     val tableEntity = tableEntities.head
-    tableEntities.foreach(println)
 
     val dbEntity = tableEntities.find(_.getTypeName == external.HIVE_DB_TYPE_STRING).get
     val sdEntity = tableEntities.find(_.getTypeName == external.HIVE_STORAGEDESC_TYPE_STRING).get

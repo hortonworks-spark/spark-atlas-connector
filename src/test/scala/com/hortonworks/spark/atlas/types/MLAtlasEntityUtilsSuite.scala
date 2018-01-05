@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas.types
 
-import com.hortonworks.spark.atlas.TestUtils._
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml.Pipeline
@@ -26,6 +25,8 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+
+import com.hortonworks.spark.atlas.TestUtils._
 
 class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
@@ -54,7 +55,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
 
-    val tableEntities = AtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntities = internal.sparkTableToEntities(tableDefinition, Some(dbDefinition))
     val tableEntity = tableEntities.head
 
     tableEntity
@@ -65,11 +66,11 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     val pipelineDir = "tmp/pipeline"
     val modelDir = "tmp/model"
 
-    val pipelineDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, pipelineDir)
+    val pipelineDirEntity = internal.mlDirectoryToEntity(uri, pipelineDir)
     pipelineDirEntity.getAttribute("uri") should be (uri)
     pipelineDirEntity.getAttribute("directory") should be (pipelineDir)
 
-    val modelDirEntity = AtlasEntityUtils.MLDirectoryToEntity(uri, modelDir)
+    val modelDirEntity = internal.mlDirectoryToEntity(uri, modelDir)
     modelDirEntity.getAttribute("uri") should be (uri)
     modelDirEntity.getAttribute("directory") should be (modelDir)
 
@@ -91,13 +92,13 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = AtlasEntityUtils.MLPipelineToEntity(pipeline, pipelineDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
     pipelineEntity.getTypeName should be (metadata.ML_PIPELINE_TYPE_STRING)
     pipelineEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (pipeline.uid)
     pipelineEntity.getAttribute("name") should be (pipeline.uid)
     pipelineEntity.getAttribute("directory") should be (pipelineDirEntity)
 
-    val modelEntity = AtlasEntityUtils.MLModelToEntity(model, modelDirEntity)
+    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
     val modelUid = model.uid.replaceAll("pipeline", "model")
     modelEntity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
     modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
@@ -106,7 +107,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
 
     val inputEntity1 = getTableEntity("tbl1")
     val inputEntity2 = getTableEntity("tbl2")
-    val fitEntity = AtlasEntityUtils.MLFitProcessToEntity(
+    val fitEntity = internal.mlFitProcessToEntity(
       pipeline, pipelineEntity, List(inputEntity1, pipelineEntity), List(modelEntity))
 
     val fitName = pipeline.uid.replaceAll("pipeline", "fit_process")
@@ -120,7 +121,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     val df2 = model.transform(df)
     df2.collect()
 
-    val transformEntity = AtlasEntityUtils.MLTransformProcessToEntity(
+    val transformEntity = internal.mlTransformProcessToEntity(
       model, modelEntity, List(inputEntity1, modelEntity), List(inputEntity2))
 
     val transformName = model.uid.replaceAll("pipeline", "transform_process")
