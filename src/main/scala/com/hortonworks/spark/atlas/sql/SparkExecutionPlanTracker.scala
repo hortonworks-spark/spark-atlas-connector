@@ -20,6 +20,8 @@ package com.hortonworks.spark.atlas.sql
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.execution._
@@ -79,27 +81,27 @@ class SparkExecutionPlanTracker(
             case r: ExecutedCommandExec =>
               r.cmd match {
                 case c: InsertIntoHiveTable =>
-                  logInfo(s"INSERT query ${qd.qe}")
+                  logDebug(s"INSERT query ${qd.qe}")
                   CommandsHarvester.InsertIntoHiveTableHarvester.harvest(c, qd)
 
                 // Case 6. CREATE TABLE AS SELECT
                 case c: CreateHiveTableAsSelectCommand =>
-                  logInfo(s"CREATE TABLE AS SELECT query: ${qd.qe}")
+                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
 
                 case c: CreateViewCommand =>
-                  logInfo(s"CREATE VIEW AS SELECT query ${qd.qe}")
+                  logDebug(s"CREATE VIEW AS SELECT query ${qd.qe}")
                   CommandsHarvester.CreateViewHarvester.harvest(c, qd)
 
                 case c: LoadDataCommand =>
                   // Case 1. LOAD DATA LOCAL INPATH (from local)
                   // Case 2. LOAD DATA INPATH (from HDFS)
-                  logInfo("Table name in Load (local file) query: " + c.table + c.path)
+                  logDebug("Table name in Load (local file) query: " + c.table + c.path)
                   Seq.empty
 
                 case c: CreateDataSourceTableAsSelectCommand =>
                   // Case 7. DF.saveAsTable
-                  logInfo("Table name in saveAsTable query: " + c.table.identifier.table)
+                  logDebug("Table name in saveAsTable query: " + c.table.identifier.table)
                   Seq.empty
 
                 case _ =>
@@ -123,6 +125,9 @@ class SparkExecutionPlanTracker(
           case _: InterruptedException =>
             logDebug(s"Thread is interrupted")
             stopped = true
+
+          case NonFatal(e) =>
+          logWarn(s"Caught exception during parsing the query: $e")
        }
     }
   }
