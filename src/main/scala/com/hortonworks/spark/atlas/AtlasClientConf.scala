@@ -23,7 +23,7 @@ import com.hortonworks.spark.atlas.AtlasClientConf.ConfigEntry
 
 class AtlasClientConf {
 
-  private val configuration = ApplicationProperties.get()
+  private lazy val configuration = ApplicationProperties.get()
 
   def set(key: String, value: String): AtlasClientConf = {
     configuration.setProperty(key, value)

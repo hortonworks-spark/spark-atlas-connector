@@ -72,6 +72,9 @@ class SparkCatalogEventTracker(
         if (!eventQueue.offer(e, timeout, TimeUnit.MILLISECONDS)) {
           logError(s"Fail to put event $e into queue within time limit $timeout, will throw it")
         }
+
+      case _ =>
+        // Ignore other events
     }
   }
 

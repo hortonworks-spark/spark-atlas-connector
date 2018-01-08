@@ -56,7 +56,7 @@ object metadata {
     STORAGEDESC_TYPE_STRING,
     "",
     METADATA_VERSION,
-    ImmutableSet.of("DataSet"),
+    ImmutableSet.of("Referenceable"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),

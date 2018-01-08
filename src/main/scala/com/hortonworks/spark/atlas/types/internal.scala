@@ -143,6 +143,8 @@ object internal extends Logging {
 
     entity.setAttribute(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, sparkProcessUniqueAttribute(executionId))
+    entity.setAttribute(AtlasClient.NAME, sparkProcessUniqueAttribute(executionId))
+    entity.setAttribute("executionId", executionId)
     entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("remoteUser", SparkUtils.currSessionUser(qe))
     entity.setAttribute("inputs", inputs.asJava)
