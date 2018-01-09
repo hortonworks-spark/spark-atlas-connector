@@ -19,10 +19,8 @@ package com.hortonworks.spark.atlas.sql
 
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.execution.{CreateHiveTableAsSelectCommand, InsertIntoHiveTable}
 
@@ -117,26 +115,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pEntity = processToEntity(
         qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-    }
-  }
-
-  object CreateViewHarvester extends Harvester[CreateViewCommand] {
-    override def harvest(node: CreateViewCommand, qd: QueryDetail): Seq[AtlasEntity] = {
-      // from table entities
-      val child = node.child.asInstanceOf[Project].child
-      val fromTableIdentifier = child.asInstanceOf[UnresolvedRelation].tableIdentifier
-      val inputsEntities = prepareEntities(fromTableIdentifier)
-
-      // new view entities
-      val viewIdentifier = node.name
-      val outputsEntities = prepareEntities(viewIdentifier)
-
-      // create process entity
-      val inputTableEntities = List(inputsEntities.head)
-      val outputTableEntities = List(outputsEntities.head)
-      val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTableEntities, outputTableEntities)
-      Seq(pEntity) ++ inputsEntities ++ outputsEntities
     }
   }
 

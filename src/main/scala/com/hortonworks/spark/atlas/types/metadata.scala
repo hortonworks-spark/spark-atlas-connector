@@ -115,7 +115,6 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("lastAccessTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef(
       "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
-    AtlasTypeUtil.createOptionalAttrDef("viewText", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("comment", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
       "unsupportedFeatures", new AtlasArrayType(new AtlasStringType)))

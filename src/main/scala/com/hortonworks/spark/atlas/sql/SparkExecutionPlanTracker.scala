@@ -89,10 +89,6 @@ class SparkExecutionPlanTracker(
                   logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
 
-                case c: CreateViewCommand =>
-                  logDebug(s"CREATE VIEW AS SELECT query ${qd.qe}")
-                  CommandsHarvester.CreateViewHarvester.harvest(c, qd)
-
                 case c: LoadDataCommand =>
                   // Case 1. LOAD DATA LOCAL INPATH (from local)
                   // Case 2. LOAD DATA INPATH (from HDFS)

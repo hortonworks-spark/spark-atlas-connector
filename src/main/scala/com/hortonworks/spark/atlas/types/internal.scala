@@ -122,7 +122,6 @@ object internal extends Logging {
     tblEntity.setAttribute("createTime", tableDefinition.createTime)
     tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
     tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
-    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewText", _))
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 

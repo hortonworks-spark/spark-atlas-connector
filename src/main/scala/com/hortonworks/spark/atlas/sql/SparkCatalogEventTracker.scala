@@ -115,6 +115,7 @@ class SparkCatalogEventTracker(
 
             logInfo(s"Deleted db entity $db")
 
+          // TODO. We should also not create/alter view table in Atlas
           case CreateTableEvent(db, table) =>
             val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
             val tableEntities = tableToEntities(tableDefinition)
@@ -237,6 +238,9 @@ class SparkCatalogEventTracker(
         case _: InterruptedException =>
           logDebug(s"Thread is interrupted")
           stopped = true
+
+        case NonFatal(e) =>
+          logWarn(s" Caught exception during parsing catalog event", e)
       }
     }
   }
