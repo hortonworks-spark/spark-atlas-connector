@@ -42,7 +42,7 @@ object external {
 
   def pathToEntity(path: String): AtlasEntity = {
     val uri = resolveURI(path)
-    val entity = if (uri.getScheme == "hfds") {
+    val entity = if (uri.getScheme == "hdfs") {
       new AtlasEntity(HDFS_PATH_TYPE_STRING)
     } else {
       new AtlasEntity(FS_PATH_TYPE_STRING)

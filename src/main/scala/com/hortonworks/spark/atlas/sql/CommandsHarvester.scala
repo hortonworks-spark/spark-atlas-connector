@@ -21,11 +21,12 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.execution.{CreateHiveTableAsSelectCommand, InsertIntoHiveTable}
 
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.types.AtlasEntityUtils
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
@@ -115,6 +116,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pEntity = processToEntity(
         qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+    }
+  }
+
+  object LoadDataHarvester extends Harvester[LoadDataCommand] {
+    override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      val pathEntity = external.pathToEntity(node.path)
+      val outputEntities = prepareEntities(node.table)
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head))
+      Seq(pEntity, pathEntity) ++ outputEntities
     }
   }
 

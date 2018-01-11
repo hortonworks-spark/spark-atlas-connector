@@ -92,8 +92,8 @@ class SparkExecutionPlanTracker(
                 case c: LoadDataCommand =>
                   // Case 1. LOAD DATA LOCAL INPATH (from local)
                   // Case 2. LOAD DATA INPATH (from HDFS)
-                  logDebug("Table name in Load (local file) query: " + c.table + c.path)
-                  Seq.empty
+                  logDebug(s"LOAD DATA [LOCAL] INPATH (${c.path}) ${c.table}")
+                  CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
                 case c: CreateDataSourceTableAsSelectCommand =>
                   // Case 7. DF.saveAsTable
