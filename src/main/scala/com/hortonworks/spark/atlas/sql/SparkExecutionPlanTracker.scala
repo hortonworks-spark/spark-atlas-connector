@@ -73,11 +73,8 @@ class SparkExecutionPlanTracker(
     while (!stopped) {
       try {
         Option(qeQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach { qd =>
-          val relations = qd.qe.sparkPlan.collect {
-            case p: LeafExecNode => p
-          }
-
-          val entities = relations.flatMap {
+          val entities = qd.qe.sparkPlan.collect { case p: LeafExecNode => p }
+            .flatMap {
             case r: ExecutedCommandExec =>
               r.cmd match {
                 case c: InsertIntoHiveTable =>
@@ -113,6 +110,15 @@ class SparkExecutionPlanTracker(
               //            if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
               //              println("close hive connection via " + r.relation.getClass.getCanonicalName)
 
+            } ++ {
+              qd.qe.sparkPlan match {
+                case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
+                  CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
+                    d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
+
+                case _ =>
+                  Seq.empty
+              }
             }
 
             atlasClient.createEntities(entities)

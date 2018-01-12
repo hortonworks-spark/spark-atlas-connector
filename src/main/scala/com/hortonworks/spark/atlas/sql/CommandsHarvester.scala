@@ -17,15 +17,18 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import scala.util.Try
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
 import org.apache.spark.sql.execution.command.LoadDataCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.execution.{CreateHiveTableAsSelectCommand, InsertIntoHiveTable}
-
+import org.apache.spark.sql.hive.execution._
 import com.hortonworks.spark.atlas.AtlasClientConf
+
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -101,7 +104,11 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation => l.catalogTable.map(tableToEntities(_)).getOrElse(Seq.empty)
+
+        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
+          l.catalogTable.map(tableToEntities(_)).getOrElse(
+            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
+
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -126,6 +133,37 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pEntity = processToEntity(
         qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head))
       Seq(pEntity, pathEntity) ++ outputEntities
+    }
+  }
+
+  object InsertIntoHiveDirHarvester extends Harvester[InsertIntoHiveDirCommand] {
+    override def harvest(node: InsertIntoHiveDirCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      if (node.storage.locationUri.isEmpty) {
+        throw new IllegalStateException("Location URI is illegally empty")
+      }
+
+      val destEntity = external.pathToEntity(node.storage.locationUri.get.toString)
+      val inputsEntities = qd.qe.sparkPlan.collectLeaves().map {
+        case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
+          Try {
+            val method = h.getClass.getMethod("relation")
+            method.setAccessible(true)
+            val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
+            tableToEntities(relation.tableMeta)
+          }.getOrElse(Seq.empty)
+
+        case f: FileSourceScanExec =>
+           f.tableIdentifier.map(prepareEntities).getOrElse(
+             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
+          Seq.empty
+      }
+
+      val inputs = inputsEntities.flatMap(_.headOption).toList
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity))
+      Seq(pEntity, destEntity) ++ inputsEntities.flatten
     }
   }
 
