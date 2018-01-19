@@ -24,13 +24,17 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.{BeforeAndAfterAll, Matchers}
-
-import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient}
+import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 
 class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAfterAll {
   private var sparkSession: SparkSession = _
+
+  protected  override  val atlasClientConf = new AtlasClientConf()
+    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.9.150:21000")
+
   private val atlasClient = new RestAtlasClient(atlasClientConf)
 
   override def beforeAll(): Unit = {
@@ -64,7 +68,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
   }
 
   // Enable it to run integrated test.
-  it("pipeline and pipeline model") {
+  test("pipeline and pipeline model") {
     SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
     val uri = "hdfs://"
