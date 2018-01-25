@@ -58,23 +58,11 @@ class MLPipelineTracker(
   @VisibleForTesting
   @volatile private[atlas] var shouldContinue: Boolean = true
 
-  private val cachedObject = new mutable.WeakHashMap[String, Object]
+  private val cachedObjects = new mutable.WeakHashMap[String, Object]
 
-  private var pipelineCache:Pipeline = null
+  private val uri = "hdfs://"
 
-  private var mlModeCache:PipelineModel = null
-
-  private var pipelineDirectoryCache:String = null
-
-  private var modelDirectoryCache:String = null
-
-  private var trainingData:Dataset[_] = null
-
-  private var modelEntityCache:AtlasEntity = null
-
-  private var modelDirEntityCache:AtlasEntity = null
-
-  private var tableEntityCache:Seq[AtlasEntity] = null
+  private var tableEntity1:Seq[AtlasEntity] = null
 
   startThread()
 
@@ -129,37 +117,48 @@ class MLPipelineTracker(
       try {
         Option(eventQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach {
           case CreatePipelineEvent(pipeline, dataset) =>
-            pipelineCache = pipeline
-            trainingData = dataset
+
+            cachedObjects.put(pipeline.uid, pipeline)
+            cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
 
           case CreateModelEvent(pipelineModel) =>
-            mlModeCache = pipelineModel
+            cachedObjects.put(pipelineModel.uid + "_" + "model", pipelineModel)
 
-          case SavePipelineEvent(path) =>
-            pipelineDirectoryCache = path
+          case SavePipelineEvent(uid, path) =>
+            val pipelineDirEntity = internal.mlDirectoryToEntity(uri, path)
+            val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
-          case SaveModelEvent(path) =>
-            modelDirectoryCache = path
-            val uri = "hdfs://"
+            val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+
+            atlasClient.createEntities(Seq(pipelineEntity,pipelineDirEntity))
+
+            cachedObjects.put(uid + "_" + "pipelineDirEntity", pipelineDirEntity)
+            cachedObjects.put(uid + "_" + "pipelineEntity", pipelineEntity)
+
+            logInfo(s"Created pipeline Entity " + pipelineEntity.getGuid)
+
+          case SaveModelEvent(uid, path) =>
 
             val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
-            modelDirEntityCache = modelDirEntity
+            cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
 
-            val modelEntity = internal.mlModelToEntity(mlModeCache, modelDirEntity)
-            modelEntityCache = modelEntity
+            val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity").get.asInstanceOf[AtlasEntity]
+            val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity").get.asInstanceOf[AtlasEntity]
+            val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
+
+            atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+            val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
+
+            val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+            cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
             atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
 
-            val pipelineDirEntity = internal.mlDirectoryToEntity(uri, path)
-            val pipelineEntity = internal.mlPipelineToEntity(pipelineCache, pipelineDirEntity)
-            atlasClient.createEntities(Seq(pipelineEntity,pipelineDirEntity))
-
-            //trainingData.createOrReplaceTempView("tmp1")
             val tableEntities1 = getTableEntities("chris1")
-            tableEntityCache = tableEntities1
+            tableEntity1 = tableEntities1
 
             val fitEntity = internal.mlFitProcessToEntity(
-              pipelineCache,
+              pipeline,
               pipelineEntity,
               List(pipelineEntity, tableEntities1.head),
               List(modelEntity))
@@ -167,18 +166,34 @@ class MLPipelineTracker(
             atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
               pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
 
+            cachedObjects.remove(uid + "_" + "pipelineDirEntity")
+            cachedObjects.remove(uid + "_" + "pipelineEntity")
+            cachedObjects.remove(uid + "_" + "model")
+            cachedObjects.remove(uid)
+
+            logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
+
           case TransformEvent(model, dataset) =>
 
             val tableEntities2 = getTableEntities("chris2")
+            val uid = model.uid
+
+            val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
+            val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").get.asInstanceOf[AtlasEntity]
 
             val transformEntity = internal.mlTransformProcessToEntity(
               model,
-              modelEntityCache,
-              List(modelEntityCache, tableEntityCache.head),
+              modelEntity,
+              List(modelEntity, tableEntity1.head),
               List(tableEntities2.head))
 
-            atlasClient.createEntities(Seq(modelDirEntityCache, modelEntityCache, transformEntity)
-              ++ tableEntityCache ++ tableEntities2)
+            atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
+              ++ tableEntity1 ++ tableEntities2)
+
+            cachedObjects.remove(uid + "_" + "modelEntity")
+            cachedObjects.remove(uid + "_" + "modelDirEntity")
+
+            logInfo(s"Created transFormEntity " + transformEntity.getGuid)
         }
       }
     }

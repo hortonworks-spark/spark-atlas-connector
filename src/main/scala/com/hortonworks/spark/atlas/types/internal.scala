@@ -159,6 +159,7 @@ object internal extends Logging {
     val entity = new AtlasEntity(metadata.ML_DIRECTORY_TYPE_STRING)
 
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, s"$uri.$directory")
+    entity.setAttribute("name", s"$uri.$directory")
     entity.setAttribute("uri", uri)
     entity.setAttribute("directory", directory)
     entity
