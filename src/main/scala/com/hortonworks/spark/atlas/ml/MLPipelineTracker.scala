@@ -29,7 +29,6 @@ import com.hortonworks.spark.atlas.utils.CatalogUtils
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 import scala.collection.mutable
@@ -37,7 +36,8 @@ import scala.util.control.NonFatal
 
 class MLPipelineTracker(
     val atlasClient: AtlasClient,
-    val conf: AtlasClientConf)  extends SparkListener with AbstractService with AtlasEntityUtils with Logging {
+    val conf: AtlasClientConf)
+  extends SparkListener with AbstractService with AtlasEntityUtils with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
     this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
