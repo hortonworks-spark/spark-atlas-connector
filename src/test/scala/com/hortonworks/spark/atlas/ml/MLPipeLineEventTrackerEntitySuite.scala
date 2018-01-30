@@ -28,7 +28,7 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 
-class MLPipeLineEventTrackerSuite extends BaseResourceIT with Matchers{
+class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
   private var sparkSession: SparkSession = _
 
