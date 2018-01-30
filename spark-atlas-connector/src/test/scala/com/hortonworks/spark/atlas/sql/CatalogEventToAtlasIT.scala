@@ -142,8 +142,6 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     val tblDef2 = SparkUtils.getExternalCatalog().getTable("db2", "tbl2")
     val isHiveTbl2 = tracker.isHiveTable(tblDef2)
     tracker.onOtherEvent(DropTablePreEvent("db2", "tbl2"))
-    SparkUtils.getExternalCatalog().dropTable(
-      "db2", "tbl2", ignoreIfNotExists = true, purge = false)
     tracker.onOtherEvent(DropTableEvent("db2", "tbl2"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {

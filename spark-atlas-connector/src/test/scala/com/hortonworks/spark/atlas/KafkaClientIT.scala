@@ -137,8 +137,6 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
     val tblDef = SparkUtils.getExternalCatalog().getTable("db2", "tbl3")
     val isHiveTbl = tracker.isHiveTable(tblDef)
     tracker.onOtherEvent(DropTablePreEvent("db2", "tbl3"))
-    SparkUtils.getExternalCatalog().dropTable(
-      "db2", "tbl3", ignoreIfNotExists = true, purge = false)
     tracker.onOtherEvent(DropTableEvent("db2", "tbl3"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {

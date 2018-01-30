@@ -59,7 +59,7 @@ trait AtlasEntityUtils {
     if (isHiveTable) {
       external.HIVE_STORAGEDESC_TYPE_STRING
     } else {
-      metadata.DB_TYPE_STRING
+      metadata.STORAGEDESC_TYPE_STRING
     }
   }
 
