@@ -55,6 +55,8 @@ class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAn
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     sparkSession = null
+
+    super.afterAll()
   }
 
   test("correctly handle DB related events") {

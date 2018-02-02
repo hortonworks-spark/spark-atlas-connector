@@ -57,6 +57,8 @@ class LoadDataHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterA
 
     FileUtils.deleteDirectory(new File("metastore_db"))
     FileUtils.deleteDirectory(new File("spark-warehouse"))
+
+    super.afterAll()
   }
 
   test("LOAD DATA [LOCAL] INPATH path source") {

@@ -61,6 +61,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
 
     FileUtils.deleteDirectory(new File("metastore_db"))
     FileUtils.deleteDirectory(new File("spark-warehouse"))
+
+    super.afterAll()
   }
 
   test("CREATE TABLE dest AS SELECT [] FROM source") {

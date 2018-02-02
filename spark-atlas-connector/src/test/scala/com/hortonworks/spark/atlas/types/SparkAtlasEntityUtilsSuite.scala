@@ -50,6 +50,7 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     SparkSession.clearDefaultSession()
     sparkSession = null
     sparkAtlasEntityUtils = null
+    super.afterAll()
   }
 
   test("convert catalog db to entity") {

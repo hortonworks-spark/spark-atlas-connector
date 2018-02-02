@@ -45,6 +45,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     sparkSession = null
+    super.afterAll()
   }
 
   def getTableEntity(tableName: String): AtlasEntity = {

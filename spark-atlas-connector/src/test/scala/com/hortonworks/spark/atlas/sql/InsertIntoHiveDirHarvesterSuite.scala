@@ -57,6 +57,8 @@ class InsertIntoHiveDirHarvesterSuite extends FunSuite with Matchers with Before
 
     FileUtils.deleteDirectory(new File("metastore_db"))
     FileUtils.deleteDirectory(new File("spark-warehouse"))
+
+    super.afterAll()
   }
 
   test("INSERT OVERWRITE DIRECTORY path...") {

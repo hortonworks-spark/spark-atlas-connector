@@ -53,6 +53,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with BeforeAn
     SparkSession.clearDefaultSession()
     sparkSession = null
     hiveAtlasEntityUtils = null
+    super.afterAll()
   }
 
   test("convert catalog db to hive entity") {
