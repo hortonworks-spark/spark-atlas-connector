@@ -58,7 +58,7 @@ class MLPipelineTracker(
   @VisibleForTesting
   @volatile private[atlas] var shouldContinue: Boolean = true
 
-  private val cachedObjects = new mutable.WeakHashMap[String, Object]
+  private val cachedObjects = new mutable.HashMap[String, Object]
 
   private val uri = "hdfs://"
 
@@ -117,7 +117,6 @@ class MLPipelineTracker(
       try {
         Option(eventQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach {
           case CreatePipelineEvent(pipeline, dataset) =>
-
             cachedObjects.put(pipeline.uid, pipeline)
             cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
 
@@ -129,7 +128,6 @@ class MLPipelineTracker(
             val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
             val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
-
             atlasClient.createEntities(Seq(pipelineEntity,pipelineDirEntity))
 
             cachedObjects.put(uid + "_" + "pipelineDirEntity", pipelineDirEntity)
@@ -194,6 +192,10 @@ class MLPipelineTracker(
             cachedObjects.remove(uid + "_" + "modelDirEntity")
 
             logInfo(s"Created transFormEntity " + transformEntity.getGuid)
+
+          case _ =>
+            logInfo(s"ML tracker for other event")
+
         }
       }
     }
