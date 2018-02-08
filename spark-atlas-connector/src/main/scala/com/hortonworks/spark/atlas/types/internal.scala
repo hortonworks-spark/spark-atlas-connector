@@ -137,12 +137,14 @@ object internal extends Logging {
       executionId: Long,
       executionTime: Long,
       inputs: List[AtlasEntity],
-      outputs: List[AtlasEntity]): AtlasEntity = {
+      outputs: List[AtlasEntity],
+      query: Option[String] = None): AtlasEntity = {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
+    val name = query.getOrElse(sparkProcessUniqueAttribute(executionId))
 
     entity.setAttribute(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, sparkProcessUniqueAttribute(executionId))
-    entity.setAttribute(AtlasClient.NAME, sparkProcessUniqueAttribute(executionId))
+    entity.setAttribute(AtlasClient.NAME, name)
     entity.setAttribute("executionId", executionId)
     entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("remoteUser", SparkUtils.currSessionUser(qe))
