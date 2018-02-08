@@ -137,61 +137,76 @@ class MLPipelineTracker(
 
           case SaveModelEvent(uid, path) =>
 
-            val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
-            cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
+            if (!cachedObjects.contains(uid + "_" + "pipelineDirEntity")) {
 
-            val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity").get.asInstanceOf[AtlasEntity]
-            val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity").get.asInstanceOf[AtlasEntity]
-            val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
+                logInfo(s"Model Entity is already created")
+            } else {
 
-            atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
-            val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
+              val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
+              cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
 
-            val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
-            cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
+              val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity").get.asInstanceOf[AtlasEntity]
+              val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity").get.asInstanceOf[AtlasEntity]
+              val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
-            atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
+              atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+              val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
 
-            val tableEntities1 = getTableEntities("chris1")
-            tableEntity1 = tableEntities1
+              val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+              cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
-            val fitEntity = internal.mlFitProcessToEntity(
-              pipeline,
-              pipelineEntity,
-              List(pipelineEntity, tableEntities1.head),
-              List(modelEntity))
+              atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
 
-            atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
-              pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
+              //to do list: get the dataframe entity from here
+              val tableEntities1 = getTableEntities("chris1")
+              tableEntity1 = tableEntities1
 
-            cachedObjects.remove(uid + "_" + "pipelineDirEntity")
-            cachedObjects.remove(uid + "_" + "pipelineEntity")
-            cachedObjects.remove(uid + "_" + "model")
-            cachedObjects.remove(uid)
+              val fitEntity = internal.mlFitProcessToEntity(
+                pipeline,
+                pipelineEntity,
+                List(pipelineEntity, tableEntities1.head),
+                List(modelEntity))
 
-            logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
+              atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
+                pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
+
+              cachedObjects.remove(uid + "_" + "pipelineDirEntity")
+              cachedObjects.remove(uid + "_" + "pipelineEntity")
+              cachedObjects.remove(uid + "_" + "model")
+              cachedObjects.remove(uid)
+
+              logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
+            }
 
           case TransformEvent(model, dataset) =>
 
-            val tableEntities2 = getTableEntities("chris2")
             val uid = model.uid
 
-            val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
-            val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").get.asInstanceOf[AtlasEntity]
+            if (cachedObjects.contains( uid + "_" + "modelEntity")) {
 
-            val transformEntity = internal.mlTransformProcessToEntity(
-              model,
-              modelEntity,
-              List(modelEntity, tableEntity1.head),
-              List(tableEntities2.head))
+              //to do list: get the dataframe entity from here
+              val tableEntities2 = getTableEntities("chris2")
 
-            atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
-              ++ tableEntity1 ++ tableEntities2)
+              val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
+              val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").get.asInstanceOf[AtlasEntity]
 
-            cachedObjects.remove(uid + "_" + "modelEntity")
-            cachedObjects.remove(uid + "_" + "modelDirEntity")
+              val transformEntity = internal.mlTransformProcessToEntity(
+                model,
+                modelEntity,
+                List(modelEntity, tableEntity1.head),
+                List(tableEntities2.head))
 
-            logInfo(s"Created transFormEntity " + transformEntity.getGuid)
+              atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
+                ++ tableEntity1 ++ tableEntities2)
+
+              cachedObjects.remove(uid + "_" + "modelEntity")
+              cachedObjects.remove(uid + "_" + "modelDirEntity")
+
+              logInfo(s"Created transFormEntity " + transformEntity.getGuid)
+              } else {
+
+                logInfo(s"Transform Entity is already created")
+            }
 
           case _ =>
             logInfo(s"ML tracker for other event")
