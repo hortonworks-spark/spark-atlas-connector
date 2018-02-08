@@ -185,6 +185,7 @@ class MLPipelineTracker(
             if (cachedObjects.contains( uid + "_" + "modelEntity")) {
 
               //to do list: get the dataframe entity from here
+              val tableEntities3 = getTableEntities("chris3")
               val tableEntities2 = getTableEntities("chris2")
 
               val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
@@ -193,11 +194,11 @@ class MLPipelineTracker(
               val transformEntity = internal.mlTransformProcessToEntity(
                 model,
                 modelEntity,
-                List(modelEntity, tableEntity1.head),
+                List(modelEntity, tableEntities3.head),
                 List(tableEntities2.head))
 
               atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
-                ++ tableEntity1 ++ tableEntities2)
+                ++ tableEntities3 ++ tableEntities2)
 
               cachedObjects.remove(uid + "_" + "modelEntity")
               cachedObjects.remove(uid + "_" + "modelDirEntity")
