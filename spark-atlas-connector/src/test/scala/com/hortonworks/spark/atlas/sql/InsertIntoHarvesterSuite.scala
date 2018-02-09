@@ -18,22 +18,21 @@
 package com.hortonworks.spark.atlas.sql
 
 import java.io.File
-
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+import java.util
 
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import java.util
-
-import com.hortonworks.spark.atlas.types.{internal, external}
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.SparkSession
+import org.apache.commons.io.FileUtils
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
+import org.apache.spark.sql.SparkSession
 import org.scalatest.{BeforeAndAfterAll, Matchers, FunSuite}
+
+import com.hortonworks.spark.atlas.types.external
 
 class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
