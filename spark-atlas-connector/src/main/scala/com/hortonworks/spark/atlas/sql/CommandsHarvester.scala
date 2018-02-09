@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.execution._
-import com.hortonworks.spark.atlas.AtlasClientConf
 
+import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -104,7 +104,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-
         case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
           l.catalogTable.map(tableToEntities(_)).getOrElse(
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
@@ -118,6 +117,35 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = tableToEntities(node.tableDesc)
 
       // create process entity
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val outputTableEntities = List(outputEntities.head)
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+    }
+  }
+
+  object CreateDataSourceTableAsSelectHarvester
+    extends Harvester[CreateDataSourceTableAsSelectCommand] {
+    override def harvest(
+        node: CreateDataSourceTableAsSelectCommand,
+        qd: QueryDetail): Seq[AtlasEntity] = {
+      val tChildren = node.query.collectLeaves()
+      val inputsEntities = tChildren.map {
+        case r: HiveTableRelation => tableToEntities(r.tableMeta)
+        case v: View => tableToEntities(v.desc)
+        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
+          l.catalogTable.map(tableToEntities(_)).getOrElse {
+            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq
+          }
+
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
+          Seq.empty
+      }
+
+      val outputEntities = tableToEntities(node.table)
+
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(

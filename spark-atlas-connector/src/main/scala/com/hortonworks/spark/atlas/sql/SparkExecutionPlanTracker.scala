@@ -93,9 +93,8 @@ class SparkExecutionPlanTracker(
                   CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
                 case c: CreateDataSourceTableAsSelectCommand =>
-                  // Case 7. DF.saveAsTable
-                  logDebug("Table name in saveAsTable query: " + c.table.identifier.table)
-                  Seq.empty
+                  logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
 
                 case _ =>
                   Seq.empty
