@@ -65,7 +65,9 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     SparkSession.clearDefaultSession()
     sparkSession = null
 
+    FileUtils.deleteDirectory(new File("metastore_db"))
     FileUtils.deleteDirectory(new File("spark-warehouse"))
+
     super.afterAll()
   }
 
