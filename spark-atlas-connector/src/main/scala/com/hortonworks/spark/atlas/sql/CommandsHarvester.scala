@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.execution._
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -44,6 +44,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
+        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -68,9 +69,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
-          l.catalogTable.map(tableToEntities(_)).getOrElse(
-            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
+        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
