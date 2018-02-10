@@ -66,7 +66,6 @@ class SparkExecutionPlanTracker(
     logWarn(s"Fail to execute query: {$qe}, {$funcName}", exception)
   }
 
-  // TODO: We should consider multiple inputs and multiple outs.
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
   override protected def eventProcess(): Unit = {
@@ -75,6 +74,7 @@ class SparkExecutionPlanTracker(
       try {
         Option(qeQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach { qd =>
           val entities = qd.qe.sparkPlan.collect {
+            case p: UnionExec => p.children
             case p: DataWritingCommandExec => p
             case p: LeafExecNode => p
           }.flatMap {
