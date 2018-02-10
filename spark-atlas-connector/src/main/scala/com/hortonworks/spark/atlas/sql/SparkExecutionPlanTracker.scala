@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -73,28 +74,44 @@ class SparkExecutionPlanTracker(
     while (!stopped) {
       try {
         Option(qeQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach { qd =>
-          val entities = qd.qe.sparkPlan.collect { case p: LeafExecNode => p }
-            .flatMap {
+          val entities = qd.qe.sparkPlan.collect {
+            case p: DataWritingCommandExec => p
+            case p: LeafExecNode => p
+          }.flatMap {
             case r: ExecutedCommandExec =>
               r.cmd match {
-                case c: InsertIntoHiveTable =>
-                  logDebug(s"INSERT query ${qd.qe}")
-                  CommandsHarvester.InsertIntoHiveTableHarvester.harvest(c, qd)
-
-                // Case 6. CREATE TABLE AS SELECT
-                case c: CreateHiveTableAsSelectCommand =>
-                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
-                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
-
                 case c: LoadDataCommand =>
                   // Case 1. LOAD DATA LOCAL INPATH (from local)
                   // Case 2. LOAD DATA INPATH (from HDFS)
                   logDebug(s"LOAD DATA [LOCAL] INPATH (${c.path}) ${c.table}")
                   CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
+                // Case 6. CREATE TABLE AS SELECT
+                case c: CreateHiveTableAsSelectCommand =>
+                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
+
                 case c: CreateDataSourceTableAsSelectCommand =>
                   logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
+
+                case c: CreateViewCommand =>
+                  logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateViewHarvester.harvest(c, qd)
+
+                case _ =>
+                  Seq.empty
+              }
+
+            case r: DataWritingCommandExec =>
+              r.cmd match {
+                case c: InsertIntoHiveTable =>
+                  logDebug(s"INSERT INTO HIVE TABLE query ${qd.qe}")
+                  CommandsHarvester.InsertIntoHiveTableHarvester.harvest(c, qd)
+
+                case c: InsertIntoHadoopFsRelationCommand =>
+                  logDebug(s"INSERT INTO SPARK TABLE query ${qd.qe}")
+                  CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(c, qd)
 
                 case _ =>
                   Seq.empty

@@ -17,6 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+
 import scala.util.Try
 
 import org.apache.atlas.model.instance.AtlasEntity
@@ -24,8 +26,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.execution._
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -37,61 +39,51 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   object InsertIntoHiveTableHarvester extends Harvester[InsertIntoHiveTable] {
     override def harvest(node: InsertIntoHiveTable, qd: QueryDetail): Seq[AtlasEntity] = {
-      val child = node.query.asInstanceOf[Project].child
-      child match {
-        // case 3. INSERT INTO VALUES
-        case _: LocalRelation =>
-          Seq.empty
-
-        // case 4. INSERT INTO SELECT
-        case s: SubqueryAlias =>
-          // Prepare input entities
-          val fromTableIdentifier: Option[TableIdentifier] = s.child match {
-            case r: View => Some(r.desc.identifier)
-            case r: HiveTableRelation => Some(r.tableMeta.identifier)
-            case _ => None
-          }
-          require(fromTableIdentifier.isDefined, s"Fail to get input table from node $node")
-          val inputEntities = prepareEntities(fromTableIdentifier.get)
-
-          // Prepare output entities
-          val outTableIdentifier = node.table.identifier
-          val outputEntities = prepareEntities(outTableIdentifier)
-
-          // Create process entity
-          val inputTableEntity = List(inputEntities.head)
-          val outputTableEntity = List(outputEntities.head)
-          val pEntity = processToEntity(
-            qd.qe, qd.executionId, qd.executionTime, inputTableEntity, outputTableEntity)
-
-          Seq(pEntity) ++ inputEntities ++ outputEntities
-
-        // case 8. Multiple fromTables
-        case c: Filter =>
-          // Prepare input entities
-          val lChild = c.child.asInstanceOf[Join].left.asInstanceOf[SubqueryAlias]
-            .child.asInstanceOf[HiveTableRelation].tableMeta.identifier
-          val lInputs = prepareEntities(lChild)
-          val rChild = c.child.asInstanceOf[Join].right.asInstanceOf[SubqueryAlias]
-            .child.asInstanceOf[HiveTableRelation].tableMeta.identifier
-          val rInputs = prepareEntities(rChild)
-          val inputsEntities = lInputs ++ rInputs
-
-          // Prepare output entities
-          val outTableIdentifier = node.table.identifier
-          val outputsEntities = prepareEntities(outTableIdentifier)
-
-          // Create process entity
-          val inputTableEntities = List(lInputs.head, rInputs.head)
-          val outputTableEntities = List(outputsEntities.head)
-          val pEntity = processToEntity(
-            qd.qe, qd.executionId, qd.executionTime, inputTableEntities, outputTableEntities)
-
-          Seq(pEntity) ++ inputsEntities ++ outputsEntities
-
-        case _ =>
+      // source tables entities
+      val tChildren = node.query.collectLeaves()
+      val inputsEntities = tChildren.map {
+        case r: HiveTableRelation => tableToEntities(r.tableMeta)
+        case v: View => tableToEntities(v.desc)
+        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
       }
+
+      // new table entity
+      val outputEntities = tableToEntities(node.table)
+
+      // create process entity
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val outputTableEntities = List(outputEntities.head)
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+    }
+  }
+
+  object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
+    override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      // source tables entities
+      val tChildren = node.query.collectLeaves()
+      val inputsEntities = tChildren.map {
+        case r: HiveTableRelation => tableToEntities(r.tableMeta)
+        case v: View => tableToEntities(v.desc)
+        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
+          Seq.empty
+      }
+
+      // new table entity
+      val outputEntities = tableToEntities(node.catalogTable.get)
+
+      // create process entity
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val outputTableEntities = List(outputEntities.head)
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
 
@@ -194,6 +186,28 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       Seq(pEntity, destEntity) ++ inputsEntities.flatten
     }
   }
+
+  object CreateViewHarvester extends Harvester[CreateViewCommand] {
+    override def harvest(node: CreateViewCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      // from table entities
+      val child = node.child.asInstanceOf[Project].child
+      val fromTableIdentifier = child.asInstanceOf[UnresolvedRelation].tableIdentifier
+      val inputEntities = prepareEntities(fromTableIdentifier)
+
+      // new view entities
+      val viewIdentifier = node.name
+      val outputEntities = prepareEntities(viewIdentifier)
+
+      // create process entity
+      val inputTableEntity = List(inputEntities.head)
+      val outputTableEntity = List(outputEntities.head)
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputTableEntity, outputTableEntity)
+
+      Seq(pEntity) ++ inputEntities ++ outputEntities
+    }
+  }
+
 
   private def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
     val tableName = tableIdentifier.table
