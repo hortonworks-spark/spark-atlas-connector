@@ -46,17 +46,17 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     super.beforeAll()
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
+      .enableHiveSupport()
       .getOrCreate()
 
     sparkSession.sql(s"CREATE TABLE $sourceHiveTblName (name string)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceHiveTblName VALUES ('a'), ('b'), ('c')")
 
-    sparkSession.sql(s"CREATE TABLE $sourceSparkTblName (name string) USING PARQUET")
+    sparkSession.sql(s"CREATE TABLE $sourceSparkTblName (name string) USING ORC")
     sparkSession.sql(s"INSERT INTO TABLE $sourceSparkTblName VALUES ('d'), ('e'), ('f')")
 
     sparkSession.sql(s"CREATE TABLE $destinationHiveTblName (name string)")
-    sparkSession.sql(s"CREATE TABLE $destinationSparkTblName (name string) USING PARQUET")
+    sparkSession.sql(s"CREATE TABLE $destinationSparkTblName (name string) USING ORC")
   }
 
   override def afterAll(): Unit = {
