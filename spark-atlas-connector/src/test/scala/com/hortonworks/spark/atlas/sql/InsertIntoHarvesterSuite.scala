@@ -37,10 +37,10 @@ import com.hortonworks.spark.atlas.types.external
 class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
   private var sparkSession: SparkSession = _
-  private val sourceHiveTblName = "source_" + Random.nextInt(100000)
-  private val sourceSparkTblName = "source_" + Random.nextInt(100000)
-  private val destinationHiveTblName = "destination_" + Random.nextInt(100000)
-  private val destinationSparkTblName = "destination_" + Random.nextInt(100000)
+  private val sourceHiveTblName = "source_h_" + Random.nextInt(100000)
+  private val sourceSparkTblName = "source_s_" + Random.nextInt(100000)
+  private val destinationHiveTblName = "destination_h_" + Random.nextInt(100000)
+  private val destinationSparkTblName = "destination_s_" + Random.nextInt(100000)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
