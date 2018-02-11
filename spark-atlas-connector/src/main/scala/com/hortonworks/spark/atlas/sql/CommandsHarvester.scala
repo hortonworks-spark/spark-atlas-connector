@@ -89,8 +89,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   object CreateHiveTableAsSelectHarvester extends Harvester[CreateHiveTableAsSelectCommand] {
     override def harvest(
-                          node: CreateHiveTableAsSelectCommand,
-                          qd: QueryDetail): Seq[AtlasEntity] = {
+        node: CreateHiveTableAsSelectCommand,
+        qd: QueryDetail): Seq[AtlasEntity] = {
       // source tables entities
       val tChildren = node.query.collectLeaves()
       val inputsEntities = tChildren.map {
@@ -120,8 +120,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object CreateDataSourceTableAsSelectHarvester
     extends Harvester[CreateDataSourceTableAsSelectCommand] {
     override def harvest(
-                          node: CreateDataSourceTableAsSelectCommand,
-                          qd: QueryDetail): Seq[AtlasEntity] = {
+        node: CreateDataSourceTableAsSelectCommand,
+        qd: QueryDetail): Seq[AtlasEntity] = {
       val tChildren = node.query.collectLeaves()
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
