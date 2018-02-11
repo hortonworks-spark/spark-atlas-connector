@@ -52,7 +52,6 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
   private val outputTable3 = "output3_" + Random.nextInt(100000)
   private val outputTable4 = "output4_" + Random.nextInt(100000)
 
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     sparkSession = SparkSession.builder()
@@ -84,7 +83,6 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     sparkSession.sql(s"create table $outputTable2 (id int)")
     sparkSession.sql(s"create table $outputTable3 (code string)")
     sparkSession.sql(s"create table $outputTable4 (salary int)")
-
   }
 
   override def afterAll(): Unit = {
@@ -274,7 +272,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
 
     assert(qe.sparkPlan.isInstanceOf[UnionExec])
     qe.sparkPlan.asInstanceOf[UnionExec]
-      qe.sparkPlan.children.foreach(child => {
+    qe.sparkPlan.children.foreach(child => {
       assert(child.isInstanceOf[DataWritingCommandExec])
       val node = child.asInstanceOf[DataWritingCommandExec]
       assert(node.cmd.isInstanceOf[InsertIntoHiveTable])
