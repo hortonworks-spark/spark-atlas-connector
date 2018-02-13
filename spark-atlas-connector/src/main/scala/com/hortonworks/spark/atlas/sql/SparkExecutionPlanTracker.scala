@@ -86,11 +86,6 @@ class SparkExecutionPlanTracker(
                   logDebug(s"LOAD DATA [LOCAL] INPATH (${c.path}) ${c.table}")
                   CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
-                // Case 6. CREATE TABLE AS SELECT
-                case c: CreateHiveTableAsSelectCommand =>
-                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
-                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
-
                 case c: CreateDataSourceTableAsSelectCommand =>
                   logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
@@ -112,6 +107,11 @@ class SparkExecutionPlanTracker(
                 case c: InsertIntoHadoopFsRelationCommand =>
                   logDebug(s"INSERT INTO SPARK TABLE query ${qd.qe}")
                   CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(c, qd)
+
+                // Case 6. CREATE TABLE AS SELECT
+                case c: CreateHiveTableAsSelectCommand =>
+                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
 
                 case _ =>
                   Seq.empty
