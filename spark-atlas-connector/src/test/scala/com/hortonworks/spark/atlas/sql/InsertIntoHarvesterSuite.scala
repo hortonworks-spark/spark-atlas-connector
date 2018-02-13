@@ -38,6 +38,7 @@ import com.hortonworks.spark.atlas.types.external
 class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
   private var sparkSession: SparkSession = _
+  private val dataBase = "sac"
   private val sourceHiveTblName = "source_h_" + Random.nextInt(100000)
   private val sourceSparkTblName = "source_s_" + Random.nextInt(100000)
   private val destinationHiveTblName = "destination_h_" + Random.nextInt(100000)
@@ -46,11 +47,10 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
   private val inputTable1 = "input1_" + Random.nextInt(100000)
   private val inputTable2 = "input2_" + Random.nextInt(100000)
   private val inputTable3 = "input3_" + Random.nextInt(100000)
-  private val inputTable4 = "input4_" + Random.nextInt(100000)
   private val outputTable1 = "output1_" + Random.nextInt(100000)
   private val outputTable2 = "output2_" + Random.nextInt(100000)
   private val outputTable3 = "output3_" + Random.nextInt(100000)
-  private val outputTable4 = "output4_" + Random.nextInt(100000)
+  private val bigTable = "big_" + Random.nextInt(100000)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -58,6 +58,10 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
       .master("local")
       .enableHiveSupport()
       .getOrCreate()
+
+    sparkSession.sql(s"DROP DATABASE IF EXISTS $dataBase Cascade")
+    sparkSession.sql(s"CREATE DATABASE $dataBase")
+    sparkSession.sql(s"USE $dataBase")
 
     sparkSession.sql(s"CREATE TABLE $sourceHiveTblName (name string)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceHiveTblName VALUES ('a'), ('b'), ('c')")
@@ -68,24 +72,22 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     sparkSession.sql(s"CREATE TABLE $destinationHiveTblName (name string)")
     sparkSession.sql(s"CREATE TABLE $destinationSparkTblName (name string) USING ORC")
 
-    // multiple source tables
-    sparkSession.sql(s"CREATE TABLE $inputTable1 (a int, b string)")
-    sparkSession.sql(s"INSERT INTO $inputTable1 VALUES(1, 'str1')")
-    sparkSession.sql(s"CREATE TABLE $inputTable2 (c int, d string)")
-    sparkSession.sql(s"INSERT INTO $inputTable2 VALUES(1, 'str2')")
-    sparkSession.sql(s"CREATE TABLE $inputTable3 (e int, f string)")
-    sparkSession.sql(s"INSERT INTO $inputTable3 VALUES(1, 'str3')")
-    sparkSession.sql(s"CREATE TABLE $outputTable1 (a int, b string, c int, d string, e int, f string)")
-
-    // multiple destination tables
-    sparkSession.sql(s"create table $inputTable4 (id int, code string, salary int)")
-    sparkSession.sql(s"INSERT INTO $inputTable4 VALUES(1, 'hihi', 100)")
-    sparkSession.sql(s"create table $outputTable2 (id int)")
-    sparkSession.sql(s"create table $outputTable3 (code string)")
-    sparkSession.sql(s"create table $outputTable4 (salary int)")
+    // tables used in cases of multiple source/destination tables
+    sparkSession.sql(s"CREATE TABLE $inputTable1 (a int)")
+    sparkSession.sql(s"INSERT INTO $inputTable1 VALUES(1)")
+    sparkSession.sql(s"CREATE TABLE $inputTable2 (b int)")
+    sparkSession.sql(s"INSERT INTO $inputTable2 VALUES(1)")
+    sparkSession.sql(s"CREATE TABLE $inputTable3 (c int)")
+    sparkSession.sql(s"INSERT INTO $inputTable3 VALUES(1)")
+    sparkSession.sql(s"create table $outputTable1 (a int)")
+    sparkSession.sql(s"create table $outputTable2 (b int)")
+    sparkSession.sql(s"create table $outputTable3 (c int)")
+    sparkSession.sql(s"CREATE TABLE $bigTable (a int, b int, c int)")
+    sparkSession.sql(s"INSERT INTO $bigTable VALUES(100, '150', 200)")
   }
 
   override def afterAll(): Unit = {
+    sparkSession.sql(s"DROP DATABASE IF EXISTS $dataBase Cascade")
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
@@ -118,7 +120,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     inputTbl.getAttribute("name") should be (sourceHiveTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$sourceHiveTblName@primary")
+      s"$dataBase.$sourceHiveTblName@primary")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -127,7 +129,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     outputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     outputTbl.getAttribute("name") should be (destinationHiveTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$destinationHiveTblName@primary")
+      s"$dataBase.$destinationHiveTblName@primary")
   }
 
   test("INSERT INTO HIVE TABLE FROM SPARK TABLE") {
@@ -151,7 +153,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     inputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
     inputTbl.getAttribute("name") should be (sourceSparkTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$sourceSparkTblName")
+      s"$dataBase.$sourceSparkTblName")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -160,7 +162,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     outputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     outputTbl.getAttribute("name") should be (destinationHiveTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$destinationHiveTblName@primary")
+      s"$dataBase.$destinationHiveTblName@primary")
   }
 
   test("INSERT INTO SPARK TABLE FROM HIVE TABLE") {
@@ -184,7 +186,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     inputTbl.getAttribute("name") should be (sourceHiveTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$sourceHiveTblName@primary")
+      s"$dataBase.$sourceHiveTblName@primary")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -193,7 +195,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     outputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
     outputTbl.getAttribute("name") should be (destinationSparkTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$destinationSparkTblName")
+      s"$dataBase.$destinationSparkTblName")
   }
 
   test("INSERT INTO SPARK TABLE FROM SPARK TABLE") {
@@ -217,7 +219,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     inputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
     inputTbl.getAttribute("name") should be (sourceSparkTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$sourceSparkTblName")
+      s"$dataBase.$sourceSparkTblName")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -226,13 +228,13 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     outputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
     outputTbl.getAttribute("name") should be (destinationSparkTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
-      s"default.$destinationSparkTblName")
+      s"$dataBase.$destinationSparkTblName")
   }
 
   test("INSERT INTO TABLE FROM MULTIPLE TABLES") {
-    val qe = sparkSession.sql(s"INSERT INTO $outputTable1 " +
+    val qe = sparkSession.sql(s"INSERT INTO $bigTable " +
       s"SELECT * FROM $inputTable1, $inputTable2, $inputTable3 " +
-      s"where $inputTable1.a = $inputTable2.c AND $inputTable1.a = $inputTable3.e").queryExecution
+      s"where $inputTable1.a = $inputTable2.b AND $inputTable1.a = $inputTable3.c").queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
@@ -251,23 +253,23 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
     inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     inputTbl.getAttribute("name").toString should startWith ("input")
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should startWith (
-      "default.input")
+      s"$dataBase.input")
 
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
     outputs.size() should be (1)
     val outputTbl = outputs.asScala.head
     outputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    outputTbl.getAttribute("name") should be (outputTable1)
+    outputTbl.getAttribute("name") should be (bigTable)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$outputTable1@primary")
+      s"$dataBase.$bigTable@primary")
   }
 
   test("INSERT INTO MULTIPLE TABLES FROM TABLE") {
-    val qe = sparkSession.sql(s"FROM $inputTable4 " +
-      s"INSERT INTO TABLE $outputTable2 SELECT $inputTable4.id " +
-      s"INSERT INTO TABLE $outputTable3 SELECT $inputTable4.code " +
-      s"INSERT into TABLE $outputTable4 SELECT $inputTable4.salary").queryExecution
+    val qe = sparkSession.sql(s"FROM $bigTable " +
+      s"INSERT INTO TABLE $outputTable1 SELECT $bigTable.a " +
+      s"INSERT INTO TABLE $outputTable2 SELECT $bigTable.b " +
+      s"INSERT into TABLE $outputTable3 SELECT $bigTable.c").queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[UnionExec])
@@ -287,9 +289,9 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
 
       val inputTbl = inputs.asScala.head
       inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      inputTbl.getAttribute("name") should be (inputTable4)
+      inputTbl.getAttribute("name") should be (bigTable)
       inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$inputTable4@primary")
+        s"$dataBase.$bigTable@primary")
 
       assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
       val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -298,7 +300,47 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
       outputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
       outputTbl.getAttribute("name").toString should startWith ("output")
       outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should startWith (
-        "default.output")
+        s"$dataBase.output")
+    })
+  }
+
+  test("INSERT INTO MULTIPLE TABLES FROM MULTIPLE TABLES") {
+    val qe = sparkSession.sql(s"WITH view1 AS (SELECT * FROM $inputTable1, $inputTable2, $inputTable3 " +
+      s"where $inputTable1.a = $inputTable2.b AND $inputTable1.a = $inputTable3.c) " +
+      s"FROM view1 INSERT INTO TABLE $outputTable1 SELECT view1.a " +
+      s"INSERT INTO TABLE $outputTable2 SELECT view1.b " +
+      s"INSERT into TABLE $outputTable3 SELECT view1.c").queryExecution
+    val qd = QueryDetail(qe, 0L, 0L)
+
+    assert(qe.sparkPlan.isInstanceOf[UnionExec])
+    qe.sparkPlan.asInstanceOf[UnionExec]
+    qe.sparkPlan.children.foreach(child => {
+      assert(child.isInstanceOf[DataWritingCommandExec])
+      val node = child.asInstanceOf[DataWritingCommandExec]
+      assert(node.cmd.isInstanceOf[InsertIntoHiveTable])
+      val cmd = node.cmd.asInstanceOf[InsertIntoHiveTable]
+
+      val entities = CommandsHarvester.InsertIntoHiveTableHarvester.harvest(cmd, qd)
+      val pEntity = entities.head
+
+      assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
+      val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
+      inputs.size() should be(3)
+
+      val inputTbl = inputs.asScala.head
+      inputTbl.getTypeName should be(external.HIVE_TABLE_TYPE_STRING)
+      inputTbl.getAttribute("name").toString should startWith("input")
+      inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should startWith(
+        s"$dataBase.input")
+
+      assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
+      val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
+      outputs.size() should be(1)
+      val outputTbl = outputs.asScala.head
+      outputTbl.getTypeName should be(external.HIVE_TABLE_TYPE_STRING)
+      outputTbl.getAttribute("name").toString should startWith("output")
+      outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should startWith(
+        s"$dataBase.output")
     })
   }
 }
