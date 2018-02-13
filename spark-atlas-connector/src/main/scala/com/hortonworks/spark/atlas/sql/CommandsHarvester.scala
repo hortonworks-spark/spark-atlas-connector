@@ -112,7 +112,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.sqlQuery))
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -141,7 +141,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.sqlQuery))
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -151,7 +151,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head), Some(SQLQuery.sqlQuery))
+        qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head), Some(SQLQuery.get()))
       Seq(pEntity, pathEntity) ++ outputEntities
     }
   }
@@ -182,7 +182,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), Some(SQLQuery.sqlQuery))
+        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), Some(SQLQuery.get()))
       Seq(pEntity, destEntity) ++ inputsEntities.flatten
     }
   }
