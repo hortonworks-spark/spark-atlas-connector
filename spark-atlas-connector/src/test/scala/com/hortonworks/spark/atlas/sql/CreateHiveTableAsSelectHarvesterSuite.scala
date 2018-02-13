@@ -28,7 +28,7 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
@@ -71,10 +71,11 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
       .queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
     val ctasNode = qe.sparkPlan.collect {
+      case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
     }
-    assert(ctasNode.size === 1)
-    val execNode = ctasNode.head.asInstanceOf[ExecutedCommandExec]
+    assert(ctasNode.size === 2)
+    val execNode = ctasNode.head.asInstanceOf[DataWritingCommandExec]
 
     val entities = CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(
       execNode.cmd.asInstanceOf[CreateHiveTableAsSelectCommand], qd)
@@ -110,10 +111,11 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
       .queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
     val ctasNode = qe.sparkPlan.collect {
+      case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
     }
-    assert(ctasNode.size === 1)
-    val execNode = ctasNode.head.asInstanceOf[ExecutedCommandExec]
+    assert(ctasNode.size === 3)
+    val execNode = ctasNode.head.asInstanceOf[DataWritingCommandExec]
 
     val entities = CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(
       execNode.cmd.asInstanceOf[CreateHiveTableAsSelectCommand], qd)
@@ -147,10 +149,11 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
       .queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
     val ctasNode = qe.sparkPlan.collect {
+      case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
     }
-    assert(ctasNode.size === 1)
-    val execNode = ctasNode.head.asInstanceOf[ExecutedCommandExec]
+    assert(ctasNode.size === 2)
+    val execNode = ctasNode.head.asInstanceOf[DataWritingCommandExec]
 
     val entities = CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(
       execNode.cmd.asInstanceOf[CreateHiveTableAsSelectCommand], qd)
@@ -184,10 +187,11 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
       s"FROM parquet.`$path`").queryExecution
     val qd = QueryDetail(qe, 0L, 0L)
     val ctasNode = qe.sparkPlan.collect {
+      case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
     }
-    assert(ctasNode.size === 1)
-    val execNode = ctasNode.head.asInstanceOf[ExecutedCommandExec]
+    assert(ctasNode.size === 2)
+    val execNode = ctasNode.head.asInstanceOf[DataWritingCommandExec]
 
     val entities = CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(
       execNode.cmd.asInstanceOf[CreateHiveTableAsSelectCommand], qd)
