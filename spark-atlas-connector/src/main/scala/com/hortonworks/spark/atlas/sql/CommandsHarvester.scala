@@ -69,15 +69,11 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation =>
-          if (l.catalogTable.isDefined)
-            l.catalogTable.map(tableToEntities(_)).get
-          else {
-            l.relation match {
-              case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-              case _ => Seq.empty
-            }
-          }
+        case l: LogicalRelation if l.catalogTable.isDefined => l.catalogTable.map(tableToEntities(_)).get
+        case l: LogicalRelation => l.relation match {
+                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                  case _ => Seq.empty
+                }
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
