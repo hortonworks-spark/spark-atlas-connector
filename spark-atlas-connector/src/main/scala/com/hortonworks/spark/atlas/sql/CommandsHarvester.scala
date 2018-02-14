@@ -112,7 +112,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -141,7 +141,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Some(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -151,7 +151,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head))
+        qd.qe, qd.executionId, qd.executionTime, List(pathEntity), List(outputEntities.head), Some(SQLQuery.get()))
       Seq(pEntity, pathEntity) ++ outputEntities
     }
   }
@@ -173,8 +173,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           }.getOrElse(Seq.empty)
 
         case f: FileSourceScanExec =>
-           f.tableIdentifier.map(prepareEntities).getOrElse(
-             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+          f.tableIdentifier.map(prepareEntities).getOrElse(
+            f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -182,7 +182,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity))
+        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), Some(SQLQuery.get()))
       Seq(pEntity, destEntity) ++ inputsEntities.flatten
     }
   }
@@ -208,7 +208,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-
   private def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
     val tableName = tableIdentifier.table
     val dbName = tableIdentifier.database.getOrElse("default")
@@ -216,4 +215,3 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     tableToEntities(tableDef)
   }
 }
-
