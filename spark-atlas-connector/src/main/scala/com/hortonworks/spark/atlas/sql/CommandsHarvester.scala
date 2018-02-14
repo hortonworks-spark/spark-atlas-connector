@@ -64,19 +64,25 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
     override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail): Seq[AtlasEntity] = {
-      // source tables entities
+      // source tables/files entities
       val tChildren = node.query.collectLeaves()
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
+        case l: LogicalRelation if l.catalogTable.isDefined =>
+          l.catalogTable.map(tableToEntities(_)).get
+        case l: LogicalRelation => l.relation match {
+          case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+          case _ => Seq.empty
+        }
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
       }
 
-      // new table entity
-      val outputEntities = tableToEntities(node.catalogTable.get)
+      // new table/file entity
+      val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
+        List(external.pathToEntity(node.outputPath.toUri.toString)))
 
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
