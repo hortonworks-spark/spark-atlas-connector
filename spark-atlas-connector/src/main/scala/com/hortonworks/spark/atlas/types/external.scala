@@ -79,6 +79,21 @@ object external {
     new File(path).getAbsoluteFile().toURI()
   }
 
+  // ================ HBase entities ======================
+  // val HBASE_NAMESPACE_STRING = "hbase_namespace"
+  val HBASE_TABLE_STRING = "hbase_table"
+  val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
+  val HBASE_COLUMN_STRING = "hbase_column"
+
+  def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
+    val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
+    hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, tableName.toLowerCase + '@' + cluster)
+    hbaseEntity.setAttribute(AtlasClient.NAME, tableName)
+    hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
+    hbaseEntity.setAttribute("uri", tableName)
+    Seq(hbaseEntity)
+  }
+
   // ================== Hive entities =====================
   val HIVE_DB_TYPE_STRING = "hive_db"
   val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
@@ -108,7 +123,7 @@ object external {
     hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
   }
 
-    def hiveStorageDescToEntities(
+  def hiveStorageDescToEntities(
       storageFormat: CatalogStorageFormat,
       cluster: String,
       db: String,

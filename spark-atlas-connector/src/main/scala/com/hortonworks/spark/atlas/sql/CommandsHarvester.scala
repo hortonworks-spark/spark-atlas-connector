@@ -23,11 +23,11 @@ import scala.util.Try
 
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, LogicalRelation, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.execution._
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -36,6 +36,18 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
+
+  // Spark HBase Connector
+  private val HBASE_RELATION_CLASS_NAME = "org.apache.spark.sql.execution.datasources.hbase.HBaseRelation"
+
+  // Load HBaseRelation class
+  lazy val maybeClazz: Option[Class[_]] = {
+    try {
+      Some(Class.forName(HBASE_RELATION_CLASS_NAME))
+    } catch {
+      case _: ClassNotFoundException => None
+    }
+  }
 
   object InsertIntoHiveTableHarvester extends Harvester[InsertIntoHiveTable] {
     override def harvest(node: InsertIntoHiveTable, qd: QueryDetail): Seq[AtlasEntity] = {
@@ -61,6 +73,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
+
+  /*object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
+    override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+
+      Seq.empty
+    }
+  }*/
 
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
     override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail): Seq[AtlasEntity] = {
@@ -102,10 +121,43 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = tChildren.map {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
-          l.catalogTable.map(tableToEntities(_)).getOrElse(
+        case l: LogicalRelation => l.relation match {
+          case r: FileRelation =>  l.catalogTable.map(tableToEntities(_)).getOrElse(
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
 
+          case r if r.getClass.getCanonicalName.endsWith(HBASE_RELATION_CLASS_NAME) =>
+            r.asInstanceOf[some(maybeClazz)]
+            if (maybeClazz.isDefined) {
+              val catalog = maybeClazz.get.getField("catalog")
+              Seq.empty
+
+              Class.forName(f.fCoder)
+                .getConstructor(classOf[Option[Field]])
+                .newInstance(Some(f))
+                .asInstanceOf[SHCDataType]
+              /*
+              val dbName = catalog.namespace  //"default"
+              val tableName = r.name.asInstanceOf[String]
+              stable = tableName
+
+              val schema = c.query.asInstanceOf[org.apache.spark.sql.execution.datasources.LogicalRelation].schema
+              val sd = CatalogStorageFormat.empty
+              val tableDef = createTable(dbName, tableName, schema, sd) //catalog table
+              //val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
+              val dbDef = SparkUtils.getExternalCatalog().getDatabase(dbName)
+
+              val tableSchemaEntities = AtlasEntityUtils.schemaToEntity(tableDef.schema, dbName, tableName)
+              val tableStorageFormatEntity = AtlasEntityUtils.storageFormatToEntity(tableDef.storage, dbName, tableName)
+              val dbEntity = AtlasEntityUtils.dbToEntity(dbDef)
+              val tableEntity = AtlasEntityUtils.tableToEntity(tableDef, dbEntity, tableSchemaEntities,
+                tableStorageFormatEntity)
+
+              Seq(dbEntity, tableStorageFormatEntity, tableEntity) ++ tableSchemaEntities */
+
+            }
+            Seq.empty
+          case e => Seq.empty
+        }
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty

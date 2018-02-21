@@ -20,11 +20,15 @@ package com.hortonworks.spark.atlas.sql
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
+import com.hortonworks.spark.atlas.types.external
+import org.json4s.JsonAST.JObject
+import org.json4s.jackson.JsonMethods._
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -66,6 +70,7 @@ class SparkExecutionPlanTracker(
     logWarn(s"Fail to execute query: {$qe}, {$funcName}", exception)
   }
 
+
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
   override protected def eventProcess(): Unit = {
@@ -93,6 +98,18 @@ class SparkExecutionPlanTracker(
                 case c: CreateViewCommand =>
                   logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateViewHarvester.harvest(c, qd)
+
+                case c: SaveIntoDataSourceCommand =>
+                  logDebug(s"DATA FRAME SAVE INTO DATA SOURCE: ${qd.qe}")
+                  // SHC
+                  var catalog = ""
+                  c.options.foreach {x => if (x._1.equals("catalog")) catalog = x._2}
+                  val jObj = parse(catalog).asInstanceOf[JObject]
+                  val map = jObj.values
+                  val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
+                  val nSpace = tableMeta.get("namespace").getOrElse("default").asInstanceOf[String]
+                  val tName = tableMeta.get("name").get.asInstanceOf[String]
+                  external.hbaseTableToEntity(conf.get(AtlasClientConf.CLUSTER_NAME), tName, nSpace)
 
                 case _ =>
                   Seq.empty

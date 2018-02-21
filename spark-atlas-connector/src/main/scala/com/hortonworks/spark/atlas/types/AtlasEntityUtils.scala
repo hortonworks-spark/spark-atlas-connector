@@ -157,4 +157,7 @@ trait AtlasEntityUtils {
 
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)
+
+  def hbaseTableToEntity(tableName: String, nameSpace: String): Seq[AtlasEntity] =
+    external.hbaseTableToEntity(clusterName, tableName, nameSpace)
 }
