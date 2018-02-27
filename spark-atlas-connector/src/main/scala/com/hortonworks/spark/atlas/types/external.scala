@@ -80,19 +80,36 @@ object external {
   }
 
   // ================ HBase entities ======================
-  // val HBASE_NAMESPACE_STRING = "hbase_namespace"
+  val HBASE_NAMESPACE_STRING = "hbase_namespace"
   val HBASE_TABLE_STRING = "hbase_table"
   val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
   val HBASE_COLUMN_STRING = "hbase_column"
 
+  private def stripNameSpace(tableName: String): String = {
+    tableName.substring(tableName.indexOf(":") + 1)
+  }
+
+  def hbaseTbUniqueAttribute(cluster: String, tableName: String, nameSpace: String) =
+    nameSpace.toLowerCase + '.' + stripNameSpace(tableName.toLowerCase()) + '@' + cluster
+
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
-    hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, tableName.toLowerCase + '@' + cluster)
-    hbaseEntity.setAttribute(AtlasClient.NAME, tableName)
+    hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      hbaseTbUniqueAttribute(cluster, tableName, nameSpace))
+    hbaseEntity.setAttribute(AtlasClient.NAME, tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    hbaseEntity.setAttribute("uri", tableName)
+    hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
   }
+
+  // TODO: we will make HBase entities in column level
+  def hbaseCFUniqueAttribute(cluster: String, tableName: String, nameSpace: String, columnFamily: String) =
+    String.format("%s.%s.%s@%s", nameSpace.toLowerCase, stripNameSpace(tableName.toLowerCase),
+      columnFamily.toLowerCase, cluster)
+
+  def hbaseColumnUniqueAttribute(cluster: String, tableName: String, nameSpace: String, columnFamily: String,
+    column: String) = String.format("%s.%s.%s.%s@%s", nameSpace.toLowerCase,
+      stripNameSpace(tableName.toLowerCase), columnFamily.toLowerCase, column, cluster)
 
   // ================== Hive entities =====================
   val HIVE_DB_TYPE_STRING = "hive_db"
