@@ -96,8 +96,6 @@ object external {
     Seq(hbaseEntity)
   }
 
-  // TODO: we will make HBase entities in column level (SAC-23)
-
   // ================== Hive entities =====================
   val HIVE_DB_TYPE_STRING = "hive_db"
   val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
