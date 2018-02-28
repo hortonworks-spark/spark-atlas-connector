@@ -27,7 +27,7 @@
 
   <properties>
     <spark.version>2.3.1-SNAPSHOT</spark.version>
-    <atlas.version>0.8.1</atlas.version>
+    <atlas.version>0.8.2</atlas.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <MaxPermGen>512m</MaxPermGen>
@@ -153,6 +153,12 @@
       <groupId>org.apache.atlas</groupId>
       <artifactId>atlas-notification</artifactId>
       <version>${atlas.version}</version>
+    </dependency>
+
+    <dependency>
+       <groupId>org.apache.atlas</groupId>
+       <artifactId>atlas-client-v2</artifactId>
+       <version>${atlas.version}</version>
     </dependency>
 
     <dependency>
