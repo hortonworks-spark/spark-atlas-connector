@@ -21,17 +21,18 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.util.Date
 
-import com.hortonworks.spark.atlas.utils.SparkUtils
-
 import scala.collection.JavaConverters._
 
 import org.apache.atlas.{AtlasClient, AtlasConstants}
+import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
+
+import com.hortonworks.spark.atlas.utils.SparkUtils
 
 object external {
   // External metadata types used to link with external entities
@@ -79,6 +80,22 @@ object external {
     new File(path).getAbsoluteFile().toURI()
   }
 
+  // ================ HBase entities ======================
+  val HBASE_NAMESPACE_STRING = "hbase_namespace"
+  val HBASE_TABLE_STRING = "hbase_table"
+  val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
+  val HBASE_COLUMN_STRING = "hbase_column"
+
+  def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
+    val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
+    hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      getTableQualifiedName(cluster, tableName, nameSpace))
+    hbaseEntity.setAttribute(AtlasClient.NAME, tableName.toLowerCase)
+    hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
+    hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
+    Seq(hbaseEntity)
+  }
+
   // ================== Hive entities =====================
   val HIVE_DB_TYPE_STRING = "hive_db"
   val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
@@ -108,7 +125,7 @@ object external {
     hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
   }
 
-    def hiveStorageDescToEntities(
+  def hiveStorageDescToEntities(
       storageFormat: CatalogStorageFormat,
       cluster: String,
       db: String,
