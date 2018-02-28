@@ -21,17 +21,18 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.util.Date
 
-import com.hortonworks.spark.atlas.utils.SparkUtils
-
 import scala.collection.JavaConverters._
 
 import org.apache.atlas.{AtlasClient, AtlasConstants}
+import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
+
+import com.hortonworks.spark.atlas.utils.SparkUtils
 
 object external {
   // External metadata types used to link with external entities
@@ -95,14 +96,14 @@ object external {
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
     hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      hbaseTbUniqueAttribute(cluster, tableName, nameSpace))
+      getTableQualifiedName(cluster, tableName, nameSpace))
     hbaseEntity.setAttribute(AtlasClient.NAME, tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
   }
 
-  // TODO: we will make HBase entities in column level (Issues#23)
+  // TODO: we will make HBase entities in column level (SAC-23)
   def hbaseCFUniqueAttribute(cluster: String, tableName: String, nameSpace: String, columnFamily: String) =
     String.format("%s.%s.%s@%s", nameSpace.toLowerCase, stripNameSpace(tableName.toLowerCase),
       columnFamily.toLowerCase, cluster)

@@ -156,9 +156,15 @@
     </dependency>
 
     <dependency>
-       <groupId>org.apache.atlas</groupId>
-       <artifactId>atlas-client-v2</artifactId>
-       <version>${atlas.version}</version>
+      <groupId>org.apache.atlas</groupId>
+      <artifactId>atlas-client-v2</artifactId>
+      <version>${atlas.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.atlas</groupId>
+      <artifactId>hbase-bridge</artifactId>
+      <version>${atlas.version}</version>
     </dependency>
 
     <dependency>
