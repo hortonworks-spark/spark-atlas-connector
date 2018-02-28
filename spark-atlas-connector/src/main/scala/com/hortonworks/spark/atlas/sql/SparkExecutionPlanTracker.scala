@@ -70,7 +70,6 @@ class SparkExecutionPlanTracker(
     logWarn(s"Fail to execute query: {$qe}, {$funcName}", exception)
   }
 
-
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
   override protected def eventProcess(): Unit = {

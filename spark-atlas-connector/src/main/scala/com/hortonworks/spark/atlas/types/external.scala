@@ -102,7 +102,7 @@ object external {
     Seq(hbaseEntity)
   }
 
-  // TODO: we will make HBase entities in column level
+  // TODO: we will make HBase entities in column level (Issues#23)
   def hbaseCFUniqueAttribute(cluster: String, tableName: String, nameSpace: String, columnFamily: String) =
     String.format("%s.%s.%s@%s", nameSpace.toLowerCase, stripNameSpace(tableName.toLowerCase),
       columnFamily.toLowerCase, cluster)
