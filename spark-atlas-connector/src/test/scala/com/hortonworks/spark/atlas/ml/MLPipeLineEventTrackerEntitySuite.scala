@@ -36,7 +36,7 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
   protected  override  val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.61.76:21000")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.15.135:21000")
 
   private val atlasClient = new RestAtlasClient(atlasClientConf)
   SparkAtlasModel.checkAndCreateTypes(atlasClient)
@@ -145,13 +145,16 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
     pipeline.write.overwrite().save(pipelineDir)
     model.write.overwrite().save(modelDir)
 
-    val df2 = model.transform(df)
+    val savedmodel = PipelineModel.load(modelDir)
+
+    val df2 = savedmodel.transform(df)
     df2.collect()
 
     tracker.onOtherEvent(CreatePipelineEvent(pipeline, df))
     tracker.onOtherEvent(CreateModelEvent(model))
     tracker.onOtherEvent(SavePipelineEvent(pipeline.uid, pipelineDir))
     tracker.onOtherEvent(SaveModelEvent(model.uid, modelDir))
+    tracker.onOtherEvent(LoadModelEvent(modelDir,savedmodel))
     tracker.onOtherEvent(TransformEvent(model, df))
   }
 

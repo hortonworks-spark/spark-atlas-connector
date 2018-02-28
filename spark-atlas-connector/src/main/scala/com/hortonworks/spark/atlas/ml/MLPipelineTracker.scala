@@ -143,7 +143,6 @@ class MLPipelineTracker(
             } else {
 
               val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
-              cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
 
               val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity").get.asInstanceOf[AtlasEntity]
               val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity").get.asInstanceOf[AtlasEntity]
@@ -153,7 +152,6 @@ class MLPipelineTracker(
               val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
 
               val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
-              cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
               atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
 
@@ -177,6 +175,14 @@ class MLPipelineTracker(
 
               logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
             }
+
+          case LoadModelEvent(directory, model) =>
+
+            val modelDirEntity = internal.mlDirectoryToEntity(uri, directory)
+            val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+            val uid = model.uid
+            cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
+            cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
           case TransformEvent(model, dataset) =>
 
