@@ -21,14 +21,16 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import com.google.common.annotations.VisibleForTesting
 import com.hortonworks.spark.atlas.sql.AbstractService
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, internal}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.CatalogUtils
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 import scala.collection.mutable
@@ -61,8 +63,6 @@ class MLPipelineTracker(
   private val cachedObjects = new mutable.HashMap[String, Object]
 
   private val uri = "hdfs://"
-
-  private var tableEntity1:Seq[AtlasEntity] = null
 
   startThread()
 
@@ -120,6 +120,15 @@ class MLPipelineTracker(
             cachedObjects.put(pipeline.uid, pipeline)
             cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
 
+            val logicalplan = dataset.queryExecution.analyzed
+
+            val entities = logicalplan.collectLeaves().map {
+              case l: LogicalRelation => l.relation match {
+                case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                case _ => Seq.empty
+              }
+            }
+
           case CreateModelEvent(pipelineModel) =>
             cachedObjects.put(pipelineModel.uid + "_" + "model", pipelineModel)
 
@@ -156,21 +165,30 @@ class MLPipelineTracker(
               atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
 
               //to do list: get the dataframe entity from here
-              val tableEntities1 = getTableEntities("chris1")
-              tableEntity1 = tableEntities1
+              val trainingdata = cachedObjects.get(pipeline.uid + "_" + "traindata").get.asInstanceOf[Dataset[_]]
+
+              val logicalplan = trainingdata.queryExecution.analyzed
+
+              val tableEntities = logicalplan.collectLeaves().map {
+                case l: LogicalRelation => l.relation match {
+                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                  case _ => Seq.empty
+                }
+              }
 
               val fitEntity = internal.mlFitProcessToEntity(
                 pipeline,
                 pipelineEntity,
-                List(pipelineEntity, tableEntities1.head),
+                List(pipelineEntity, tableEntities.head.head),
                 List(modelEntity))
 
               atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
-                pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
+                pipelineEntity, modelEntity, fitEntity) ++ tableEntities.head)
 
               cachedObjects.remove(uid + "_" + "pipelineDirEntity")
               cachedObjects.remove(uid + "_" + "pipelineEntity")
               cachedObjects.remove(uid + "_" + "model")
+              cachedObjects.remove(uid + "_" + "traindata")
               cachedObjects.remove(uid)
 
               logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
@@ -184,15 +202,24 @@ class MLPipelineTracker(
             cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
             cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
-          case TransformEvent(model, dataset) =>
+          case TransformEvent(model, inputdataset, outputdataset) =>
 
             val uid = model.uid
 
             if (cachedObjects.contains( uid + "_" + "modelEntity")) {
 
               //to do list: get the dataframe entity from here
-              val tableEntities3 = getTableEntities("chris3")
-              val tableEntities2 = getTableEntities("chris2")
+              val logicalplan = inputdataset.queryExecution.analyzed
+
+              val tableEntities2 = logicalplan.collectLeaves().map {
+                case l: LogicalRelation => l.relation match {
+                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                  case _ => Seq.empty
+                }
+              }
+
+              val name = outputdataset.hashCode().toString
+              val tableEntities3 = getTableEntities(name)
 
               val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
               val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").get.asInstanceOf[AtlasEntity]
@@ -200,11 +227,11 @@ class MLPipelineTracker(
               val transformEntity = internal.mlTransformProcessToEntity(
                 model,
                 modelEntity,
-                List(modelEntity, tableEntities3.head),
-                List(tableEntities2.head))
+                List(modelEntity, tableEntities2.head.head),
+                List(tableEntities3.head))
 
               atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
-                ++ tableEntities3 ++ tableEntities2)
+                ++ tableEntities2.head ++ tableEntities3)
 
               cachedObjects.remove(uid + "_" + "modelEntity")
               cachedObjects.remove(uid + "_" + "modelDirEntity")

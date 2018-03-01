@@ -20,10 +20,12 @@ package com.hortonworks.spark.atlas.ml
 import scala.concurrent.duration._
 import com.hortonworks.spark.atlas.types.{SparkAtlasModel, internal, metadata}
 import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient}
+import org.apache.spark
 import org.apache.spark.ml._
+import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -36,7 +38,7 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
   protected  override  val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.15.135:21000")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.39.4:21000")
 
   private val atlasClient = new RestAtlasClient(atlasClientConf)
   SparkAtlasModel.checkAndCreateTypes(atlasClient)
@@ -63,26 +65,20 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
     val uri = "hdfs://"
     val pipelineDir = "tmp/pipeline1"
-    val df = sparkSession.createDataFrame(Seq(
-      (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-      (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-      (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-      (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
-    )).toDF("id", "features", "label")
+    val training = sparkSession.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
-    val scaler = new MinMaxScaler()
-      .setInputCol("features")
-      .setOutputCol("features_scaled")
-      .setMin(0.0)
-      .setMax(3.0)
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
 
-    val pipeline = new Pipeline().setStages(Array(scaler))
+    val pipeline = new Pipeline().setStages(Array(lr))
 
-    val model = pipeline.fit(df)
+    val model = pipeline.fit(training)
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    tracker.onOtherEvent(CreatePipelineEvent(pipeline, df))
+    tracker.onOtherEvent(CreatePipelineEvent(pipeline, training))
     tracker.onOtherEvent(SavePipelineEvent(pipeline.uid, pipelineDir))
   }
 
@@ -93,27 +89,21 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
     val pipelineDir = "tmp/pipeline2"
     val modelDir = "tmp/model2"
 
-    val df = sparkSession.createDataFrame(Seq(
-      (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-      (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-      (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-      (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
-    )).toDF("id", "features", "label")
+    val training = sparkSession.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
-    val scaler = new MinMaxScaler()
-      .setInputCol("features")
-      .setOutputCol("features_scaled")
-      .setMin(0.0)
-      .setMax(3.0)
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
 
-    val pipeline = new Pipeline().setStages(Array(scaler))
+    val pipeline = new Pipeline().setStages(Array(lr))
 
-    val model = pipeline.fit(df)
+    val model = pipeline.fit(training)
 
     pipeline.write.overwrite().save(pipelineDir)
     model.write.overwrite().save(modelDir)
 
-    tracker.onOtherEvent(CreatePipelineEvent(pipeline, df))
+    tracker.onOtherEvent(CreatePipelineEvent(pipeline, training))
     tracker.onOtherEvent(SavePipelineEvent(pipeline.uid, pipelineDir))
     tracker.onOtherEvent(CreateModelEvent(model))
     tracker.onOtherEvent(SaveModelEvent(model.uid, modelDir))
@@ -123,39 +113,38 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
   test("Spark PipelineModel transform event  to Atlas entities") {
 
     val uri = "hdfs://"
-    val pipelineDir = "tmp/pipeline3"
-    val modelDir = "tmp/model3"
+    val pipelineDir = "tmp/pipeline4"
+    val modelDir = "tmp/model4"
 
-    val df = sparkSession.createDataFrame(Seq(
-      (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
-      (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
-      (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
-      (4, Vectors.dense(0.0, 0.0, 5.0), 4.0)
-    )).toDF("id", "features", "label")
+    val training = sparkSession.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
-    val scaler = new MinMaxScaler()
-      .setInputCol("features")
-      .setOutputCol("features_scaled")
-      .setMin(0.0)
-      .setMax(3.0)
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
 
-    val pipeline = new Pipeline().setStages(Array(scaler))
-    val model = pipeline.fit(df)
+    val pipeline = new Pipeline().setStages(Array(lr))
+
+    val model = pipeline.fit(training)
 
     pipeline.write.overwrite().save(pipelineDir)
+
     model.write.overwrite().save(modelDir)
 
     val savedmodel = PipelineModel.load(modelDir)
 
-    val df2 = savedmodel.transform(df)
-    df2.collect()
+    val testing = sparkSession.read.format("libsvm").load("data/mllib/sample_libsvm_data_test.txt")
 
-    tracker.onOtherEvent(CreatePipelineEvent(pipeline, df))
+    val df2 = savedmodel.transform(testing)
+
+    df2.show(10)
+
+    tracker.onOtherEvent(CreatePipelineEvent(pipeline, training))
     tracker.onOtherEvent(CreateModelEvent(model))
     tracker.onOtherEvent(SavePipelineEvent(pipeline.uid, pipelineDir))
     tracker.onOtherEvent(SaveModelEvent(model.uid, modelDir))
     tracker.onOtherEvent(LoadModelEvent(modelDir,savedmodel))
-    tracker.onOtherEvent(TransformEvent(model, df))
+    tracker.onOtherEvent(TransformEvent(savedmodel, testing, df2))
   }
 
 }
