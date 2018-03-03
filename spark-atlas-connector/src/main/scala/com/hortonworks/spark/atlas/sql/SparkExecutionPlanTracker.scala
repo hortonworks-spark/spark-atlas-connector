@@ -24,11 +24,14 @@ import scala.util.control.NonFatal
 
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
+import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.kafka010.KafkaStreamWriter
+import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import org.apache.spark.sql.util.QueryExecutionListener
 
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
@@ -80,6 +83,7 @@ class SparkExecutionPlanTracker(
           val entities = qd.qe.sparkPlan.collect {
             case p: UnionExec => p.children
             case p: DataWritingCommandExec => p
+            case p: WriteToDataSourceV2Exec => p
             case p: LeafExecNode => p
           }.flatMap {
             case r: ExecutedCommandExec =>
@@ -128,10 +132,28 @@ class SparkExecutionPlanTracker(
                   logDebug(s"INSERT INTO SPARK TABLE query ${qd.qe}")
                   CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(c, qd)
 
-                // Case 6. CREATE TABLE AS SELECT
                 case c: CreateHiveTableAsSelectCommand =>
                   logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
+
+                case _ =>
+                  Seq.empty
+              }
+
+            case r: WriteToDataSourceV2Exec =>
+              r.writer match {
+                case w: InternalRowMicroBatchWriter =>
+                  try {
+                    val streamWriter = w.getClass.getMethod("writer").invoke(w)
+                    streamWriter match {
+                      case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
+                      case _ => Seq.empty
+                    }
+                  }catch {
+                      case e: NoSuchMethodException =>
+                        logDebug(s"Can not get KafkaStreamWriter, so can not create Kafka topic entities: ${qd.qe}")
+                        Seq.empty
+                  }
 
                 case _ =>
                   Seq.empty

@@ -96,6 +96,20 @@ object external {
     Seq(hbaseEntity)
   }
 
+  // ================ Kafka entities =======================
+  val KAFKA_TOPIC_STRING = "kafka_topic"
+
+  def kafkaToEntity(cluster: String, topicName: String): Seq[AtlasEntity] = {
+    val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
+    kafkaEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      topicName.toLowerCase + '@' + cluster)
+    kafkaEntity.setAttribute(AtlasClient.NAME, topicName.toLowerCase)
+    kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
+    kafkaEntity.setAttribute("uri", topicName.toLowerCase)
+    kafkaEntity.setAttribute("topic", topicName.toLowerCase)
+    Seq(kafkaEntity)
+  }
+
   // ================== Hive entities =====================
   val HIVE_DB_TYPE_STRING = "hive_db"
   val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"

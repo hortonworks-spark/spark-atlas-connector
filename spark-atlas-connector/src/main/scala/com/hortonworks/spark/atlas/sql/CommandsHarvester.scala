@@ -129,7 +129,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
               val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
               val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
               val tName = tableMeta.get("name").get.asInstanceOf[String]
-              external.hbaseTableToEntity(conf.get(AtlasClientConf.CLUSTER_NAME), tName, nSpace)
+              external.hbaseTableToEntity(clusterName, tName, nSpace)
             } else {
               logWarn(s"Class $maybeClazz is not found")
               Seq.empty
