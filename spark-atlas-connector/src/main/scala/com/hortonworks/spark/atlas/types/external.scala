@@ -100,7 +100,6 @@ object external {
   val KAFKA_TOPIC_STRING = "kafka_topic"
 
   def kafkaToEntity(cluster: String, topicName: String): Seq[AtlasEntity] = {
-    println("---kafkaToEntity----")
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
     kafkaEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
       topicName.toLowerCase + '@' + cluster)

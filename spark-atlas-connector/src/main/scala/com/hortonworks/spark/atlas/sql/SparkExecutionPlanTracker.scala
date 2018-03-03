@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
@@ -53,7 +52,7 @@ class SparkExecutionPlanTracker(
   def this() {
     this(new AtlasClientConf)
   }
-  println("---SparkExecutionPlanTracker new----")
+
   private val capacity = conf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
   // A blocking queue for various query executions
   private val qeQueue = new LinkedBlockingQueue[QueryDetail](capacity)
@@ -142,21 +141,16 @@ class SparkExecutionPlanTracker(
               }
 
             case r: WriteToDataSourceV2Exec =>
-              println("-----WriteToDataSourceV2Exec-------")
               r.writer match {
                 case w: InternalRowMicroBatchWriter =>
-                  println("-----InternalRowMicroBatchWriter-------")
                   try {
                     val streamWriter = w.getClass.getMethod("writer").invoke(w)
                     streamWriter match {
-                      case sw: KafkaStreamWriter =>
-                        println("-----KafkaStreamWriter-------")
-                        KafkaHarvester.harvest(sw, r, qd)
+                      case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
                       case _ => Seq.empty
                     }
                   }catch {
                       case e: NoSuchMethodException =>
-                        println("-----WriteToDataSourceV2Exec NoSuchMethodException-------")
                         logDebug(s"Can not get KafkaStreamWriter, so can not create Kafka topic entities: ${qd.qe}")
                         Seq.empty
                   }

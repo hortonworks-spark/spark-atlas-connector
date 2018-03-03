@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010.atlas
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
@@ -32,35 +34,40 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
 
   def harvest(node: KafkaStreamWriter, writer: WriteToDataSourceV2Exec,
     qd: QueryDetail) : Seq[AtlasEntity] = {
-    // source topic
+    // source topics - can be multiple topics
+    val read_from_topics = new ListBuffer[String]()
     val tChildren = writer.query.collectLeaves()
     val inputsEntities = tChildren.flatMap{
       case r: RDDScanExec =>
         r.rdd.partitions.map {
           case e: KafkaSourceRDDPartition =>
-            println("-----KafkaSourceRDDPartition -------")
-            external.kafkaToEntity(clusterName, e.offsetRange.topic)
+            val topic = e.offsetRange.topic
+            read_from_topics += topic
+            external.kafkaToEntity(clusterName, topic)
         }.toSeq.flatten
     }
 
     // destination topic
-    var topic = None: Option[String]
+    var destTopic = None: Option[String]
     try {
-      topic = node.getClass.getMethod("topic").invoke(node).asInstanceOf[Option[String]]
+      destTopic = node.getClass.getMethod("topic").invoke(node).asInstanceOf[Option[String]]
     } catch {
       case e: NoSuchMethodException =>
-        println("-----KafkaHarvester NoSuchMethodException-------" + node.getClass)
-        println(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
         logDebug(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
     }
-    val outputEntities = if (topic.isDefined) external.kafkaToEntity(clusterName, topic.get) else Seq.empty
+    val outputEntities = if (destTopic.isDefined)
+      external.kafkaToEntity(clusterName, destTopic.get) else Seq.empty
 
     // create process entity
+    val pDescription = StringBuilder.newBuilder.append("Topics subscribed( ")
+    read_from_topics.sorted.flatMap{
+      e => pDescription.append(e).append(" ")
+    }
+    pDescription.append(") Topics written into( ").append(destTopic.get).append(" )")
     val inputTablesEntities = inputsEntities.toList
     val outputTableEntities = outputEntities.toList
-    val pEntity = processToEntity(
-      qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+    val pEntity = processToEntity(qd.qe, pDescription.toString().hashCode,
+      qd.executionTime, inputTablesEntities, outputTableEntities, Option(pDescription.toString()))
     Seq(pEntity) ++ inputsEntities ++ outputEntities
   }
-
 }

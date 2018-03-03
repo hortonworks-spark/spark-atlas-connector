@@ -45,8 +45,6 @@ class SparkCatalogEventTracker(
     this(new AtlasClientConf)
   }
 
-  println("---SparkCatalogEventTracker new----")
-
   private val capacity = conf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
 
   // A blocking queue for Spark Listener ExternalCatalog related events.
