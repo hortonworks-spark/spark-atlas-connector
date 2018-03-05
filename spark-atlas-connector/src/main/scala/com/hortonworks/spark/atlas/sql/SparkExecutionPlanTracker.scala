@@ -111,9 +111,9 @@ class SparkExecutionPlanTracker(
 
             } ++ {
               qd.qe.sparkPlan match {
-               // case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
-               //   CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
-               //     d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
+                case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
+                  CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
+                    d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
 
                 case _ =>
                   Seq.empty
