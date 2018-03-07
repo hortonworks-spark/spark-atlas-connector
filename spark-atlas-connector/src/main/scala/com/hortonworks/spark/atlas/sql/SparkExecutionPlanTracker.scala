@@ -22,8 +22,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
-import org.json4s.JsonAST.JObject
-import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
@@ -35,7 +33,6 @@ import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import org.apache.spark.sql.util.QueryExecutionListener
 
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
-import com.hortonworks.spark.atlas.types.external
 import com.hortonworks.spark.atlas.utils.Logging
 
 case class QueryDetail(qe: QueryExecution, executionId: Long, executionTime: Long)
@@ -104,19 +101,7 @@ class SparkExecutionPlanTracker(
 
                 case c: SaveIntoDataSourceCommand =>
                   logDebug(s"DATA FRAME SAVE INTO DATA SOURCE: ${qd.qe}")
-                  // support SHC
-                  var catalog = ""
-                  c.options.foreach {x => if (x._1.equals("catalog")) catalog = x._2}
-                  if (catalog != "") {
-                    val jObj = parse(catalog).asInstanceOf[JObject]
-                    val map = jObj.values
-                    val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
-                    val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
-                    val tName = tableMeta.get("name").get.asInstanceOf[String]
-                    external.hbaseTableToEntity(conf.get(AtlasClientConf.CLUSTER_NAME), tName, nSpace)
-                  } else {
-                    Seq.empty
-                  }
+                  CommandsHarvester.SaveIntoDataSourceHarvester.harvest(c, qd)
 
                 case _ =>
                   Seq.empty

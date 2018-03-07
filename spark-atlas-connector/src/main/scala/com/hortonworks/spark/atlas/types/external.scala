@@ -89,7 +89,7 @@ object external {
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
     hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      getTableQualifiedName(cluster, tableName, nameSpace))
+      getTableQualifiedName(cluster, nameSpace, tableName))
     hbaseEntity.setAttribute(AtlasClient.NAME, tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)

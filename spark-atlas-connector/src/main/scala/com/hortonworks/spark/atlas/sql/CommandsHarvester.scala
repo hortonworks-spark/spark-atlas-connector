@@ -29,8 +29,9 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, LogicalRelation, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.sources.BaseRelation
 
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
@@ -71,7 +72,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Option(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -106,7 +107,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         else inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities)
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Option(SQLQuery.get()))
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -124,20 +125,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           case r: FileRelation => l.catalogTable.map(tableToEntities(_)).getOrElse(
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
 
+          // support SHC
           case r if r.getClass.getCanonicalName.endsWith(HBASE_RELATION_CLASS_NAME) =>
-            if (maybeClazz.isDefined) {
-              val parameters = r.getClass.getMethod("parameters").invoke(r)
-              val catalog = parameters.asInstanceOf[Map[String, String]].getOrElse("catalog", "")
-              val jObj = parse(catalog).asInstanceOf[JObject]
-              val map = jObj.values
-              val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
-              val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
-              val tName = tableMeta.get("name").get.asInstanceOf[String]
-              external.hbaseTableToEntity(clusterName, tName, nSpace)
-            } else {
-              logWarn(s"Class $maybeClazz is not found")
-              Seq.empty
-            }
+            getHBaseEntity(r)
         }
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
@@ -169,7 +159,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           l.catalogTable.map(tableToEntities(_)).getOrElse {
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq
           }
-
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -240,9 +229,57 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTableEntity = List(inputEntities.head)
       val outputTableEntity = List(outputEntities.head)
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputTableEntity, outputTableEntity)
+        qd.qe, qd.executionId, qd.executionTime, inputTableEntity, outputTableEntity, Option(SQLQuery.get()))
 
       Seq(pEntity) ++ inputEntities ++ outputEntities
+    }
+  }
+
+  object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
+    override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      // source table entity
+      val tChildren = node.query.collectLeaves()
+      val inputsEntities = tChildren.map {
+        case r: HiveTableRelation => tableToEntities(r.tableMeta)
+        case v: View => tableToEntities(v.desc)
+        case l: LogicalRelation => l.relation match {
+          case r: FileRelation => l.catalogTable.map(tableToEntities(_)).getOrElse(
+            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
+          case e => Seq.empty
+        }
+        case a: AnalysisBarrier => a.child match {
+            case c: LogicalRelation => c.relation match {
+              case r if r.getClass.getCanonicalName.endsWith(HBASE_RELATION_CLASS_NAME) =>
+                getHBaseEntity(r.asInstanceOf[BaseRelation])
+              case e => Seq.empty
+            }
+            case e => Seq.empty
+        }
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
+          Seq.empty
+      }
+
+      // support Spark HBase Connector (destination table entity)
+      var catalog = ""
+      node.options.foreach {x => if (x._1.equals("catalog")) catalog = x._2}
+      val outputEntities = if (catalog != "") {
+        val jObj = parse(catalog).asInstanceOf[JObject]
+        val map = jObj.values
+        val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
+        val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
+        val tName = tableMeta.get("name").get.asInstanceOf[String]
+        external.hbaseTableToEntity(conf.get(AtlasClientConf.CLUSTER_NAME), tName, nSpace)
+      } else {
+        Seq.empty
+      }
+
+      // create process entity
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val outputTableEntities = outputEntities.toList
+      val pEntity = processToEntity(
+        qd.qe, qd.executionId, qd.executionTime, inputTablesEntities, outputTableEntities, Option(SQLQuery.get()))
+      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
 
@@ -251,5 +288,21 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     val dbName = tableIdentifier.database.getOrElse("default")
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
     tableToEntities(tableDef)
+  }
+
+  private def getHBaseEntity(r: BaseRelation): Seq[AtlasEntity] = {
+    if (maybeClazz.isDefined) {
+      val parameters = r.getClass.getMethod("parameters").invoke(r)
+      val catalog = parameters.asInstanceOf[Map[String, String]].getOrElse("catalog", "")
+      val jObj = parse(catalog).asInstanceOf[JObject]
+      val map = jObj.values
+      val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
+      val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
+      val tName = tableMeta.get("name").get.asInstanceOf[String]
+      external.hbaseTableToEntity(clusterName, tName, nSpace)
+    } else {
+      logWarn(s"Class $maybeClazz is not found")
+      Seq.empty
+    }
   }
 }
