@@ -134,10 +134,11 @@ class SparkExecutionPlanTracker(
                       case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
                       case _ => Seq.empty
                     }
-                  }catch {
-                      case e: NoSuchMethodException =>
-                        logDebug(s"Can not get KafkaStreamWriter, so can not create Kafka topic entities: ${qd.qe}")
-                        Seq.empty
+                  } catch {
+                    case _: NoSuchMethodException =>
+                      logDebug("Can not get KafkaStreamWriter, so can not create Kafka topic " +
+                        s"entities: ${qd.qe}")
+                      Seq.empty
                   }
 
                 case _ =>
@@ -150,8 +151,8 @@ class SparkExecutionPlanTracker(
               // Case 5. FROM ... INSERT (OVERWRITE) INTO t2 INSERT INTO t3
               // CASE LLAP:
               //    case r: RowDataSourceScanExec
-              //            if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
-              //              println("close hive connection via " + r.relation.getClass.getCanonicalName)
+              //        if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
+              //      println("close hive connection via " + r.relation.getClass.getCanonicalName)
 
             } ++ {
               qd.qe.sparkPlan match {

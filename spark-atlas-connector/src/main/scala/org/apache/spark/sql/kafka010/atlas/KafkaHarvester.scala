@@ -55,8 +55,11 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       case e: NoSuchMethodException =>
         logDebug(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
     }
-    val outputEntities = if (destTopic.isDefined)
-      external.kafkaToEntity(clusterName, destTopic.get) else Seq.empty
+    val outputEntities = if (destTopic.isDefined) {
+      external.kafkaToEntity(clusterName, destTopic.get)
+    } else {
+      Seq.empty
+    }
 
     // create process entity
     val pDescription = StringBuilder.newBuilder.append("Topics subscribed( ")

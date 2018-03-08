@@ -86,7 +86,8 @@ object external {
   val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
   val HBASE_COLUMN_STRING = "hbase_column"
 
-  def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String): Seq[AtlasEntity] = {
+  def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
+      : Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
     hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
       getTableQualifiedName(cluster, nameSpace, tableName))
@@ -116,7 +117,7 @@ object external {
   val HIVE_COLUMN_TYPE_STRING = "hive_column"
   val HIVE_TABLE_TYPE_STRING = "hive_table"
 
-  def hiveDbUniqueAttribute(cluster: String, db: String) = s"${db.toLowerCase}@$cluster"
+  def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
   def hiveDbToEntities(dbDefinition: CatalogDatabase, cluster: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
@@ -190,7 +191,7 @@ object external {
       cluster: String,
       db: String,
       table: String,
-      isTemporary: Boolean = false): String  = {
+      isTemporary: Boolean = false): String = {
     val tableName = if (isTemporary) {
       if (SessionState.get() != null && SessionState.get().getSessionId != null) {
         s"${table}_temp-${SessionState.get().getSessionId}"
@@ -215,9 +216,9 @@ object external {
     val dbEntities = hiveDbToEntities(dbDefinition, cluster)
     val sdEntities = hiveStorageDescToEntities(
       tableDefinition.storage, cluster, db, table
-      /* isTempTable = false  Spark doesn't support temp table*/)
+      /* isTempTable = false  Spark doesn't support temp table */)
     val schemaEntities = hiveSchemaToEntities(
-      tableDefinition.schema, cluster, db, table /*, isTempTable = false */)
+      tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
     tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
