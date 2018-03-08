@@ -28,4 +28,4 @@ notifications:
   email: false
 
 install:
-  - mvn -q clean package
+  - mvn -q clean scalastyle:check package

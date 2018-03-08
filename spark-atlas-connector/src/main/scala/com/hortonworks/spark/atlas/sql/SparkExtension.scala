@@ -31,7 +31,8 @@ class SparkExtension extends (SparkSessionExtensions => Unit) {
   }
 }
 
-case class SparkAtlasConnectorParser(spark: SparkSession, delegate: ParserInterface) extends ParserInterface {
+case class SparkAtlasConnectorParser(spark: SparkSession, delegate: ParserInterface)
+  extends ParserInterface {
   override def parsePlan(sqlText: String): LogicalPlan = {
     SQLQuery.set(sqlText)
     delegate.parsePlan(sqlText)
@@ -56,5 +57,5 @@ case class SparkAtlasConnectorParser(spark: SparkSession, delegate: ParserInterf
 object SQLQuery {
   private[this] val sqlQuery = new ThreadLocal[String]
   def get(): String = sqlQuery.get
-  def set(s: String) = sqlQuery.set(s)
+  def set(s: String): Unit = sqlQuery.set(s)
 }
