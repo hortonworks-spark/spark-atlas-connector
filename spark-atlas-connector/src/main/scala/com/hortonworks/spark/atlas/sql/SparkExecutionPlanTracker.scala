@@ -35,7 +35,8 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
-case class QueryDetail(qe: QueryExecution, executionId: Long, executionTime: Long)
+case class QueryDetail(qe: QueryExecution, executionId: Long,
+  executionTime: Long, query: Option[String] = None)
 
 class SparkExecutionPlanTracker(
     private[atlas] val atlasClient: AtlasClient,
@@ -61,7 +62,8 @@ class SparkExecutionPlanTracker(
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
     if (!qeQueue.offer(
-      QueryDetail(qe, executionId.getAndIncrement(), durationNs), timeout, TimeUnit.MILLISECONDS)) {
+      QueryDetail(qe, executionId.getAndIncrement(), durationNs, Option(SQLQuery.get())),
+        timeout, TimeUnit.MILLISECONDS)) {
       logError(s"Fail to put ${qe.toString()} into queue within time limit $timeout, will throw it")
     }
   }

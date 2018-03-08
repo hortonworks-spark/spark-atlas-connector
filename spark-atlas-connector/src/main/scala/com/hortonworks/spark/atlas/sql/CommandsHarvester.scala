@@ -73,7 +73,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, Option(SQLQuery.get()))
+        outputTableEntities, qd.query)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -109,7 +109,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         else inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, Option(SQLQuery.get()))
+        outputTableEntities, qd.query)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -143,7 +143,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, Option(SQLQuery.get()))
+        outputTableEntities, qd.query)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
@@ -169,7 +169,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, Option(SQLQuery.get()))
+        outputTableEntities, qd.query)
 
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
@@ -180,7 +180,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, List(pathEntity),
-        List(outputEntities.head), Option(SQLQuery.get()))
+        List(outputEntities.head), qd.query)
       Seq(pEntity, pathEntity) ++ outputEntities
     }
   }
@@ -211,7 +211,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
       val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), Option(SQLQuery.get()))
+        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), qd.query)
       Seq(pEntity, destEntity) ++ inputsEntities.flatten
     }
   }
@@ -231,7 +231,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTableEntity = List(inputEntities.head)
       val outputTableEntity = List(outputEntities.head)
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTableEntity,
-        outputTableEntity, Option(SQLQuery.get()))
+        outputTableEntity, qd.query)
 
       Seq(pEntity) ++ inputEntities ++ outputEntities
     }
@@ -280,7 +280,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = outputEntities.toList
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, Option(SQLQuery.get()))
+        outputTableEntities, qd.query)
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
