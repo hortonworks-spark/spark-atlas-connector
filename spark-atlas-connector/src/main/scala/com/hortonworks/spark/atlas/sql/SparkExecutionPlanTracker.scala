@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import org.apache.spark.sql.util.QueryExecutionListener
 
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
+import com.hortonworks.spark.atlas.{AbstractService, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
 case class QueryDetail(qe: QueryExecution, executionId: Long,

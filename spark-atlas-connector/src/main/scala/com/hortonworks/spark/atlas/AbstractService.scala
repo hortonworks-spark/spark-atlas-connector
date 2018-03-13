@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql
+package com.hortonworks.spark.atlas
 
 trait AbstractService {
 
