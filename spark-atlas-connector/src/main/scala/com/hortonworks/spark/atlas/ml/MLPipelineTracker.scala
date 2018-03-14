@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas.ml
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import com.google.common.annotations.VisibleForTesting
-import com.hortonworks.spark.atlas.sql.AbstractService
+import com.hortonworks.spark.atlas.{AbstractService}
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
@@ -137,7 +137,7 @@ class MLPipelineTracker(
             val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
             val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
-            atlasClient.createEntities(Seq(pipelineEntity,pipelineDirEntity))
+            atlasClient.createEntities(Seq(pipelineEntity, pipelineDirEntity))
 
             cachedObjects.put(uid + "_" + "pipelineDirEntity", pipelineDirEntity)
             cachedObjects.put(uid + "_" + "pipelineEntity", pipelineEntity)
@@ -153,8 +153,10 @@ class MLPipelineTracker(
 
               val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
 
-              val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity").get.asInstanceOf[AtlasEntity]
-              val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity").get.asInstanceOf[AtlasEntity]
+              val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity")
+                .get.asInstanceOf[AtlasEntity]
+              val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity")
+                .get.asInstanceOf[AtlasEntity]
               val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
               atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
@@ -162,10 +164,10 @@ class MLPipelineTracker(
 
               val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
 
-              atlasClient.createEntities(Seq(modelEntity,modelDirEntity))
+              atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
 
-              //to do list: get the dataframe entity from here
-              val trainingdata = cachedObjects.get(pipeline.uid + "_" + "traindata").get.asInstanceOf[Dataset[_]]
+              val trainingdata = cachedObjects.get(pipeline.uid + "_" + "traindata")
+                .get.asInstanceOf[Dataset[_]]
 
               val logicalplan = trainingdata.queryExecution.analyzed
 
@@ -208,7 +210,6 @@ class MLPipelineTracker(
 
             if (cachedObjects.contains( uid + "_" + "modelEntity")) {
 
-              //to do list: get the dataframe entity from here
               val logicalplan = inputdataset.queryExecution.analyzed
 
               val tableEntities2 = logicalplan.collectLeaves().map {
@@ -221,8 +222,10 @@ class MLPipelineTracker(
               val name = outputdataset.hashCode().toString
               val tableEntities3 = getTableEntities(name)
 
-              val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").get.asInstanceOf[AtlasEntity]
-              val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").get.asInstanceOf[AtlasEntity]
+              val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").
+                get.asInstanceOf[AtlasEntity]
+              val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").
+                get.asInstanceOf[AtlasEntity]
 
               val transformEntity = internal.mlTransformProcessToEntity(
                 model,
