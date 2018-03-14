@@ -42,20 +42,6 @@
     <jersey.version>1.19</jersey.version>
   </properties>
 
-  <repositories>
-    <repository>
-      <id>apache-snapshot-repo</id>
-      <name>Apache Snapshot Repository</name>
-      <url>https://repository.apache.org/content/repositories/snapshots/</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-    </repository>
-  </repositories>
-
   <modules>
     <module>spark-atlas-connector</module>
     <module>spark-atlas-connector-assembly</module>
@@ -86,6 +72,13 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
+      <version>${spark.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql-kafka-0-10_${scala.binary.version}</artifactId>
       <version>${spark.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -152,6 +145,18 @@
     <dependency>
       <groupId>org.apache.atlas</groupId>
       <artifactId>atlas-notification</artifactId>
+      <version>${atlas.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.atlas</groupId>
+      <artifactId>atlas-client-v2</artifactId>
+      <version>${atlas.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.atlas</groupId>
+      <artifactId>hbase-bridge</artifactId>
       <version>${atlas.version}</version>
     </dependency>
 
@@ -434,6 +439,30 @@
         <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
 
+      <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <version>1.0.0</version>
+        <configuration>
+          <verbose>false</verbose>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <failOnWarning>false</failOnWarning>
+          <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
+          <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
+          <configLocation>scalastyle-config.xml</configLocation>
+          <outputFile>${basedir}/target/scalastyle-output.xml</outputFile>
+          <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
+          <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 

@@ -24,13 +24,19 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
+import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.kafka010.KafkaStreamWriter
+import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import org.apache.spark.sql.util.QueryExecutionListener
 
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
+import com.hortonworks.spark.atlas.{AbstractService, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
-case class QueryDetail(qe: QueryExecution, executionId: Long, executionTime: Long)
+case class QueryDetail(qe: QueryExecution, executionId: Long,
+  executionTime: Long, query: Option[String] = None)
 
 class SparkExecutionPlanTracker(
     private[atlas] val atlasClient: AtlasClient,
@@ -56,7 +62,8 @@ class SparkExecutionPlanTracker(
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
     if (!qeQueue.offer(
-      QueryDetail(qe, executionId.getAndIncrement(), durationNs), timeout, TimeUnit.MILLISECONDS)) {
+      QueryDetail(qe, executionId.getAndIncrement(), durationNs, Option(SQLQuery.get())),
+        timeout, TimeUnit.MILLISECONDS)) {
       logError(s"Fail to put ${qe.toString()} into queue within time limit $timeout, will throw it")
     }
   }
@@ -65,7 +72,6 @@ class SparkExecutionPlanTracker(
     logWarn(s"Fail to execute query: {$qe}, {$funcName}", exception)
   }
 
-  // TODO: We should consider multiple inputs and multiple outs.
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
   override protected def eventProcess(): Unit = {
@@ -73,19 +79,14 @@ class SparkExecutionPlanTracker(
     while (!stopped) {
       try {
         Option(qeQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach { qd =>
-          val entities = qd.qe.sparkPlan.collect { case p: LeafExecNode => p }
-            .flatMap {
+          val entities = qd.qe.sparkPlan.collect {
+            case p: UnionExec => p.children
+            case p: DataWritingCommandExec => p
+            case p: WriteToDataSourceV2Exec => p
+            case p: LeafExecNode => p
+          }.flatMap {
             case r: ExecutedCommandExec =>
               r.cmd match {
-                case c: InsertIntoHiveTable =>
-                  logDebug(s"INSERT query ${qd.qe}")
-                  CommandsHarvester.InsertIntoHiveTableHarvester.harvest(c, qd)
-
-                // Case 6. CREATE TABLE AS SELECT
-                case c: CreateHiveTableAsSelectCommand =>
-                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
-                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
-
                 case c: LoadDataCommand =>
                   // Case 1. LOAD DATA LOCAL INPATH (from local)
                   // Case 2. LOAD DATA INPATH (from HDFS)
@@ -95,6 +96,52 @@ class SparkExecutionPlanTracker(
                 case c: CreateDataSourceTableAsSelectCommand =>
                   logDebug(s"CREATE TABLE USING xx AS SELECT query: ${qd.qe}")
                   CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(c, qd)
+
+                case c: CreateViewCommand =>
+                  logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateViewHarvester.harvest(c, qd)
+
+                case c: SaveIntoDataSourceCommand =>
+                  logDebug(s"DATA FRAME SAVE INTO DATA SOURCE: ${qd.qe}")
+                  CommandsHarvester.SaveIntoDataSourceHarvester.harvest(c, qd)
+
+                case _ =>
+                  Seq.empty
+              }
+
+            case r: DataWritingCommandExec =>
+              r.cmd match {
+                case c: InsertIntoHiveTable =>
+                  logDebug(s"INSERT INTO HIVE TABLE query ${qd.qe}")
+                  CommandsHarvester.InsertIntoHiveTableHarvester.harvest(c, qd)
+
+                case c: InsertIntoHadoopFsRelationCommand =>
+                  logDebug(s"INSERT INTO SPARK TABLE query ${qd.qe}")
+                  CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(c, qd)
+
+                case c: CreateHiveTableAsSelectCommand =>
+                  logDebug(s"CREATE TABLE AS SELECT query: ${qd.qe}")
+                  CommandsHarvester.CreateHiveTableAsSelectHarvester.harvest(c, qd)
+
+                case _ =>
+                  Seq.empty
+              }
+
+            case r: WriteToDataSourceV2Exec =>
+              r.writer match {
+                case w: InternalRowMicroBatchWriter =>
+                  try {
+                    val streamWriter = w.getClass.getMethod("writer").invoke(w)
+                    streamWriter match {
+                      case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
+                      case _ => Seq.empty
+                    }
+                  } catch {
+                    case _: NoSuchMethodException =>
+                      logDebug("Can not get KafkaStreamWriter, so can not create Kafka topic " +
+                        s"entities: ${qd.qe}")
+                      Seq.empty
+                  }
 
                 case _ =>
                   Seq.empty
@@ -106,8 +153,8 @@ class SparkExecutionPlanTracker(
               // Case 5. FROM ... INSERT (OVERWRITE) INTO t2 INSERT INTO t3
               // CASE LLAP:
               //    case r: RowDataSourceScanExec
-              //            if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
-              //              println("close hive connection via " + r.relation.getClass.getCanonicalName)
+              //        if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
+              //      println("close hive connection via " + r.relation.getClass.getCanonicalName)
 
             } ++ {
               qd.qe.sparkPlan match {

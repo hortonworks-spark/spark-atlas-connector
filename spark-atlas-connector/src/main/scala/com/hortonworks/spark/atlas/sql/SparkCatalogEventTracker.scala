@@ -27,8 +27,7 @@ import com.google.common.annotations.VisibleForTesting
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog._
-
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
+import com.hortonworks.spark.atlas.{AbstractService, AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -181,54 +180,39 @@ class SparkCatalogEventTracker(
 
             logInfo(s"Rename table entity $name to $newName")
 
-          case e if e.getClass.getName ==
-            "org.apache.spark.sql.catalyst.catalog.AlterDatabaseEvent" =>
-            try {
-              val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
-              val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(dbName)
-              val dbEntities = dbToEntities(dbDefinition)
-              atlasClient.createEntities(dbEntities)
-              logInfo(s"Updated DB properties")
-            } catch {
-              case NonFatal(t) => logWarn(s"Failed to update DB properties", t)
-            }
+          case AlterDatabaseEvent(db) =>
+            val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
+            val dbEntities = dbToEntities(dbDefinition)
+            atlasClient.createEntities(dbEntities)
+            logInfo(s"Updated DB properties")
 
-          case e if e.getClass.getName == "org.apache.spark.sql.catalyst.catalog.AlterTableEvent" =>
-            try {
-              val dbName = e.getClass.getMethod("database").invoke(e).asInstanceOf[String]
-              val tableName = e.getClass.getMethod("name").invoke(e).asInstanceOf[String]
-              val kind = e.getClass.getMethod("kind").invoke(e).asInstanceOf[String]
+          case AlterTableEvent(db, table, kind) =>
+            val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+            kind match {
+              case "table" =>
+                val tableEntities = tableToEntities(tableDefinition)
+                atlasClient.createEntities(tableEntities)
+                logInfo(s"Updated table entity $table")
 
-              val tableDefinition = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
-              kind match {
-                case "table" =>
-                  val tableEntities = tableToEntities(tableDefinition)
-                  atlasClient.createEntities(tableEntities)
-                  logInfo(s"Updated table entity $tableName")
+              case "dataSchema" =>
+                val isHiveTbl = isHiveTable(tableDefinition)
+                val schemaEntities =
+                  schemaToEntities(tableDefinition.schema, db, table, isHiveTbl)
+                atlasClient.createEntities(schemaEntities)
 
-                case "dataSchema" =>
-                  val isHiveTbl = isHiveTable(tableDefinition)
-                  val schemaEntities =
-                    schemaToEntities(tableDefinition.schema, dbName, tableName, isHiveTbl)
-                  atlasClient.createEntities(schemaEntities)
+                val tableEntity = new AtlasEntity(tableType(isHiveTbl))
+                tableEntity.setAttribute("schema", schemaEntities.asJava)
+                atlasClient.updateEntityWithUniqueAttr(
+                  tableType(isHiveTbl),
+                  tableUniqueAttribute(db, table, isHiveTbl),
+                  tableEntity)
+                logInfo(s"Updated table schema")
 
-                  val tableEntity = new AtlasEntity(tableType(isHiveTbl))
-                  tableEntity.setAttribute("schema", schemaEntities.asJava)
-                  atlasClient.updateEntityWithUniqueAttr(
-                    tableType(isHiveTbl),
-                    tableUniqueAttribute(dbName, tableName, isHiveTbl),
-                    tableEntity)
-                  logInfo(s"Updated table schema")
+              case "stats" =>
+                logDebug(s"Stats update will not be tracked here")
 
-                case "stats" =>
-                  logDebug(s"Stats update will not be tracked here")
-
-                case _ =>
-                  // No op.
-              }
-            } catch {
-              case NonFatal(t) =>
-                logWarn("Failed to update table entity", t)
+              case _ =>
+                // No op.
             }
 
           case e =>
