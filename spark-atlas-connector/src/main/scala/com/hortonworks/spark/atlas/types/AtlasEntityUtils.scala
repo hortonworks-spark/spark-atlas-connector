@@ -144,7 +144,7 @@ trait AtlasEntityUtils {
     }
   }
 
-  def pipelineUniqueAttribute(pipeline: Pipeline):String = {
+  def pipelineUniqueAttribute(pipeline: Pipeline): String = {
     pipeline.uid
   }
 
