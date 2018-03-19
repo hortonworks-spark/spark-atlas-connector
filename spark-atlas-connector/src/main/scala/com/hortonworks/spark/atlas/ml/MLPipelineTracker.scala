@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas.ml
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import com.google.common.annotations.VisibleForTesting
-import com.hortonworks.spark.atlas.{AbstractService}
+import com.hortonworks.spark.atlas.AbstractService
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
@@ -51,7 +51,7 @@ class MLPipelineTracker(
 
   private val capacity = conf.get(AtlasClientConf.BLOCKING_QUEUE_CAPACITY).toInt
 
-  // A blocking queue for Spark Listener ExternalCatalog related events.
+  // A blocking queue for Spark Listener ML related events.
   @VisibleForTesting
   private[atlas] val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
 
@@ -113,144 +113,201 @@ class MLPipelineTracker(
     }
 
     var stopped = false
+
     while (!stopped) {
       try {
         Option(eventQueue.poll(3000, TimeUnit.MILLISECONDS)).foreach {
-          case CreatePipelineEvent(pipeline, dataset) =>
-            cachedObjects.put(pipeline.uid, pipeline)
-            cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
+          event => event.getClass.getName match {
 
-            val logicalplan = dataset.queryExecution.analyzed
+            case name if name.contains("CreatePipelineEvent") =>
 
-            val entities = logicalplan.collectLeaves().map {
-              case l: LogicalRelation => l.relation match {
-                case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-                case _ => Seq.empty
+              val datasetF = event.getClass.getDeclaredField("dataset")
+              datasetF.setAccessible(true)
+              val dataset = datasetF.get(event).asInstanceOf[Dataset[_]]
+
+              val pipelineF = event.getClass.getDeclaredField("pipeline")
+              pipelineF.setAccessible(true)
+              val pipeline = pipelineF.get(event).asInstanceOf[Pipeline]
+
+              cachedObjects.put(pipeline.uid, pipeline)
+              cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
+
+              val logicalplan = dataset.queryExecution.analyzed
+
+              val entities = logicalplan.collectLeaves().map {
+                case l: LogicalRelation => l.relation match {
+                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                  case _ => Seq.empty
+                }
               }
-            }
 
-          case CreateModelEvent(pipelineModel) =>
-            cachedObjects.put(pipelineModel.uid + "_" + "model", pipelineModel)
 
-          case SavePipelineEvent(uid, path) =>
-            val pipelineDirEntity = internal.mlDirectoryToEntity(uri, path)
-            val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
+            case name if name.contains("CreateModelEvent") =>
+              val modeF = event.getClass.getDeclaredField("model")
+              modeF.setAccessible(true)
+              val model = modeF.get(event).asInstanceOf[PipelineModel]
+              cachedObjects.put(model.uid + "_" + "model", model)
 
-            val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
-            atlasClient.createEntities(Seq(pipelineEntity, pipelineDirEntity))
+            case name if name.contains("SavePipelineEvent") =>
+              val uidF = event.getClass.getDeclaredField("uid")
+              uidF.setAccessible(true)
+              val uid = uidF.get(event).asInstanceOf[String]
 
-            cachedObjects.put(uid + "_" + "pipelineDirEntity", pipelineDirEntity)
-            cachedObjects.put(uid + "_" + "pipelineEntity", pipelineEntity)
+              val pathF = event.getClass.getDeclaredField("directory")
+              pathF.setAccessible(true)
+              val path = pathF.get(event).asInstanceOf[String]
 
-            logInfo(s"Created pipeline Entity " + pipelineEntity.getGuid)
-
-          case SaveModelEvent(uid, path) =>
-
-            if (!cachedObjects.contains(uid + "_" + "pipelineDirEntity")) {
-
-                logInfo(s"Model Entity is already created")
-            } else {
-
-              val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
-
-              val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity")
-                .get.asInstanceOf[AtlasEntity]
-              val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity")
-                .get.asInstanceOf[AtlasEntity]
+              val pipelineDirEntity = internal.mlDirectoryToEntity(uri, path)
               val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
 
-              atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
-              val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
+              val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+              atlasClient.createEntities(Seq(pipelineEntity, pipelineDirEntity))
 
+              cachedObjects.put(uid + "_" + "pipelineDirEntity", pipelineDirEntity)
+              cachedObjects.put(uid + "_" + "pipelineEntity", pipelineEntity)
+
+              logInfo(s"Created pipeline Entity " + pipelineEntity.getGuid)
+
+            case name if name.contains("SaveModelEvent") =>
+
+              val uidF = event.getClass.getDeclaredField("uid")
+              uidF.setAccessible(true)
+              val uid = uidF.get(event).asInstanceOf[String]
+
+              val pathF = event.getClass.getDeclaredField("path")
+              pathF.setAccessible(true)
+              val path = pathF.get(event).asInstanceOf[String]
+
+              if (!cachedObjects.contains(uid + "_" + "pipelineDirEntity")) {
+
+                logInfo(s"Model Entity is already created")
+              } else {
+
+                val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
+
+                val pipelineDirEntity = cachedObjects.get(uid + "_" + "pipelineDirEntity")
+                  .get.asInstanceOf[AtlasEntity]
+                val pipelineEntity = cachedObjects.get(uid + "_" + "pipelineEntity")
+                  .get.asInstanceOf[AtlasEntity]
+                val pipeline = cachedObjects.get(uid).get.asInstanceOf[Pipeline]
+
+                atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+                val model = cachedObjects.get(uid + "_" + "model").get.asInstanceOf[PipelineModel]
+
+                val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+
+                atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
+
+                val trainingdata = cachedObjects.get(pipeline.uid + "_" + "traindata")
+                  .get.asInstanceOf[Dataset[_]]
+
+                val logicalplan = trainingdata.queryExecution.analyzed
+
+                val tableEntities = logicalplan.collectLeaves().map {
+                  case l: LogicalRelation => l.relation match {
+                    case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                    case _ => Seq.empty
+                  }
+                }
+
+                val fitEntity = internal.mlFitProcessToEntity(
+                  pipeline,
+                  pipelineEntity,
+                  List(pipelineEntity, tableEntities.head.head),
+                  List(modelEntity))
+
+                atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
+                  pipelineEntity, modelEntity, fitEntity) ++ tableEntities.head)
+
+                cachedObjects.remove(uid + "_" + "pipelineDirEntity")
+                cachedObjects.remove(uid + "_" + "pipelineEntity")
+                cachedObjects.remove(uid + "_" + "model")
+                cachedObjects.remove(uid + "_" + "traindata")
+                cachedObjects.remove(uid)
+
+                logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
+              }
+
+
+            case name if name.contains("LoadModelEvent") =>
+
+              val modeF = event.getClass.getDeclaredField("model")
+              modeF.setAccessible(true)
+              val model = modeF.get(event).asInstanceOf[PipelineModel]
+
+              val directoryF = event.getClass.getDeclaredField("directory")
+              directoryF.setAccessible(true)
+              val directory = directoryF.get(event).asInstanceOf[String]
+
+              val modelDirEntity = internal.mlDirectoryToEntity(uri, directory)
               val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+              val uid = model.uid
+              cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
+              cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
 
-              atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
+            case name if name.contains("TransformEvent") =>
 
-              val trainingdata = cachedObjects.get(pipeline.uid + "_" + "traindata")
-                .get.asInstanceOf[Dataset[_]]
+              val modeF = event.getClass.getDeclaredField("model")
+              modeF.setAccessible(true)
+              val model = modeF.get(event).asInstanceOf[PipelineModel]
 
-              val logicalplan = trainingdata.queryExecution.analyzed
+              val datasetInputF = event.getClass.getDeclaredField("input")
+              datasetInputF.setAccessible(true)
+              val inputdataset = datasetInputF.get(event).asInstanceOf[Dataset[_]]
 
-              val tableEntities = logicalplan.collectLeaves().map {
-                case l: LogicalRelation => l.relation match {
-                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-                  case _ => Seq.empty
+              val datasetOutputF = event.getClass.getDeclaredField("output")
+              datasetOutputF.setAccessible(true)
+              val outputdataset = datasetOutputF.get(event).asInstanceOf[Dataset[_]]
+
+              val uid = model.uid
+
+              if (cachedObjects.contains( uid + "_" + "modelEntity")) {
+
+                val logicalplan = inputdataset.queryExecution.analyzed
+
+                val tableEntities2 = logicalplan.collectLeaves().map {
+                  case l: LogicalRelation => l.relation match {
+                    case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                    case _ => Seq.empty
+                  }
                 }
-              }
 
-              val fitEntity = internal.mlFitProcessToEntity(
-                pipeline,
-                pipelineEntity,
-                List(pipelineEntity, tableEntities.head.head),
-                List(modelEntity))
+                val name = outputdataset.hashCode().toString
+                val tableEntities3 = getTableEntities(name)
 
-              atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
-                pipelineEntity, modelEntity, fitEntity) ++ tableEntities.head)
+                val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").
+                  get.asInstanceOf[AtlasEntity]
+                val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").
+                  get.asInstanceOf[AtlasEntity]
 
-              cachedObjects.remove(uid + "_" + "pipelineDirEntity")
-              cachedObjects.remove(uid + "_" + "pipelineEntity")
-              cachedObjects.remove(uid + "_" + "model")
-              cachedObjects.remove(uid + "_" + "traindata")
-              cachedObjects.remove(uid)
+                val transformEntity = internal.mlTransformProcessToEntity(
+                  model,
+                  modelEntity,
+                  List(modelEntity, tableEntities2.head.head),
+                  List(tableEntities3.head))
 
-              logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
-            }
+                atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
+                  ++ tableEntities2.head ++ tableEntities3)
 
-          case LoadModelEvent(directory, model) =>
+                cachedObjects.remove(uid + "_" + "modelEntity")
+                cachedObjects.remove(uid + "_" + "modelDirEntity")
 
-            val modelDirEntity = internal.mlDirectoryToEntity(uri, directory)
-            val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
-            val uid = model.uid
-            cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
-            cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
-
-          case TransformEvent(model, inputdataset, outputdataset) =>
-
-            val uid = model.uid
-
-            if (cachedObjects.contains( uid + "_" + "modelEntity")) {
-
-              val logicalplan = inputdataset.queryExecution.analyzed
-
-              val tableEntities2 = logicalplan.collectLeaves().map {
-                case l: LogicalRelation => l.relation match {
-                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-                  case _ => Seq.empty
-                }
-              }
-
-              val name = outputdataset.hashCode().toString
-              val tableEntities3 = getTableEntities(name)
-
-              val modelEntity = cachedObjects.get(uid + "_" + "modelEntity").
-                get.asInstanceOf[AtlasEntity]
-              val modelDirEntity = cachedObjects.get(uid + "_" + "modelDirEntity").
-                get.asInstanceOf[AtlasEntity]
-
-              val transformEntity = internal.mlTransformProcessToEntity(
-                model,
-                modelEntity,
-                List(modelEntity, tableEntities2.head.head),
-                List(tableEntities3.head))
-
-              atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
-                ++ tableEntities2.head ++ tableEntities3)
-
-              cachedObjects.remove(uid + "_" + "modelEntity")
-              cachedObjects.remove(uid + "_" + "modelDirEntity")
-
-              logInfo(s"Created transFormEntity " + transformEntity.getGuid)
+                logInfo(s"Created transFormEntity " + transformEntity.getGuid)
               } else {
 
                 logInfo(s"Transform Entity is already created")
-            }
+              }
 
-          case _ =>
-            logInfo(s"ML tracker for other event")
+            case _ =>
+              logInfo(s"ML tracker does not support for other events")
 
+          }
         }
       }
     }
+
+
+
   }
 
   private def initializeSparkModel(): Boolean = {
