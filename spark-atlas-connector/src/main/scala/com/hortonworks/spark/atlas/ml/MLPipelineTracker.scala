@@ -74,7 +74,7 @@ class MLPipelineTracker(
 
     // We only care about ML related events.
     event match {
-      case e: MLListenEvent =>
+      case e: SparkListenerEvent if e.getClass.getName.contains("org.apache.spark.ml") =>
         if (!eventQueue.offer(e, timeout, TimeUnit.MILLISECONDS)) {
           logError(s"Fail to put event $e into queue within time limit $timeout, will throw it")
         }
@@ -174,7 +174,7 @@ class MLPipelineTracker(
               uidF.setAccessible(true)
               val uid = uidF.get(event).asInstanceOf[String]
 
-              val pathF = event.getClass.getDeclaredField("path")
+              val pathF = event.getClass.getDeclaredField("directory")
               pathF.setAccessible(true)
               val path = pathF.get(event).asInstanceOf[String]
 
