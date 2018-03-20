@@ -30,13 +30,7 @@ import com.hortonworks.spark.atlas.TestUtils._
 
 class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAfterAll {
   private var sparkSession: SparkSession = _
-
-  protected  override  val atlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.15.135:21000")
-
   private val atlasClient = new RestAtlasClient(atlasClientConf)
-
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -69,8 +63,8 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
   }
 
   // Enable it to run integrated test.
-  test("pipeline and pipeline model") {
-   SparkAtlasModel.checkAndCreateTypes(atlasClient)
+  it("pipeline and pipeline model") {
+    SparkAtlasModel.checkAndCreateTypes(atlasClient)
 
     val uri = "hdfs://"
     val pipelineDir = "tmp/pipeline"
@@ -81,7 +75,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
 
     atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
 
-     val df = sparkSession.createDataFrame(Seq(
+    val df = sparkSession.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
       (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
       (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
@@ -135,6 +129,5 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
       ++ tableEntities1 ++ tableEntities2)
-
   }
 }
