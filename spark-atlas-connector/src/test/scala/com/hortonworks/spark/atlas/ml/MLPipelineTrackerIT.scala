@@ -24,8 +24,7 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.{BeforeAndAfterAll, Matchers}
-
-import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient}
+import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 

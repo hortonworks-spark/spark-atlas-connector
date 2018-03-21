@@ -21,9 +21,9 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import org.apache.spark.ml.Pipeline
 
 trait AtlasEntityUtils {
 
@@ -142,6 +142,10 @@ trait AtlasEntityUtils {
     } else {
       internal.sparkTableUniqueAttribute(db, table)
     }
+  }
+
+  def pipelineUniqueAttribute(pipeline: Pipeline): String = {
+    pipeline.uid
   }
 
   def processType: String = metadata.PROCESS_TYPE_STRING

@@ -1,0 +1,257 @@
+From ed686c62f2f22285fbe5b3b6e4b68b59b7256a73 Mon Sep 17 00:00:00 2001
+From: Mingjie Tang <mtang@hortonworks.com>
+Date: Tue, 13 Feb 2018 00:55:20 -0800
+Subject: [PATCH] Add Spark ml listener for atlas connector
+
+---
+ .../scala/org/apache/spark/ml/MLListener.scala     | 59 ++++++++++++++++++
+ .../main/scala/org/apache/spark/ml/Pipeline.scala  | 71 +++++++++++++++++++---
+ .../scala/org/apache/spark/ml/util/ReadWrite.scala |  9 ++-
+ 3 files changed, 128 insertions(+), 11 deletions(-)
+ create mode 100644 mllib/src/main/scala/org/apache/spark/ml/MLListener.scala
+
+diff --git a/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala b/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala
+new file mode 100644
+index 0000000..21e4da4
+--- /dev/null
++++ b/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala
+@@ -0,0 +1,59 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to You under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ *    http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.spark.ml
++
++import org.apache.spark.SparkContext
++import org.apache.spark.annotation.DeveloperApi
++import org.apache.spark.scheduler.SparkListenerEvent
++import org.apache.spark.sql.Dataset
++
++
++/**
++ * :: DeveloperApi ::
++ * Base trait for events related to MLListener
++ */
++@DeveloperApi
++sealed trait MLListenEvent extends SparkListenerEvent
++
++/**
++ * Listener interface for Spark ML events.
++ */
++trait MLListener {
++  def onEvent(event: MLListenEvent): Unit = {
++    // SparkContext.getOrCreate().listenerBus.post(event)
++  }
++}
++
++@DeveloperApi
++case class CreatePipelineEvent(pipeline: Pipeline, dataset: Dataset[_]) extends MLListenEvent
++
++@DeveloperApi
++case class CreateModelEvent(model: PipelineModel) extends MLListenEvent
++
++@DeveloperApi
++case class SavePipelineEvent(uid: String, directory: String) extends MLListenEvent
++
++@DeveloperApi
++case class SaveModelEvent(uid: String, directory: String) extends MLListenEvent
++
++@DeveloperApi
++case class LoadModelEvent(directory: String, model: PipelineModel) extends MLListenEvent
++
++@DeveloperApi
++case class TransformEvent(model: PipelineModel, input: Dataset[_], output: Dataset[_])
++  extends MLListenEvent
+diff --git a/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala b/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
+index 103082b..4e67f76 100644
+--- a/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
++++ b/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
+@@ -33,13 +33,15 @@ import org.apache.spark.ml.param.{Param, ParamMap, Params}
+ import org.apache.spark.ml.util._
+ import org.apache.spark.sql.{DataFrame, Dataset}
+ import org.apache.spark.sql.types.StructType
++import org.apache.spark.util.{ListenerBus, SystemClock}
+ 
+ /**
+  * :: DeveloperApi ::
+  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
+  */
+ @DeveloperApi
+-abstract class PipelineStage extends Params with Logging {
++abstract class PipelineStage extends Params with Logging with
++  ListenerBus[MLListener, MLListenEvent]{
+ 
+   /**
+    * :: DeveloperApi ::
+@@ -79,6 +81,13 @@ abstract class PipelineStage extends Params with Logging {
+   }
+ 
+   override def copy(extra: ParamMap): PipelineStage
++
++  override protected def doPostEvent(
++      listener: MLListener,
++      event: MLListenEvent): Unit = {
++    listener.onEvent(event)
++  }
++
+ }
+ 
+ /**
+@@ -165,8 +174,15 @@ class Pipeline @Since("1.4.0") (
+         transformers += stage.asInstanceOf[Transformer]
+       }
+     }
+-
+-    new PipelineModel(uid, transformers.toArray).setParent(this)
++    val model = new PipelineModel(uid, transformers.toArray).setParent(this)
++    this.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        SparkContext.getOrCreate().listenerBus.post(event)
++      }
++    })
++    postToAll(CreatePipelineEvent(this, dataset))
++    postToAll(CreateModelEvent(model))
++    model
+   }
+ 
+   @Since("1.4.0")
+@@ -186,6 +202,7 @@ class Pipeline @Since("1.4.0") (
+ 
+   @Since("1.6.0")
+   override def write: MLWriter = new Pipeline.PipelineWriter(this)
++
+ }
+ 
+ @Since("1.6.0")
+@@ -201,8 +218,15 @@ object Pipeline extends MLReadable[Pipeline] {
+ 
+     SharedReadWrite.validateStages(instance.getStages)
+ 
+-    override protected def saveImpl(path: String): Unit =
++    override protected def saveImpl(path: String): Unit = {
+       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
++      this.addListener(new MLListener {
++        override def onEvent(event: MLListenEvent): Unit = {
++          SparkContext.getOrCreate().listenerBus.post(event)
++        }
++      })
++      postToAll(SavePipelineEvent(instance.uid, path))
++    }
+   }
+ 
+   private class PipelineReader extends MLReader[Pipeline] {
+@@ -303,7 +327,14 @@ class PipelineModel private[ml] (
+   @Since("2.0.0")
+   override def transform(dataset: Dataset[_]): DataFrame = {
+     transformSchema(dataset.schema, logging = true)
+-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
++    val result = stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
++    this.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        SparkContext.getOrCreate().listenerBus.post(event)
++      }
++    })
++    postToAll(TransformEvent(this, dataset, result))
++    result
+   }
+ 
+   @Since("1.2.0")
+@@ -321,22 +352,44 @@ class PipelineModel private[ml] (
+ }
+ 
+ @Since("1.6.0")
+-object PipelineModel extends MLReadable[PipelineModel] {
++object PipelineModel extends MLReadable[PipelineModel] with ListenerBus[MLListener, MLListenEvent]{
+ 
+   import Pipeline.SharedReadWrite
+ 
++  override protected def doPostEvent(
++      listener: MLListener,
++      event: MLListenEvent): Unit = {
++    listener.onEvent(event)
++  }
+   @Since("1.6.0")
+   override def read: MLReader[PipelineModel] = new PipelineModelReader
+ 
+   @Since("1.6.0")
+-  override def load(path: String): PipelineModel = super.load(path)
++  override def load(path: String): PipelineModel = {
++    val pipelinemode = super.load(path)
++    this.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        SparkContext.getOrCreate().listenerBus.post(event)
++      }
++    })
++    postToAll(LoadModelEvent(path, pipelinemode))
++    pipelinemode
++  }
+ 
+   private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
+ 
+     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
+ 
+-    override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
+-      instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
++    override protected def saveImpl(path: String): Unit = {
++      SharedReadWrite.saveImpl(instance,
++        instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
++      this.addListener(new MLListener {
++        override def onEvent(event: MLListenEvent): Unit = {
++          SparkContext.getOrCreate().listenerBus.post(event)
++        }
++      })
++      postToAll(SaveModelEvent(instance.uid, path))
++    }
+   }
+ 
+   private class PipelineModelReader extends MLReader[PipelineModel] {
+diff --git a/mllib/src/main/scala/org/apache/spark/ml/util/ReadWrite.scala b/mllib/src/main/scala/org/apache/spark/ml/util/ReadWrite.scala
+index a616907..bc63d34 100644
+--- a/mllib/src/main/scala/org/apache/spark/ml/util/ReadWrite.scala
++++ b/mllib/src/main/scala/org/apache/spark/ml/util/ReadWrite.scala
+@@ -37,7 +37,7 @@ import org.apache.spark.ml.feature.RFormulaModel
+ import org.apache.spark.ml.param.{ParamPair, Params}
+ import org.apache.spark.ml.tuning.ValidatorParams
+ import org.apache.spark.sql.{SparkSession, SQLContext}
+-import org.apache.spark.util.Utils
++import org.apache.spark.util.{ListenerBus, Utils}
+ 
+ /**
+  * Trait for `MLWriter` and `MLReader`.
+@@ -89,7 +89,8 @@ private[util] sealed trait BaseReadWrite {
+  * Abstract class for utility classes that can save ML instances.
+  */
+ @Since("1.6.0")
+-abstract class MLWriter extends BaseReadWrite with Logging {
++abstract class MLWriter extends BaseReadWrite with Logging with
++  ListenerBus[MLListener, MLListenEvent]{
+ 
+   protected var shouldOverwrite: Boolean = false
+ 
+@@ -140,6 +141,10 @@ abstract class MLWriter extends BaseReadWrite with Logging {
+ 
+   // override for Java compatibility
+   override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
++
++  override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
++    listener.onEvent(event)
++  }
+ }
+ 
+ /**
+-- 
+2.10.1 (Apple Git-78)
+
