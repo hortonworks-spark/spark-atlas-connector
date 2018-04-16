@@ -38,7 +38,7 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
   protected  override  val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.9.3:21000")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.67.30:21000")
 
   private val atlasClient = new RestAtlasClient(atlasClientConf)
   SparkAtlasModel.checkAndCreateTypes(atlasClient)

@@ -18,17 +18,19 @@
 package com.hortonworks.spark.atlas.types
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.ml.{Pipeline, PipelineModel}
-
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
+import scala.collection.mutable
+
 object internal extends Logging {
+
+  val cachedObjects = new mutable.HashMap[String, Object]
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
@@ -213,6 +215,19 @@ object internal extends Logging {
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("model", modelEntity)
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
+    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
+    entity
+  }
+
+  def mlProcessToEntity(inputs: List[AtlasEntity],
+                        outputs: List[AtlasEntity]): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.ML_PROCESS_TYPE_STRING)
+
+    val appId = SparkUtils.sparkSession.sparkContext.applicationId
+    val appName = SparkUtils.sparkSession.sparkContext.appName
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, appId)
+    entity.setAttribute("name", appName)
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
     entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
     entity
