@@ -301,7 +301,9 @@ class MLPipelineTracker(
                     Seq.empty
                 }
 
-                val name = outputdataset.hashCode().toString
+                internal.cachedObjects.put(tableEntities2.head.head.getGuid, uid)
+
+                /* val name = outputdataset.hashCode().toString
                 val tableEntities3 = getTableEntities(name)
 
                 val modelEntity = internal.cachedObjects.get(uid + "_" + "modelEntity").
@@ -318,7 +320,8 @@ class MLPipelineTracker(
                 internal.cachedObjects.remove(uid + "_" + "modelEntity")
                 internal.cachedObjects.remove(uid + "_" + "modelDirEntity")
 
-                logInfo(s"Created transFormEntity " + processEntity.getGuid)
+                logInfo(s"Created transFormEntity " + processEntity.getGuid) */
+
               } else {
 
                 logInfo(s"Transform Entity is already created")

@@ -21,20 +21,18 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, LogicalRelation, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateViewCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
-
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
@@ -100,16 +98,47 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           Seq.empty
       }
 
+      // create process entity
+      val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
+      else inputsEntities.flatMap(_.headOption).toList
+
       // new table/file entity
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
         List(external.pathToEntity(node.outputPath.toUri.toString)))
 
-      // create process entity
-      val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
-        else inputsEntities.flatMap(_.headOption).toList
+      val guid = inputsEntities.head.head.getGuid
+
+      // ml related cached object
+      if(internal.cachedObjects.contains(guid)) {
+
+        val model_uid = internal.cachedObjects.get(guid)
+
+        val modelEntity = internal.cachedObjects.get(model_uid + "_" + "modelEntity").
+          get.asInstanceOf[AtlasEntity]
+
+        val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
+          get.asInstanceOf[AtlasEntity]
+
+        val processEntity = internal.mlProcessToEntity(
+          List(inputsEntities.head.head), List(outputEntities.head))
+
+        // atlasClient.createEntities(Seq(modelDirEntity, modelEntity, processEntity)
+        //  ++ inputsEntities.head ++ outputEntities)
+
+        internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
+        internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
+        internal.cachedObjects.remove(guid)
+
+        // for test only
+        return (Seq(modelDirEntity, modelEntity, processEntity)
+          ++ inputsEntities.head ++ outputEntities)
+      }
+
       val outputTableEntities = List(outputEntities.head)
+
       val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
         outputTableEntities, qd.query)
+
       Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }

@@ -137,7 +137,7 @@ class MLPipeLineEventTrackerEntitySuite extends BaseResourceIT with Matchers{
 
     val df2 = savedmodel.transform(testing)
 
-    df2.show(10)
+    df2.write.mode(SaveMode.Overwrite).save("data/mllib/score.txt")
 
     tracker.onOtherEvent(CreatePipelineEvent(pipeline, training))
     tracker.onOtherEvent(CreateModelEvent(model))
