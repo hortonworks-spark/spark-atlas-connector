@@ -17,8 +17,9 @@
 
 package com.hortonworks.spark.atlas
 
-import scala.collection.JavaConverters._
+import java.util
 
+import scala.collection.JavaConverters._
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.AtlasClientV2
 import org.apache.atlas.model.SearchFilter
@@ -40,10 +41,11 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
   }
 
   private def getServerUrl(): Array[String] = {
-    atlasClientConf.getOption(AtlasClientConf.ATLAS_REST_ENDPOINT.key).map { url =>
-      Array(url)
-    }.getOrElse {
-      throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
+
+    atlasClientConf.getUrl(AtlasClientConf.ATLAS_REST_ENDPOINT.key) match {
+      case a: util.ArrayList[String] => a.toArray().asInstanceOf[Array[String]]
+      case s: String => Array(s)
+      case _ => throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
     }
   }
 

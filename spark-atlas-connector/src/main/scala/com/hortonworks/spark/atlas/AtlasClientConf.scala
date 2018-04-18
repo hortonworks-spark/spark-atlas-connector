@@ -17,8 +17,9 @@
 
 package com.hortonworks.spark.atlas
 
-import org.apache.atlas.ApplicationProperties
+import java.util
 
+import org.apache.atlas.ApplicationProperties
 import com.hortonworks.spark.atlas.AtlasClientConf.ConfigEntry
 
 class AtlasClientConf {
@@ -41,6 +42,10 @@ class AtlasClientConf {
 
   def getOption(key: String): Option[String] = {
     Option(configuration.getProperty(key).asInstanceOf[String])
+  }
+
+  def getUrl(key: String): Object = {
+    configuration.getProperty(key)
   }
 
   def get(t: ConfigEntry): String = {

@@ -228,6 +228,7 @@ object internal extends Logging {
     val appName = SparkUtils.sparkSession.sparkContext.appName
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, appId)
     entity.setAttribute("name", appName)
+    entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
     entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
     entity

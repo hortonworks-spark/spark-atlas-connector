@@ -21,7 +21,6 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import com.google.common.annotations.VisibleForTesting
 import com.hortonworks.spark.atlas.AbstractService
-import com.hortonworks.spark.atlas.sql.CommandsHarvester._
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
