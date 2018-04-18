@@ -43,7 +43,7 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
   private def getServerUrl(): Array[String] = {
 
     atlasClientConf.getUrl(AtlasClientConf.ATLAS_REST_ENDPOINT.key) match {
-      case a: util.ArrayList[String] => a.toArray().asInstanceOf[Array[String]]
+      case a: util.ArrayList[String] => a.toArray().map(b => b.toString)
       case s: String => Array(s)
       case _ => throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
     }
