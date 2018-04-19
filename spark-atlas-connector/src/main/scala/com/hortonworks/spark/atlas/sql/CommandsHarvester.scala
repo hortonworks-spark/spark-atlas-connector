@@ -119,15 +119,15 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
         internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
         internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
-        internal.cachedObjects.remove("model_uid")
+        // internal.cachedObjects.remove("model_uid")
 
         if (internal.cachedObjects.contains("fit_process")) {
           val processEntity = internal.mlProcessToEntity(
             List(inputsEntities.head.head), List(outputEntities.head))
 
-          internal.cachedObjects.remove("fit_process")
+          // internal.cachedObjects.remove("fit_process")
           // for test only
-          return (Seq(modelDirEntity, modelEntity, processEntity)
+           (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
 
         } else {
@@ -136,7 +136,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             inputs, List(outputEntities.head))
 
           // for test only
-          return (Seq(modelDirEntity, modelEntity, processEntity)
+           (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
         }
       }
