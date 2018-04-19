@@ -211,5 +211,5 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
+    AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 }
