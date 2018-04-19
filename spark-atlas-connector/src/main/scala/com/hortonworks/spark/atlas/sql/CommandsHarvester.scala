@@ -117,8 +117,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
           get.asInstanceOf[AtlasEntity]
 
-        internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
-        internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
+        // internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
+        // internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
         // internal.cachedObjects.remove("model_uid")
 
         if (internal.cachedObjects.contains("fit_process")) {
