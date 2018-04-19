@@ -221,7 +221,8 @@ object internal extends Logging {
   }
 
   def mlProcessToEntity(inputs: List[AtlasEntity],
-                        outputs: List[AtlasEntity]): AtlasEntity = {
+                        outputs: List[AtlasEntity],
+                        logMap: Map[String, String]): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_PROCESS_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
@@ -231,6 +232,7 @@ object internal extends Logging {
     entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
     entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
+    logMap.foreach { case (k, v) => entity.setAttribute(k, v)}
     entity
   }
 }

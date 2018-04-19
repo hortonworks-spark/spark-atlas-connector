@@ -106,6 +106,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
         List(external.pathToEntity(node.outputPath.toUri.toString)))
 
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
 
@@ -117,35 +124,27 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
           get.asInstanceOf[AtlasEntity]
 
-        // internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
-        // internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
-        // internal.cachedObjects.remove("model_uid")
-
         if (internal.cachedObjects.contains("fit_process")) {
           val processEntity = internal.mlProcessToEntity(
-            List(inputsEntities.head.head), List(outputEntities.head))
+            List(inputsEntities.head.head), List(outputEntities.head), logMap)
 
-          // internal.cachedObjects.remove("fit_process")
-          // for test only
            (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
 
         } else {
           val inputs = List(inputsEntities.head.head, modelDirEntity, modelEntity)
           val processEntity = internal.mlProcessToEntity(
-            inputs, List(outputEntities.head))
+            inputs, List(outputEntities.head), logMap)
 
-          // for test only
            (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
         }
       } else {
-          val outputTableEntities = List(outputEntities.head)
 
-          val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime,
-            inputTablesEntities, outputTableEntities, qd.query)
+        val processEntity = internal.mlProcessToEntity(
+          List(inputsEntities.head.head), List(outputEntities.head), logMap)
 
-          Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+          Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
         }
 
     }

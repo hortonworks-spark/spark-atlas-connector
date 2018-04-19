@@ -22,9 +22,8 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import com.google.common.annotations.VisibleForTesting
 import com.hortonworks.spark.atlas.AbstractService
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, SparkAtlasModel, external, internal}
-import com.hortonworks.spark.atlas.utils.Logging
+import com.hortonworks.spark.atlas.utils.{CatalogUtils, Logging, SparkUtils}
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
-import com.hortonworks.spark.atlas.utils.CatalogUtils
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
@@ -229,10 +228,10 @@ class MLPipelineTracker(
                   List(pipelineEntity, tableEntities.head.head),
                   List(modelEntity))
 
+                val logMap = Map("spark_ml_fit_uid" -> pipeline.uid)
+
                 val processEntity = internal.mlProcessToEntity(
-                  List(pipelineEntity, tableEntities.head.head), List(modelEntity))
-                // atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, fitEntity)
-                //  ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
+                  List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
 
                 atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
                   ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
