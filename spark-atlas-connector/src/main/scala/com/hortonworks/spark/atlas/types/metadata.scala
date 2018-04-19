@@ -206,9 +206,10 @@ object metadata {
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    //    AtlasTypeUtil.createRequiredAttrDef("pipeline", ML_PIPELINE_TYPE_STRING),
-    //    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-    //    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
+    AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
 }
