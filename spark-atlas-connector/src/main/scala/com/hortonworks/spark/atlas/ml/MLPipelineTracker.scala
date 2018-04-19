@@ -243,6 +243,8 @@ class MLPipelineTracker(
                 internal.cachedObjects.remove(uid + "_" + "traindata")
                 internal.cachedObjects.remove(uid)
 
+                internal.cachedObjects.put("fit_process", uid)
+
                 logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
               }
 
@@ -259,9 +261,14 @@ class MLPipelineTracker(
 
               val modelDirEntity = internal.mlDirectoryToEntity(uri, directory)
               val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+
+              atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
+
               val uid = model.uid
               internal.cachedObjects.put(uid + "_" + "modelDirEntity", modelDirEntity)
               internal.cachedObjects.put(uid + "_" + "modelEntity", modelEntity)
+
+              logInfo(s"Created model Entity " + modelEntity.getGuid)
 
             case name if name.contains("TransformEvent") =>
 
@@ -269,57 +276,11 @@ class MLPipelineTracker(
               modeF.setAccessible(true)
               val model = modeF.get(event).asInstanceOf[PipelineModel]
 
-              val datasetInputF = event.getClass.getDeclaredField("input")
-              datasetInputF.setAccessible(true)
-              val inputdataset = datasetInputF.get(event).asInstanceOf[Dataset[_]]
-
-              val datasetOutputF = event.getClass.getDeclaredField("output")
-              datasetOutputF.setAccessible(true)
-              val outputdataset = datasetOutputF.get(event).asInstanceOf[Dataset[_]]
-
               val uid = model.uid
 
-              if (internal.cachedObjects.contains( uid + "_" + "modelEntity")) {
+              if (internal.cachedObjects.contains(uid + "_" + "modelEntity")) {
 
-                val logicalplan = inputdataset.queryExecution.analyzed
-
-                var isFiles = false
-                val tableEntities2 = logicalplan.collectLeaves().map {
-                  case r: HiveTableRelation => tableToEntities(r.tableMeta)
-                  case v: View => tableToEntities(v.desc)
-                  case l: LogicalRelation if l.catalogTable.isDefined =>
-                    l.catalogTable.map(tableToEntities(_)).get
-                  case l: LogicalRelation =>
-                    isFiles = true
-                    l.relation match {
-                      case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-                      case _ => Seq.empty
-                    }
-                  case e =>
-                    logWarn(s"Missing unknown leaf node: $e")
-                    Seq.empty
-                }
-
-                internal.cachedObjects.put(tableEntities2.head.head.getGuid, uid)
-
-                /* val name = outputdataset.hashCode().toString
-                val tableEntities3 = getTableEntities(name)
-
-                val modelEntity = internal.cachedObjects.get(uid + "_" + "modelEntity").
-                  get.asInstanceOf[AtlasEntity]
-                val modelDirEntity = internal.cachedObjects.get(uid + "_" + "modelDirEntity").
-                  get.asInstanceOf[AtlasEntity]
-
-                val processEntity = internal.mlProcessToEntity(
-                  List(tableEntities2.head.head), List(tableEntities3.head))
-
-                atlasClient.createEntities(Seq(modelDirEntity, modelEntity, processEntity)
-                  ++ tableEntities2.head ++ tableEntities3)
-
-                internal.cachedObjects.remove(uid + "_" + "modelEntity")
-                internal.cachedObjects.remove(uid + "_" + "modelDirEntity")
-
-                logInfo(s"Created transFormEntity " + processEntity.getGuid) */
+                internal.cachedObjects.put("model_uid", uid)
 
               } else {
 

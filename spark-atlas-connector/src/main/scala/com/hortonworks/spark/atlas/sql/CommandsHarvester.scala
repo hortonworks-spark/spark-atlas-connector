@@ -78,7 +78,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
     override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail)
-        : Seq[AtlasEntity] = {
+    : Seq[AtlasEntity] = {
       // source tables/files entities
       val tChildren = node.query.collectLeaves()
       var isFiles = false
@@ -106,12 +106,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
         List(external.pathToEntity(node.outputPath.toUri.toString)))
 
-      val guid = inputsEntities.head.head.getGuid
-
       // ml related cached object
-      if(internal.cachedObjects.contains(guid)) {
+      if (internal.cachedObjects.contains("model_uid")) {
 
-        val model_uid = internal.cachedObjects.get(guid)
+        val model_uid = internal.cachedObjects.get("model_uid").get.asInstanceOf[String]
 
         val modelEntity = internal.cachedObjects.get(model_uid + "_" + "modelEntity").
           get.asInstanceOf[AtlasEntity]
@@ -119,19 +117,28 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
           get.asInstanceOf[AtlasEntity]
 
-        val processEntity = internal.mlProcessToEntity(
-          List(inputsEntities.head.head), List(outputEntities.head))
-
-        // atlasClient.createEntities(Seq(modelDirEntity, modelEntity, processEntity)
-        //  ++ inputsEntities.head ++ outputEntities)
-
         internal.cachedObjects.remove(model_uid + "_" + "modelEntity")
         internal.cachedObjects.remove(model_uid + "_" + "modelDirEntity")
-        internal.cachedObjects.remove(guid)
+        internal.cachedObjects.remove("model_uid")
 
-        // for test only
-        return (Seq(modelDirEntity, modelEntity, processEntity)
-          ++ inputsEntities.head ++ outputEntities)
+        if (internal.cachedObjects.contains("fit_process")) {
+          val processEntity = internal.mlProcessToEntity(
+            List(inputsEntities.head.head), List(outputEntities.head))
+
+          internal.cachedObjects.remove("fit_process")
+          // for test only
+          return (Seq(modelDirEntity, modelEntity, processEntity)
+            ++ inputsEntities.head ++ outputEntities)
+
+        } else {
+          val inputs = List(inputsEntities.head.head, modelDirEntity, modelEntity)
+          val processEntity = internal.mlProcessToEntity(
+            inputs, List(outputEntities.head))
+
+          // for test only
+          return (Seq(modelDirEntity, modelEntity, processEntity)
+            ++ inputsEntities.head ++ outputEntities)
+        }
       }
 
       val outputTableEntities = List(outputEntities.head)
