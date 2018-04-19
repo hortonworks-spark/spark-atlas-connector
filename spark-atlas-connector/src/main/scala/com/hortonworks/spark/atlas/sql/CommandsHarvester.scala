@@ -139,14 +139,15 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
            (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
         }
-      }
+      } else {
+          val outputTableEntities = List(outputEntities.head)
 
-      val outputTableEntities = List(outputEntities.head)
+          val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime,
+            inputTablesEntities, outputTableEntities, qd.query)
 
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
+          Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+        }
 
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
     }
   }
 
