@@ -223,7 +223,7 @@ object internal extends Logging {
   def mlProcessToEntity(inputs: List[AtlasEntity],
                         outputs: List[AtlasEntity],
                         logMap: Map[String, String]): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.ML_PROCESS_TYPE_STRING)
+    val entity = new AtlasEntity(metadata.PROCESS_ETL_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
     val appName = SparkUtils.sparkSession.sparkContext.appName
