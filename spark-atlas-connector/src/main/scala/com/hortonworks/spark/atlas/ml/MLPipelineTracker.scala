@@ -228,7 +228,8 @@ class MLPipelineTracker(
                   List(pipelineEntity, tableEntities.head.head),
                   List(modelEntity))
 
-                val logMap = Map("currUser" -> SparkUtils.currUser())
+                // TODO add more information
+                val logMap = Map("sparkPlanDescription" -> "unkown")
 
                 val processEntity = internal.mlProcessToEntity(
                   List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
