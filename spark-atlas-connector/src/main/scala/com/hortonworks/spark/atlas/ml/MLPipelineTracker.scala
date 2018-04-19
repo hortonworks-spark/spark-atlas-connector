@@ -228,7 +228,7 @@ class MLPipelineTracker(
                   List(pipelineEntity, tableEntities.head.head),
                   List(modelEntity))
 
-                val logMap = Map("spark_ml_fit_uid" -> pipeline.uid)
+                val logMap = Map("currUser" -> SparkUtils.currUser())
 
                 val processEntity = internal.mlProcessToEntity(
                   List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
