@@ -278,15 +278,9 @@ class MLPipelineTracker(
 
               val uid = model.uid
 
-              if (internal.cachedObjects.contains(uid + "_" + "modelEntity")) {
+              internal.cachedObjects.put("model_uid", uid)
 
-                internal.cachedObjects.put("model_uid", uid)
-
-              } else {
-
-                logInfo(s"Transform Entity is already created")
-              }
-
+              logInfo(s"Cache for TransformEvent " + uid)
             case _ =>
               logInfo(s"ML tracker does not support for other events")
 
