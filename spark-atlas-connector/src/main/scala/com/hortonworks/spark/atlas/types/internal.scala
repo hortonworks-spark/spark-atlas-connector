@@ -235,4 +235,34 @@ object internal extends Logging {
     logMap.foreach { case (k, v) => entity.setAttribute(k, v)}
     entity
   }
+
+  def updateMLProcessToEntity(inputs: Seq[AtlasEntity],
+                              outputs: Seq[AtlasEntity],
+                              logMap: Map[String, String]): Seq[AtlasEntity] = {
+
+    val model_uid = internal.cachedObjects.get("model_uid").get.asInstanceOf[String]
+
+    val modelEntity = internal.cachedObjects.get(model_uid + "_" + "modelEntity").
+      get.asInstanceOf[AtlasEntity]
+
+    val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
+      get.asInstanceOf[AtlasEntity]
+
+    if (internal.cachedObjects.contains("fit_process")) {
+      val processEntity = internal.mlProcessToEntity(
+        List(inputs.head), List(outputs.head), logMap)
+
+      (Seq(modelDirEntity, modelEntity, processEntity)
+        ++ inputs ++ outputs)
+
+    } else {
+      val new_inputs = List(inputs.head, modelDirEntity, modelEntity)
+
+      val processEntity = internal.mlProcessToEntity(
+        new_inputs, List(outputs.head), logMap)
+
+      (Seq(modelDirEntity, modelEntity, processEntity)
+        ++ new_inputs ++ outputs)
+    }
+  }
 }

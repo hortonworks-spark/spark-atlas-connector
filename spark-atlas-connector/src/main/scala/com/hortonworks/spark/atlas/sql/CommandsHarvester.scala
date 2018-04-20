@@ -98,7 +98,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           Seq.empty
       }
 
-      // create process entity
       val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
       else inputsEntities.flatMap(_.headOption).toList
 
@@ -116,7 +115,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
 
-        val model_uid = internal.cachedObjects.get("model_uid").get.asInstanceOf[String]
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+
+        /* val model_uid = internal.cachedObjects.get("model_uid").get.asInstanceOf[String]
 
         val modelEntity = internal.cachedObjects.get(model_uid + "_" + "modelEntity").
           get.asInstanceOf[AtlasEntity]
@@ -138,11 +139,12 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
            (Seq(modelDirEntity, modelEntity, processEntity)
             ++ inputsEntities.head ++ outputEntities)
-        }
+        } */
+
       } else {
 
         val processEntity = internal.mlProcessToEntity(
-          List(inputsEntities.head.head), List(outputEntities.head), logMap)
+          inputTablesEntities, List(outputEntities.head), logMap)
 
           Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
         }
