@@ -117,32 +117,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
 
-        /* val model_uid = internal.cachedObjects.get("model_uid").get.asInstanceOf[String]
-
-        val modelEntity = internal.cachedObjects.get(model_uid + "_" + "modelEntity").
-          get.asInstanceOf[AtlasEntity]
-
-        val modelDirEntity = internal.cachedObjects.get(model_uid + "_" + "modelDirEntity").
-          get.asInstanceOf[AtlasEntity]
-
-        if (internal.cachedObjects.contains("fit_process")) {
-          val processEntity = internal.mlProcessToEntity(
-            List(inputsEntities.head.head), List(outputEntities.head), logMap)
-
-           (Seq(modelDirEntity, modelEntity, processEntity)
-            ++ inputsEntities.head ++ outputEntities)
-
-        } else {
-          val inputs = List(inputsEntities.head.head, modelDirEntity, modelEntity)
-          val processEntity = internal.mlProcessToEntity(
-            inputs, List(outputEntities.head), logMap)
-
-           (Seq(modelDirEntity, modelEntity, processEntity)
-            ++ inputsEntities.head ++ outputEntities)
-        } */
-
       } else {
-
         val processEntity = internal.mlProcessToEntity(
           inputTablesEntities, List(outputEntities.head), logMap)
 
