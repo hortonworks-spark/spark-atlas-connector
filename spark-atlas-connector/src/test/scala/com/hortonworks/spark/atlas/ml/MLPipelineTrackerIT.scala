@@ -33,7 +33,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
 
   protected  override  val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.15.135:21000")
+    .set(AtlasClientConf.ATLAS_REST_ENDPOINT.key, "http://172.27.30.153:21000")
 
   private val atlasClient = new RestAtlasClient(atlasClientConf)
 
@@ -50,6 +50,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
+    internal.cachedObjects.clear()
     sparkSession = null
   }
 

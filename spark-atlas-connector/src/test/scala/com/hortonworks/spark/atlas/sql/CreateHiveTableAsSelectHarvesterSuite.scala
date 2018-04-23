@@ -82,8 +82,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
-    pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
+      sparkSession.sparkContext.applicationId)
+    pEntity.getTypeName should be (metadata.PROCESS_ETL_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -122,8 +122,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
-    pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
+      sparkSession.sparkContext.applicationId )
+    pEntity.getTypeName should be (metadata.PROCESS_ETL_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -160,8 +160,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
-    pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
+      sparkSession.sparkContext.applicationId)
+    pEntity.getTypeName should be (metadata.PROCESS_ETL_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
@@ -198,8 +198,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
-    pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
+     sparkSession.sparkContext.applicationId)
+    pEntity.getTypeName should be (metadata.PROCESS_ETL_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]

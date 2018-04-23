@@ -67,12 +67,30 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // new table entity
       val outputEntities = tableToEntities(node.table)
 
-      // create process entity
+
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+
+      } else {
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          inputTablesEntities,outputTableEntities, logMap)
+
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
+
     }
   }
 
@@ -155,9 +173,28 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+
+      } else {
+
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
+
     }
   }
 
@@ -181,10 +218,29 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = tableToEntities(node.table)
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
 
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+
+      } else {
+
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+
+      }
+
     }
   }
 
@@ -192,9 +248,28 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, List(pathEntity),
-        List(outputEntities.head), qd.query)
-      Seq(pEntity, pathEntity) ++ outputEntities
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(List(pathEntity), outputEntities, logMap)
+
+      } else {
+
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          List(pathEntity), List(outputEntities.head), logMap)
+
+        Seq(pEntity, pathEntity) ++ outputEntities
+
+      }
     }
   }
 
@@ -223,9 +298,29 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
-      val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), qd.query)
-      Seq(pEntity, destEntity) ++ inputsEntities.flatten
+
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputs, List(destEntity), logMap)
+
+      } else {
+
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          inputs, List(destEntity), logMap)
+
+        Seq(pEntity, destEntity) ++ inputsEntities.flatten
+
+      }
     }
   }
 
@@ -243,10 +338,29 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTableEntity = List(inputEntities.head)
       val outputTableEntity = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTableEntity,
-        outputTableEntity, qd.query)
 
-      Seq(pEntity) ++ inputEntities ++ outputEntities
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputTableEntity, outputTableEntity, logMap)
+
+      } else {
+
+        // create process entity
+        val pEntity = internal.mlProcessToEntity(
+          inputTableEntity, outputTableEntity, logMap)
+
+        Seq(pEntity) ++ inputEntities ++ outputEntities
+      }
+
     }
   }
 
@@ -292,9 +406,27 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = outputEntities.toList
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+
+      val logMap = Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+
+        internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
+
+      } else {
+
+        val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
+          outputTableEntities, qd.query)
+
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+
+      }
     }
   }
 

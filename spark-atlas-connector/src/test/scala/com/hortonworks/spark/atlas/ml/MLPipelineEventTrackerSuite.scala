@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.ml
 
 import com.hortonworks.spark.atlas.BaseResourceIT
+import com.hortonworks.spark.atlas.types.internal
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml._
@@ -43,6 +44,7 @@ class MLPipelineEventTrackerSuite extends BaseResourceIT with Matchers {
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
+    internal.cachedObjects.clear()
     sparkSession = null
   }
 
