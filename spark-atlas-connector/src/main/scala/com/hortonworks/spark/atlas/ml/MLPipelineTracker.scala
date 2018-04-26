@@ -236,13 +236,7 @@ class MLPipelineTracker(
 
                 atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
                   ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
-
-                // internal.cachedObjects.remove(uid + "_" + "pipelineDirEntity")
-                // internal.cachedObjects.remove(uid + "_" + "pipelineEntity")
-                // internal.cachedObjects.remove(uid + "_" + "model")
-                // internal.cachedObjects.remove(uid + "_" + "traindata")
-                // internal.cachedObjects.remove(uid)
-
+                
                 internal.cachedObjects.put("fit_process", uid)
 
                 logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
