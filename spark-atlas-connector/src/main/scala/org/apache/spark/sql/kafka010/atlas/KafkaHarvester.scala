@@ -50,13 +50,16 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     // destination topic
     var destTopic = None: Option[String]
     try {
-      destTopic = node.getClass.getMethod("topic").invoke(node).asInstanceOf[Option[String]]
+      val topicField = node.getClass.getDeclaredField("topic")
+      topicField.setAccessible(true)
+      destTopic = topicField.get(node).asInstanceOf[Option[String]]
     } catch {
       case e: NoSuchMethodException =>
         logDebug(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
-      case _ =>
-        logDebug(s"Can not get topic, please update topic of KafkaStreamWriter")
+      case e: Exception =>
+        logDebug(s"Can not get topic, please update topic of KafkaStreamWriter: ${e.toString}")
     }
+
     val outputEntities = if (destTopic.isDefined) {
       external.kafkaToEntity(clusterName, destTopic.get)
     } else {
