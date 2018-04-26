@@ -75,7 +75,7 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     if(destTopic.isDefined) {
       pDescription.append(") Topics written into( ").append(destTopic.get).append(" )")
     } else {
-      logInfo(s"Can not get des topic")
+      logInfo(s"Can not get dest topic")
     }
 
     val inputTablesEntities = inputsEntities.toList
