@@ -133,16 +133,6 @@ class MLPipelineTracker(
               internal.cachedObjects.put(pipeline.uid, pipeline)
               internal.cachedObjects.put(pipeline.uid + "_" + "traindata", dataset)
 
-              val logicalplan = dataset.queryExecution.analyzed
-
-              val entities = logicalplan.collectLeaves().map {
-                case l: LogicalRelation => l.relation match {
-                  case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-                  case _ => Seq.empty
-                }
-              }
-
-
             case name if name.contains("CreateModelEvent") =>
               val modeF = event.getClass.getDeclaredField("model")
               modeF.setAccessible(true)
