@@ -208,7 +208,7 @@ class MLPipelineTracker(
                       case _ => Seq.empty
                     }
                   case e =>
-                    logWarn(s"Missing unknown leaf node: $e")
+                    logWarn(s"Missing unknown leaf node for Sparm ML model training input: $e")
                     Seq.empty
                 }
 
