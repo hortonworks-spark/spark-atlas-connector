@@ -111,6 +111,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
             case _ => Seq.empty
           }
+        case local: LocalRelation =>
+          logInfo("Local Relation")
+          Seq.empty
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
