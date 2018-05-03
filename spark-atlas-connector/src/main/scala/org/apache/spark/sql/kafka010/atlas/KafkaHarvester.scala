@@ -94,7 +94,7 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     } else {
 
       // create process entity
-      val pEntity = internal.mlProcessToEntity(
+      val pEntity = internal.etlProcessToEntity(
         inputTablesEntities, outputTableEntities, logMap)
 
       Seq(pEntity) ++ inputsEntities ++ outputEntities

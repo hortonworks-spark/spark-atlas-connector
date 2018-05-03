@@ -45,7 +45,7 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
     atlasClientConf.getUrl(AtlasClientConf.ATLAS_REST_ENDPOINT.key) match {
       case a: util.ArrayList[_] => a.toArray().map(b => b.toString)
       case s: String => Array(s)
-      case _ => throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
+      case _: Throwable => throw new IllegalArgumentException(s"Fail to get atlas.rest.address")
     }
   }
 
@@ -70,7 +70,7 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
       logInfo(s"Entities ${response.getCreatedEntities.asScala.map(_.getGuid).mkString(", ")} " +
         s"created")
     } catch {
-      case _ =>
+      case _: Throwable => throw new IllegalStateException(s"Fail to get create entities")
     }
   }
 

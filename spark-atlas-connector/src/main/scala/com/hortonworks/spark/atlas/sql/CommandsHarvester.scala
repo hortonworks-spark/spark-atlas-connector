@@ -85,7 +85,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       } else {
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           inputTablesEntities,outputTableEntities, logMap)
 
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
@@ -139,7 +139,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
 
       } else {
-        val processEntity = internal.mlProcessToEntity(
+        val processEntity = internal.etlProcessToEntity(
           inputTablesEntities, List(outputEntities.head), logMap)
 
           Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
@@ -192,7 +192,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
 
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
 
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
@@ -237,7 +237,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
 
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
 
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
@@ -267,7 +267,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
 
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           List(pathEntity), List(outputEntities.head), logMap)
 
         Seq(pEntity, pathEntity) ++ outputEntities
@@ -318,7 +318,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
 
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           inputs, List(destEntity), logMap)
 
         Seq(pEntity, destEntity) ++ inputsEntities.flatten
@@ -358,7 +358,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
 
         // create process entity
-        val pEntity = internal.mlProcessToEntity(
+        val pEntity = internal.etlProcessToEntity(
           inputTableEntity, outputTableEntity, logMap)
 
         Seq(pEntity) ++ inputEntities ++ outputEntities
@@ -424,8 +424,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       } else {
 
-        val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-          outputTableEntities, qd.query)
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
 
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
 

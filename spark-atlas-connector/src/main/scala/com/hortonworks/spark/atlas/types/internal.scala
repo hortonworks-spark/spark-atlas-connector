@@ -220,10 +220,10 @@ object internal extends Logging {
     entity
   }
 
-  def mlProcessToEntity(inputs: List[AtlasEntity],
+  def etlProcessToEntity(inputs: List[AtlasEntity],
                         outputs: List[AtlasEntity],
                         logMap: Map[String, String]): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.PROCESS_ETL_TYPE_STRING)
+    val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
     val appName = SparkUtils.sparkSession.sparkContext.appName
@@ -249,7 +249,7 @@ object internal extends Logging {
       get.asInstanceOf[AtlasEntity]
 
     if (internal.cachedObjects.contains("fit_process")) {
-      val processEntity = internal.mlProcessToEntity(
+      val processEntity = internal.etlProcessToEntity(
         List(inputs.head), List(outputs.head), logMap)
 
       (Seq(modelDirEntity, modelEntity, processEntity)
@@ -258,7 +258,7 @@ object internal extends Logging {
     } else {
       val new_inputs = List(inputs.head, modelDirEntity, modelEntity)
 
-      val processEntity = internal.mlProcessToEntity(
+      val processEntity = internal.etlProcessToEntity(
         new_inputs, List(outputs.head), logMap)
 
       (Seq(modelDirEntity, modelEntity, processEntity)

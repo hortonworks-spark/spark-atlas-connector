@@ -128,12 +128,12 @@ object metadata {
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
+    AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 
   // ========== ML directory type ==========
   val ML_DIRECTORY_TYPE = AtlasTypeUtil.createClassTypeDef(

@@ -219,9 +219,9 @@ class MLPipelineTracker(
                   List(modelEntity))
 
                 // TODO add more information
-                val logMap = Map("sparkPlanDescription" -> "unkown")
+                val logMap = Map("sparkPlanDescription" -> ("Spark ML training model with pipeline uid: " + pipeline.uid))
 
-                val processEntity = internal.mlProcessToEntity(
+                val processEntity = internal.etlProcessToEntity(
                   List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
 
                 atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
@@ -270,6 +270,13 @@ class MLPipelineTracker(
 
           }
         }
+      } catch {
+        case _: InterruptedException =>
+          logDebug(s"Thread is interrupted")
+          stopped = true
+
+        case NonFatal(e) =>
+          logWarn(s"Spark ML tracker caught exception during parsing the query: $e")
       }
     }
 
