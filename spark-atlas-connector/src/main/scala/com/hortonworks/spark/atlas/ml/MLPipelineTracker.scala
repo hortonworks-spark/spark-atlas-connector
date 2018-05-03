@@ -34,12 +34,11 @@ import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 
 class MLPipelineTracker(
-    val atlasClient: AtlasClient,
-    val conf: AtlasClientConf)
+                         val atlasClient: AtlasClient,
+                         val conf: AtlasClientConf)
   extends SparkListener with AbstractService with AtlasEntityUtils with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
@@ -226,7 +225,7 @@ class MLPipelineTracker(
 
                 atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
                   ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
-                
+
                 internal.cachedObjects.put("fit_process", uid)
 
                 logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
