@@ -37,7 +37,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
 
   private var sparkSession: SparkSession = _
 
-  private var tracker: SparkCatalogEventTracker = _
+  private var processor: SparkCatalogEventProcessor = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -45,7 +45,9 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
       .master("local")
       .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
-    tracker = new SparkCatalogEventTracker(new RestAtlasClient(atlasClientConf), atlasClientConf)
+    processor =
+      new SparkCatalogEventProcessor(new RestAtlasClient(atlasClientConf), atlasClientConf)
+    processor.startThread()
   }
 
   override def afterAll(): Unit = {
@@ -60,19 +62,19 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     val tempDbPath = Files.createTempDirectory("db_")
     val dbDefinition = createDB("db1", tempDbPath.normalize().toUri.toString)
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
-    tracker.onOtherEvent(CreateDatabaseEvent("db1"))
+    processor.pushEvent(CreateDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val entity = getEntity(tracker.dbType, tracker.dbUniqueAttribute("db1"))
+      val entity = getEntity(processor.dbType, processor.dbUniqueAttribute("db1"))
       entity should not be (null)
       entity.getAttribute("name") should be ("db1")
     }
 
     // Drop DB from external catalog to make sure we also delete the corresponding Atlas entity
     SparkUtils.getExternalCatalog().dropDatabase("db1", ignoreIfNotExists = true, cascade = false)
-    tracker.onOtherEvent(DropDatabaseEvent("db1"))
+    processor.pushEvent(DropDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       intercept[AtlasServiceException](
-        getEntity(tracker.dbType, tracker.dbUniqueAttribute("db1")))
+        getEntity(processor.dbType, processor.dbUniqueAttribute("db1")))
     }
   }
 
@@ -80,9 +82,9 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     val tempDbPath = Files.createTempDirectory("db_")
     val dbDefinition = createDB("db2", tempDbPath.normalize().toUri.toString)
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
-    tracker.onOtherEvent(CreateDatabaseEvent("db2"))
+    processor.pushEvent(CreateDatabaseEvent("db2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val entity = getEntity(tracker.dbType, tracker.dbUniqueAttribute("db2"))
+      val entity = getEntity(processor.dbType, processor.dbUniqueAttribute("db2"))
       entity should not be (null)
       entity.getAttribute("name") should be ("db2")
     }
@@ -93,60 +95,60 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
       .add("age", IntegerType)
     val sd = CatalogStorageFormat.empty
     val tableDefinition = createTable("db2", "tbl1", schema, sd)
-    val isHiveTbl = tracker.isHiveTable(tableDefinition)
+    val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
-    tracker.onOtherEvent(CreateTableEvent("db2", "tbl1"))
+    processor.pushEvent(CreateTableEvent("db2", "tbl1"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val sdEntity = getEntity(tracker.storageFormatType(isHiveTbl),
-        tracker.storageFormatUniqueAttribute("db2", "tbl1", isHiveTbl))
+      val sdEntity = getEntity(processor.storageFormatType(isHiveTbl),
+        processor.storageFormatUniqueAttribute("db2", "tbl1", isHiveTbl))
       sdEntity should not be (null)
 
       schema.foreach { s =>
-        val colEntity = getEntity(tracker.columnType(isHiveTbl),
-          tracker.columnUniqueAttribute("db2", "tbl1", s.name, isHiveTbl))
+        val colEntity = getEntity(processor.columnType(isHiveTbl),
+          processor.columnUniqueAttribute("db2", "tbl1", s.name, isHiveTbl))
         colEntity should not be (null)
         colEntity.getAttribute("name") should be (s.name)
         colEntity.getAttribute("type") should be (s.dataType.typeName)
       }
 
-      val tblEntity = getEntity(tracker.tableType(isHiveTbl),
-        tracker.tableUniqueAttribute("db2", "tbl1", isHiveTbl))
+      val tblEntity = getEntity(processor.tableType(isHiveTbl),
+        processor.tableUniqueAttribute("db2", "tbl1", isHiveTbl))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be ("tbl1")
     }
 
     // Rename table
     SparkUtils.getExternalCatalog().renameTable("db2", "tbl1", "tbl2")
-    tracker.onOtherEvent(RenameTableEvent("db2", "tbl1", "tbl2"))
+    processor.pushEvent(RenameTableEvent("db2", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val tblEntity = getEntity(tracker.tableType(isHiveTbl),
-        tracker.tableUniqueAttribute("db2", "tbl2", isHiveTbl))
+      val tblEntity = getEntity(processor.tableType(isHiveTbl),
+        processor.tableUniqueAttribute("db2", "tbl2", isHiveTbl))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be ("tbl2")
 
       schema.foreach { s =>
-        val colEntity = getEntity(tracker.columnType(isHiveTbl),
-          tracker.columnUniqueAttribute("db2", "tbl2", s.name, isHiveTbl))
+        val colEntity = getEntity(processor.columnType(isHiveTbl),
+          processor.columnUniqueAttribute("db2", "tbl2", s.name, isHiveTbl))
         colEntity should not be (null)
         colEntity.getAttribute("name") should be (s.name)
         colEntity.getAttribute("type") should be (s.dataType.typeName)
       }
 
-      val sdEntity = getEntity(tracker.storageFormatType(isHiveTbl),
-        tracker.storageFormatUniqueAttribute("db2", "tbl2", isHiveTbl))
+      val sdEntity = getEntity(processor.storageFormatType(isHiveTbl),
+        processor.storageFormatUniqueAttribute("db2", "tbl2", isHiveTbl))
       sdEntity should not be (null)
     }
 
     // Drop table
     val tblDef2 = SparkUtils.getExternalCatalog().getTable("db2", "tbl2")
-    val isHiveTbl2 = tracker.isHiveTable(tblDef2)
-    tracker.onOtherEvent(DropTablePreEvent("db2", "tbl2"))
-    tracker.onOtherEvent(DropTableEvent("db2", "tbl2"))
+    val isHiveTbl2 = processor.isHiveTable(tblDef2)
+    processor.pushEvent(DropTablePreEvent("db2", "tbl2"))
+    processor.pushEvent(DropTableEvent("db2", "tbl2"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      intercept[AtlasServiceException](getEntity(tracker.tableType(isHiveTbl),
-        tracker.tableUniqueAttribute("db2", "tbl2", isHiveTbl2)))
+      intercept[AtlasServiceException](getEntity(processor.tableType(isHiveTbl),
+        processor.tableUniqueAttribute("db2", "tbl2", isHiveTbl2)))
     }
   }
 }

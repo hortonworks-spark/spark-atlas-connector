@@ -35,7 +35,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, TestUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
-class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   import TestUtils._
 
   private var sparkSession: SparkSession = _
@@ -60,64 +60,68 @@ class SparkCatalogEventTrackerSuite extends FunSuite with Matchers with BeforeAn
   }
 
   test("correctly handle DB related events") {
-    val tracker =
-      new SparkCatalogEventTracker(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
+    val processor =
+      new SparkCatalogEventProcessor(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
+    processor.startThread()
+
     var atlasClient: FirehoseAtlasClient = null
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      tracker.atlasClient should not be (null)
-      atlasClient = tracker.atlasClient.asInstanceOf[FirehoseAtlasClient]
+      processor.atlasClient should not be (null)
+      atlasClient = processor.atlasClient.asInstanceOf[FirehoseAtlasClient]
     }
 
     val tempPath = Files.createTempDirectory("db_")
     val dbDefinition = createDB("db1", tempPath.normalize().toUri.toString)
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
-    tracker.onOtherEvent(CreateDatabaseEvent("db1"))
+    processor.pushEvent(CreateDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall.size > 0)
-      assert(atlasClient.createEntityCall(tracker.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
     }
 
-    tracker.onOtherEvent(DropDatabaseEvent("db1"))
+    processor.pushEvent(DropDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.deleteEntityCall.size > 0)
-      assert(atlasClient.deleteEntityCall(tracker.dbType) == 1)
+      assert(atlasClient.deleteEntityCall(processor.dbType) == 1)
     }
   }
 
   test("correctly handle table related events") {
-    val tracker =
-      new SparkCatalogEventTracker(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
+    val processor =
+      new SparkCatalogEventProcessor(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
+    processor.startThread()
+
     var atlasClient: FirehoseAtlasClient = null
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      tracker.atlasClient should not be (null)
-      atlasClient = tracker.atlasClient.asInstanceOf[FirehoseAtlasClient]
+      processor.atlasClient should not be (null)
+      atlasClient = processor.atlasClient.asInstanceOf[FirehoseAtlasClient]
     }
 
     val tableDefinition =
       createTable("db1", "tbl1", new StructType().add("id", LongType), CatalogStorageFormat.empty)
-    val isHiveTbl = tracker.isHiveTable(tableDefinition)
+    val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
-    tracker.onOtherEvent(CreateTableEvent("db1", "tbl1"))
+    processor.pushEvent(CreateTableEvent("db1", "tbl1"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.createEntityCall(tracker.dbType) == 1)
-      assert(atlasClient.createEntityCall(tracker.tableType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(tracker.columnType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(tracker.storageFormatType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
     }
 
     SparkUtils.getExternalCatalog().renameTable("db1", "tbl1", "tbl2")
-    tracker.onOtherEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
+    processor.pushEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.updateEntityCall(tracker.storageFormatType(isHiveTbl)) == 1)
-      assert(atlasClient.updateEntityCall(tracker.columnType(isHiveTbl)) == 1)
-      assert(atlasClient.updateEntityCall(tracker.tableType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(processor.columnType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
     }
 
-    tracker.onOtherEvent(DropTablePreEvent("db1", "tbl2"))
-    tracker.onOtherEvent(DropTableEvent("db1", "tbl2"))
+    processor.pushEvent(DropTablePreEvent("db1", "tbl2"))
+    processor.pushEvent(DropTableEvent("db1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.deleteEntityCall(tracker.tableType(isHiveTbl)) == 1)
+      assert(atlasClient.deleteEntityCall(processor.tableType(isHiveTbl)) == 1)
     }
   }
 }
