@@ -72,7 +72,7 @@ abstract class AbstractEventProcessor[T: ClassTag] extends Logging {
           stopped = true
 
         case NonFatal(f) =>
-          logWarn(s"Caught exception during parsing catalog event", f)
+          logWarn(s"Caught exception during parsing event", f)
       }
     }
   }

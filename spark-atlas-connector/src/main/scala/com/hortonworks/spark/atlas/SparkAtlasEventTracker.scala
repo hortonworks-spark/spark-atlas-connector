@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
 import com.hortonworks.spark.atlas.sql._
+import com.hortonworks.spark.atlas.ml.MLPipelineEventProcessor
 import com.hortonworks.spark.atlas.types.SparkAtlasModel
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -58,6 +59,9 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   private val executionPlanTracker = new SparkExecutionPlanProcessor(atlasClient, atlasClientConf)
   executionPlanTracker.startThread()
 
+  private val mlEventTracker = new MLPipelineEventProcessor(atlasClient, atlasClientConf)
+  mlEventTracker.startThread()
+
   private val executionId = new AtomicLong(0L)
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
@@ -69,6 +73,8 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
     // We only care about SQL related events.
     event match {
       case e: ExternalCatalogEvent => catalogEventTracker.pushEvent(e)
+      case e: SparkListenerEvent if e.getClass.getName.contains("org.apache.spark.ml") =>
+        mlEventTracker.pushEvent(e)
       case _ => // Ignore other events
     }
   }
