@@ -86,7 +86,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
         // create process entity
         val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities,outputTableEntities, logMap)
+          inputTablesEntities, outputTableEntities, logMap)
 
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
       }

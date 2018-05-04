@@ -133,7 +133,8 @@ class MLPipelineEventProcessor(
             List(modelEntity))
 
           // TODO add more information
-          val logMap = Map("sparkPlanDescription" -> ("Spark ML training model with pipeline uid: " + pipeline.uid))
+          val logMap = Map("sparkPlanDescription" ->
+            ("Spark ML training model with pipeline uid: " + pipeline.uid))
 
           val processEntity = internal.etlProcessToEntity(
             List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
