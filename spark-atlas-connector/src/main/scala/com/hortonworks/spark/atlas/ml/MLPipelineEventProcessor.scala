@@ -17,20 +17,19 @@
 
 package com.hortonworks.spark.atlas.ml
 
-import scala.collection.mutable
 import org.apache.atlas.model.instance.AtlasEntity
+
 import org.apache.spark.ml._
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.catalyst.plans.logical.View
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+
 import com.hortonworks.spark.atlas._
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
-import com.hortonworks.spark.atlas.utils.CatalogUtils
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.plans.logical.View
 
 class MLPipelineEventProcessor(
   private[atlas] val atlasClient: AtlasClient,
@@ -105,10 +104,10 @@ class MLPipelineEventProcessor(
           val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
           atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
 
-          val trainingdata = internal.cachedObjects(s"${pipeline.uid}_traindata")
+          val trainData = internal.cachedObjects(s"${pipeline.uid}_traindata")
             .asInstanceOf[Dataset[_]]
 
-          val logicalPlan = trainingdata.queryExecution.analyzed
+          val logicalPlan = trainData.queryExecution.analyzed
           var isFiles = false
           val tableEntities = logicalPlan.collectLeaves().map {
             case r: HiveTableRelation => tableToEntities(r.tableMeta)
@@ -132,9 +131,8 @@ class MLPipelineEventProcessor(
             List(pipelineEntity, tableEntities.head.head),
             List(modelEntity))
 
-          // TODO add more information
           val logMap = Map("sparkPlanDescription" ->
-            ("Spark ML training model with pipeline uid: " + pipeline.uid))
+            (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
 
           val processEntity = internal.etlProcessToEntity(
             List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
@@ -143,8 +141,7 @@ class MLPipelineEventProcessor(
             ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
 
           internal.cachedObjects.put("fit_process", uid)
-
-          logInfo(s"Created pipeline fitEntity " + fitEntity.getGuid)
+          logInfo(s"Created pipeline fitEntity: ${fitEntity.getGuid}")
         }
 
       case name if name.contains("LoadModelEvent") =>
@@ -167,26 +164,10 @@ class MLPipelineEventProcessor(
         modeF.setAccessible(true)
         val model = modeF.get(e).asInstanceOf[PipelineModel]
         val uid = model.uid
-
-        logInfo(s"Cache for TransformEvent " + uid)
-
+        logInfo(s"Cache for TransformEvent $uid")
       case _ =>
         logInfo(s"ML tracker does not support for other events")
     }
   }
 
-  // Return table related entities as a Sequence.
-  // The first one is table entity, followed by
-  // db entity, storage entity and schema entities.
-  def getTableEntities(tableName: String): Seq[AtlasEntity] = {
-    val dbDefinition = CatalogUtils.createDB("db1", "hdfs:///test/db/db1")
-    val sd = CatalogUtils.createStorageFormat()
-    val schema = new StructType()
-      .add("user", StringType, false)
-      .add("age", IntegerType, true)
-    val tableDefinition = CatalogUtils.createTable("db1", s"$tableName", schema, sd)
-    val tableEntities = internal.sparkTableToEntities(tableDefinition, Some(dbDefinition))
-
-    tableEntities
-  }
 }

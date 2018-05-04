@@ -22,6 +22,7 @@ import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
 import org.apache.atlas.model.instance.AtlasEntity
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -31,6 +32,7 @@ import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectComm
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
+
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
@@ -66,37 +68,25 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       // new table entity
       val outputEntities = tableToEntities(node.table)
-
-
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-
       } else {
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
-
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
       }
-
     }
   }
 
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
     override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail)
-    : Seq[AtlasEntity] = {
+        : Seq[AtlasEntity] = {
       // source tables/files entities
       val tChildren = node.query.collectLeaves()
       var isFiles = false
@@ -112,7 +102,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             case _ => Seq.empty
           }
         case local: LocalRelation =>
-          logInfo("Local Relation")
+          logInfo("Local Relation to store Spark ML pipelineModel")
           Seq.empty
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
@@ -125,26 +115,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // new table/file entity
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
         List(external.pathToEntity(node.outputPath.toUri.toString)))
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-
       } else {
         val processEntity = internal.etlProcessToEntity(
           inputTablesEntities, List(outputEntities.head), logMap)
-
           Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
         }
-
     }
   }
 
@@ -176,28 +156,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
-
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
       }
-
     }
   }
 
@@ -221,29 +191,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = tableToEntities(node.table)
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
-
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-
       }
-
     }
   }
 
@@ -251,27 +210,17 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(List(pathEntity), outputEntities, logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           List(pathEntity), List(outputEntities.head), logMap)
-
         Seq(pEntity, pathEntity) ++ outputEntities
-
       }
     }
   }
@@ -301,28 +250,17 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
-
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputs, List(destEntity), logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputs, List(destEntity), logMap)
-
         Seq(pEntity, destEntity) ++ inputsEntities.flatten
-
       }
     }
   }
@@ -341,29 +279,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTableEntity = List(inputEntities.head)
       val outputTableEntity = List(outputEntities.head)
-
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTableEntity, outputTableEntity, logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputTableEntity, outputTableEntity, logMap)
-
         Seq(pEntity) ++ inputEntities ++ outputEntities
       }
-
     }
   }
 
@@ -409,27 +336,17 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = outputEntities.toList
-
-      val logMap = Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+      val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-
         internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
-
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
           inputTablesEntities, outputTableEntities, logMap)
-
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-
       }
     }
   }
@@ -455,5 +372,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       logWarn(s"Class $maybeClazz is not found")
       Seq.empty
     }
+  }
+
+  private def getPlanInfo(qd: QueryDetail): Map[String, String] = {
+    Map("executionId" -> qd.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+      "executionTime" -> qd.executionTime.toString,
+      "details" -> qd.qe.toString(),
+      "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
   }
 }
