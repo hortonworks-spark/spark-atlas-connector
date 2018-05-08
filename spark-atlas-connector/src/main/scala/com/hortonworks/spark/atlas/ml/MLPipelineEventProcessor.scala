@@ -125,12 +125,6 @@ class MLPipelineEventProcessor(
               Seq.empty
           }
 
-          val fitEntity = internal.mlFitProcessToEntity(
-            pipeline,
-            pipelineEntity,
-            List(pipelineEntity, tableEntities.head.head),
-            List(modelEntity))
-
           val logMap = Map("sparkPlanDescription" ->
             (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
 
@@ -140,8 +134,8 @@ class MLPipelineEventProcessor(
           atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
             ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
 
-          internal.cachedObjects.put("fit_process", uid)
-          logInfo(s"Created pipeline fitEntity: ${fitEntity.getGuid}")
+          internal.cachedObjects.put("fit_process", processEntity.getGuid)
+          logInfo(s"Created pipeline fitEntity: ${processEntity.getGuid}")
         }
 
       case name if name.contains("LoadModelEvent") =>
@@ -164,6 +158,7 @@ class MLPipelineEventProcessor(
         modeF.setAccessible(true)
         val model = modeF.get(e).asInstanceOf[PipelineModel]
         val uid = model.uid
+        internal.cachedObjects.put("model_uid", uid)
         logInfo(s"Cache for TransformEvent $uid")
       case _ =>
         logInfo(s"ML tracker does not support for other events")

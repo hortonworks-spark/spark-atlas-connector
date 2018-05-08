@@ -256,7 +256,7 @@ object internal extends Logging {
       val processEntity = internal.etlProcessToEntity(
         List(inputs.head), List(outputs.head), logMap)
 
-      (Seq(modelDirEntity, modelEntity, processEntity)
+      (Seq(processEntity, modelDirEntity, modelEntity)
         ++ inputs ++ outputs)
     } else {
       val new_inputs = List(inputs.head, modelDirEntity, modelEntity)
@@ -265,7 +265,7 @@ object internal extends Logging {
       val processEntity = internal.etlProcessToEntity(
         new_inputs, List(outputs.head), logMap)
 
-      (Seq(modelDirEntity, modelEntity, processEntity)
+      (Seq(processEntity, modelDirEntity, modelEntity)
         ++ new_inputs ++ outputs)
     }
   }
