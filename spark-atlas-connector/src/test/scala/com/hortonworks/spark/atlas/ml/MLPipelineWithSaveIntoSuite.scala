@@ -42,8 +42,8 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with Befo
 
   private var sparkSession: SparkSession = _
 
-  private val dataDir1 = "/target/dir1/orc/"
-  private val dataDir2 = "/target/dir2/orc/"
+  private val dataDir1 = "target/dir1/orc/"
+  private val dataDir2 = "target/dir2/orc/"
   private val destinationSparkTblName = "destination_s_" + Random.nextInt(100000)
   private val destinationSparkTblName2 = "destination_s_" + Random.nextInt(100000)
   private val sourceSparkTblName = "source_s_" + Random.nextInt(100000)
