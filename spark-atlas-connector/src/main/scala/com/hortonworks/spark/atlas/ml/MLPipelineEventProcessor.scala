@@ -129,7 +129,8 @@ class MLPipelineEventProcessor(
             (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
 
           val processEntity = internal.etlProcessToEntity(
-            List(pipelineEntity, tableEntities.head.head), List(modelEntity), logMap)
+            List(pipelineEntity, tableEntities.head.head),
+            List(modelEntity, modelDirEntity, pipelineDirEntity), logMap)
 
           atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
             ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
