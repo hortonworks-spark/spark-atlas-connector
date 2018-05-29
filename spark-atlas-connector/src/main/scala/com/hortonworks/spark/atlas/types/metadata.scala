@@ -33,6 +33,7 @@ object metadata {
   val ML_DIRECTORY_TYPE_STRING = "spark_ml_directory"
   val ML_PIPELINE_TYPE_STRING = "spark_ml_pipeline"
   val ML_MODEL_TYPE_STRING = "spark_ml_model"
+  val PROCESS_ETL_TYPE_STRING = "spark_etl_process"
   val ML_FIT_PROCESS_TYPE_STRING = "spark_ml_fit_process"
   val ML_TRANSFORM_PROCESS_TYPE_STRING = "spark_ml_transform_process"
 
@@ -127,12 +128,12 @@ object metadata {
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("executionId", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("sparkPlanDescription", new AtlasStringType))
+    AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 
   // ========== ML directory type ==========
   val ML_DIRECTORY_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -196,4 +197,19 @@ object metadata {
 //    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
+
+  // ========== ML Process type ==========
+  val ETL_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
+    PROCESS_ETL_TYPE_STRING,
+    "",
+    METADATA_VERSION,
+    ImmutableSet.of("Process"),
+    AtlasTypeUtil.createUniqueRequiredAttrDef(
+      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 }

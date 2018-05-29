@@ -21,20 +21,20 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-
 import org.apache.atlas.model.instance.AtlasEntity
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, CreateDataSourceTableAsSelectCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{SaveIntoDataSourceCommand, LogicalRelation, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateViewCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
 
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
@@ -68,13 +68,19 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       // new table entity
       val outputEntities = tableToEntities(node.table)
-
-      // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      val logMap = getPlanInfo(qd)
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+      } else {
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
     }
   }
 
@@ -95,22 +101,30 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
             case _ => Seq.empty
           }
+        case local: LocalRelation =>
+          logInfo("Local Relation to store Spark ML pipelineModel")
+          Seq.empty
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
       }
 
+      val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
+      else inputsEntities.flatMap(_.headOption).toList
+
       // new table/file entity
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
         List(external.pathToEntity(node.outputPath.toUri.toString)))
+      val logMap = getPlanInfo(qd)
 
-      // create process entity
-      val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
-        else inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+      } else {
+        val processEntity = internal.etlProcessToEntity(
+          inputTablesEntities, List(outputEntities.head), logMap)
+          Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
+        }
     }
   }
 
@@ -142,9 +156,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      val logMap = getPlanInfo(qd)
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
     }
   }
 
@@ -168,10 +191,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val outputEntities = tableToEntities(node.table)
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
+      val logMap = getPlanInfo(qd)
 
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
     }
   }
 
@@ -179,9 +210,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       val pathEntity = external.pathToEntity(node.path)
       val outputEntities = prepareEntities(node.table)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, List(pathEntity),
-        List(outputEntities.head), qd.query)
-      Seq(pEntity, pathEntity) ++ outputEntities
+      val logMap = getPlanInfo(qd)
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(List(pathEntity), outputEntities, logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          List(pathEntity), List(outputEntities.head), logMap)
+        Seq(pEntity, pathEntity) ++ outputEntities
+      }
     }
   }
 
@@ -210,9 +250,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
-      val pEntity = processToEntity(
-        qd.qe, qd.executionId, qd.executionTime, inputs, List(destEntity), qd.query)
-      Seq(pEntity, destEntity) ++ inputsEntities.flatten
+      val logMap = getPlanInfo(qd)
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputs, List(destEntity), logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputs, List(destEntity), logMap)
+        Seq(pEntity, destEntity) ++ inputsEntities.flatten
+      }
     }
   }
 
@@ -230,10 +279,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTableEntity = List(inputEntities.head)
       val outputTableEntity = List(outputEntities.head)
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTableEntity,
-        outputTableEntity, qd.query)
+      val logMap = getPlanInfo(qd)
 
-      Seq(pEntity) ++ inputEntities ++ outputEntities
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTableEntity, outputTableEntity, logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTableEntity, outputTableEntity, logMap)
+        Seq(pEntity) ++ inputEntities ++ outputEntities
+      }
     }
   }
 
@@ -279,9 +336,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = outputEntities.toList
-      val pEntity = processToEntity(qd.qe, qd.executionId, qd.executionTime, inputTablesEntities,
-        outputTableEntities, qd.query)
-      Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      val logMap = getPlanInfo(qd)
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
+      } else {
+
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
     }
   }
 
@@ -306,5 +372,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       logWarn(s"Class $maybeClazz is not found")
       Seq.empty
     }
+  }
+
+  private def getPlanInfo(qd: QueryDetail): Map[String, String] = {
+    Map("executionId" -> qd.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+      "executionTime" -> qd.executionTime.toString,
+      "details" -> qd.qe.toString(),
+      "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
   }
 }

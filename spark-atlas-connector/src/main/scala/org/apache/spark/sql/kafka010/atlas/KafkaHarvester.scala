@@ -18,16 +18,14 @@
 package org.apache.spark.sql.kafka010.atlas
 
 import scala.collection.mutable.ListBuffer
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.kafka010.{KafkaSourceRDDPartition, KafkaStreamWriter}
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
-import com.hortonworks.spark.atlas.utils.Logging
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
+import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
@@ -80,8 +78,28 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
 
     val inputTablesEntities = inputsEntities.toList
     val outputTableEntities = outputEntities.toList
-    val pEntity = processToEntity(qd.qe, pDescription.toString().hashCode,
-      qd.executionTime, inputTablesEntities, outputTableEntities, Option(pDescription.toString()))
-    Seq(pEntity) ++ inputsEntities ++ outputEntities
+
+    val logMap = Map(
+      "executionId" -> qd.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+      "executionTime" -> qd.executionTime.toString,
+      "details" -> qd.qe.toString(),
+      "sparkPlanDescription" -> pDescription.toString())
+
+    // ml related cached object
+    if (internal.cachedObjects.contains("model_uid")) {
+
+      internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+
+    } else {
+
+      // create process entity
+      val pEntity = internal.etlProcessToEntity(
+        inputTablesEntities, outputTableEntities, logMap)
+
+      Seq(pEntity) ++ inputsEntities ++ outputEntities
+
+    }
+
   }
 }
