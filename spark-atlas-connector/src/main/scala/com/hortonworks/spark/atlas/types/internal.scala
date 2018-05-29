@@ -17,10 +17,12 @@
 
 package com.hortonworks.spark.atlas.types
 
+import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
+
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
@@ -29,6 +31,8 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object internal extends Logging {
+
+  val cachedObjects = new mutable.HashMap[String, Object]
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
@@ -216,5 +220,53 @@ object internal extends Logging {
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
     entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
     entity
+  }
+
+  def etlProcessToEntity(
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity],
+      logMap: Map[String, String]): AtlasEntity = {
+    val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
+
+    val appId = SparkUtils.sparkSession.sparkContext.applicationId
+    val appName = SparkUtils.sparkSession.sparkContext.appName
+    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, appId)
+    entity.setAttribute("name", appName)
+    entity.setAttribute("currUser", SparkUtils.currUser())
+    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
+    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
+    logMap.foreach { case (k, v) => entity.setAttribute(k, v)}
+    entity
+  }
+
+  def updateMLProcessToEntity(
+      inputs: Seq[AtlasEntity],
+      outputs: Seq[AtlasEntity],
+      logMap: Map[String, String]): Seq[AtlasEntity] = {
+
+    val model_uid = internal.cachedObjects("model_uid").asInstanceOf[String]
+    val modelEntity = internal.cachedObjects(s"${model_uid}_modelEntity").
+      asInstanceOf[AtlasEntity]
+    val modelDirEntity = internal.cachedObjects(s"${model_uid}_modelDirEntity").
+      asInstanceOf[AtlasEntity]
+
+    if (internal.cachedObjects.contains("fit_process")) {
+
+      // spark ml fit process
+      val processEntity = internal.etlProcessToEntity(
+        List(inputs.head), List(outputs.head), logMap)
+
+      (Seq(processEntity, modelDirEntity, modelEntity)
+        ++ inputs ++ outputs)
+    } else {
+      val new_inputs = List(inputs.head, modelDirEntity, modelEntity)
+
+      // spark ml fit and score process
+      val processEntity = internal.etlProcessToEntity(
+        new_inputs, List(outputs.head), logMap)
+
+      (Seq(processEntity, modelDirEntity, modelEntity)
+        ++ new_inputs ++ outputs)
+    }
   }
 }

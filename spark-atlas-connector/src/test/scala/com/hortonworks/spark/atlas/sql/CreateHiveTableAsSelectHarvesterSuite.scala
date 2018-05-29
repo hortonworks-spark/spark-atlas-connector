@@ -82,7 +82,7 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
+      sparkSession.sparkContext.applicationId)
     pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
@@ -122,7 +122,7 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
+      sparkSession.sparkContext.applicationId )
     pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
@@ -160,7 +160,7 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
+      sparkSession.sparkContext.applicationId)
     pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
@@ -198,7 +198,7 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val pEntity = entities.head
 
     pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".0")
+     sparkSession.sparkContext.applicationId)
     pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
