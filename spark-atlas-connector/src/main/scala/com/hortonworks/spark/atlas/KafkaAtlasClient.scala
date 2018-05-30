@@ -20,14 +20,14 @@ package com.hortonworks.spark.atlas
 import java.util
 
 import scala.collection.JavaConverters._
-
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.hook.AtlasHook
 import org.apache.atlas.model.typedef.AtlasTypesDef
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.atlas.notification.hook.HookNotification
-import org.apache.atlas.typesystem.Referenceable
-
+import org.apache.atlas.v1.model.notification.HookNotificationV1
+import org.apache.atlas.v1.model.notification.HookNotificationV1.{EntityCreateRequest, EntityDeleteRequest}
+import org.apache.atlas.v1.model.instance.Referenceable
+import org.apache.atlas.model.notification.HookNotification
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with AtlasClient {
@@ -50,8 +50,8 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
 
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     val createRequests = entities.map { e =>
-      new HookNotification.EntityCreateRequest(
-        SparkUtils.currUser(), entityToReferenceable(e)): HookNotification.HookNotificationMessage
+      new EntityCreateRequest(
+        SparkUtils.currUser(), entityToReferenceable(e)): HookNotification
     }.toList.asJava
 
     notifyEntities(createRequests)
@@ -60,11 +60,11 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
   override protected def doDeleteEntityWithUniqueAttr(
       entityType: String,
       attribute: String): Unit = {
-    val deleteRequest = List(new HookNotification.EntityDeleteRequest(
+    val deleteRequest = List(new EntityDeleteRequest(
       SparkUtils.currUser(),
       entityType,
       org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      attribute): HookNotification.HookNotificationMessage)
+      attribute): HookNotification)
     notifyEntities(deleteRequest.asJava)
   }
 
@@ -73,12 +73,12 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
       attribute: String,
       entity: AtlasEntity): Unit = {
     val partialUpdateRequest = List(
-      new HookNotification.EntityPartialUpdateRequest(
+      new HookNotificationV1.EntityPartialUpdateRequest(
         SparkUtils.currUser(),
         entityType,
         org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
         attribute,
-        entityToReferenceable(entity)): HookNotification.HookNotificationMessage)
+        entityToReferenceable(entity)): HookNotification)
     notifyEntities(partialUpdateRequest.asJava)
   }
 
