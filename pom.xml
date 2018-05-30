@@ -340,7 +340,6 @@
                 <goal>shade</goal>
               </goals>
               <configuration>
-                <shadedArtifactAttached>true</shadedArtifactAttached>
                 <artifactSet>
                   <excludes>
                     <exclude>org.apache.hadoop:*</exclude>
