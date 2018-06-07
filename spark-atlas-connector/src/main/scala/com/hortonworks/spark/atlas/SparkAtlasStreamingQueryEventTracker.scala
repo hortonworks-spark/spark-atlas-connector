@@ -18,15 +18,15 @@
 package com.hortonworks.spark.atlas
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-
 import com.hortonworks.spark.atlas.sql.SparkStreamingQueryEventProcessor
 import com.hortonworks.spark.atlas.utils.Logging
+import org.apache.spark.SparkConf
 
 class SparkAtlasStreamingQueryEventTracker
-        (atlasClient: AtlasClient,
+        (sparkConf: SparkConf,
+         atlasClient: AtlasClient,
          atlasClientConf: AtlasClientConf)
   extends StreamingQueryListener with Logging {
 
