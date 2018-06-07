@@ -42,13 +42,13 @@ class SparkAtlasStreamingQueryEventTracker
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {
     logInfo(s"Track running Spark Streaming query in the Spark Atlas: $event")
-    if(!streamQueryHashset.contains(event.progress.id)) {
+    if(!streamQueryHashset.contains(event.progress.runId)) {
       streamingQueryTracker.pushEvent(event)
     }
   }
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
-    streamQueryHashset.remove(event.id)
+    streamQueryHashset.remove(event.runId)
     logDebug(s"Tack Spark Streaming query in the Spark Atlas Terminated: $event")
   }
 }
