@@ -1,0 +1,411 @@
+diff --git a/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala b/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala
+new file mode 100755
+index 0000000..956df6c
+--- /dev/null
++++ b/mllib/src/main/scala/org/apache/spark/ml/MLListener.scala
+@@ -0,0 +1,55 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to You under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ *    http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.apache.spark.ml
++
++import org.apache.spark.SparkContext
++import org.apache.spark.annotation.DeveloperApi
++import org.apache.spark.scheduler.SparkListenerEvent
++import org.apache.spark.sql.Dataset
++
++
++/**
++ * :: DeveloperApi ::
++ * Base trait for events related to MLListener
++ */
++@DeveloperApi
++sealed trait MLListenEvent extends SparkListenerEvent
++
++/**
++ * Listener interface for Spark ML events.
++ */
++trait MLListener {
++  def onEvent(event: MLListenEvent): Unit = {
++    // SparkContext.getOrCreate().listenerBus.post(event)
++  }
++}
++
++@DeveloperApi
++case class CreatePipelineEvent(pipeline: Pipeline, dataset: Dataset[_]) extends MLListenEvent
++
++@DeveloperApi
++case class CreateModelEvent(model: PipelineModel) extends MLListenEvent
++
++@DeveloperApi
++case class SavePipelineEvent(uid: String, directory: String) extends MLListenEvent
++
++@DeveloperApi
++case class SaveModelEvent(uid: String, directory: String) extends MLListenEvent
++
++@DeveloperApi
++case class TransformEvent(model: PipelineModel, dataset: Dataset[_]) extends MLListenEvent
+diff --git a/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala b/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
+index 103082b..729c6b9 100644
+--- a/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
++++ b/mllib/src/main/scala/org/apache/spark/ml/Pipeline.scala
+@@ -21,25 +21,27 @@ import java.{util => ju}
+ 
+ import scala.collection.JavaConverters._
+ import scala.collection.mutable.ListBuffer
+-
+ import org.apache.hadoop.fs.Path
+ import org.json4s._
+ import org.json4s.jackson.JsonMethods._
+-
+ import org.apache.spark.SparkContext
+ import org.apache.spark.annotation.{DeveloperApi, Since}
+ import org.apache.spark.internal.Logging
++import org.apache.spark.ml.Pipeline.PipelineWriter
++import org.apache.spark.ml.PipelineModel.PipelineModelWriter
+ import org.apache.spark.ml.param.{Param, ParamMap, Params}
+ import org.apache.spark.ml.util._
+ import org.apache.spark.sql.{DataFrame, Dataset}
+ import org.apache.spark.sql.types.StructType
++import org.apache.spark.util.{ListenerBus, SystemClock}
+ 
+ /**
+  * :: DeveloperApi ::
+  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
+  */
+ @DeveloperApi
+-abstract class PipelineStage extends Params with Logging {
++abstract class PipelineStage extends Params with Logging with
++  ListenerBus[MLListener, MLListenEvent]{
+ 
+   /**
+    * :: DeveloperApi ::
+@@ -79,6 +81,12 @@ abstract class PipelineStage extends Params with Logging {
+   }
+ 
+   override def copy(extra: ParamMap): PipelineStage
++
++  override protected def doPostEvent(
++	listener: MLListener,
++	event: MLListenEvent): Unit = {
++    listener.onEvent(event)
++  }
+ }
+ 
+ /**
+@@ -165,8 +173,15 @@ class Pipeline @Since("1.4.0") (
+         transformers += stage.asInstanceOf[Transformer]
+       }
+     }
+-
+-    new PipelineModel(uid, transformers.toArray).setParent(this)
++    val model = new PipelineModel(uid, transformers.toArray).setParent(this)
++    this.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        SparkContext.getOrCreate().listenerBus.post(event)
++      }
++    })
++    postToAll(CreatePipelineEvent(this, dataset))
++    postToAll(CreateModelEvent(model))
++    model
+   }
+ 
+   @Since("1.4.0")
+@@ -185,7 +200,7 @@ class Pipeline @Since("1.4.0") (
+   }
+ 
+   @Since("1.6.0")
+-  override def write: MLWriter = new Pipeline.PipelineWriter(this)
++  override def write: PipelineWriter = new Pipeline.PipelineWriter(this)
+ }
+ 
+ @Since("1.6.0")
+@@ -197,12 +212,24 @@ object Pipeline extends MLReadable[Pipeline] {
+   @Since("1.6.0")
+   override def load(path: String): Pipeline = super.load(path)
+ 
+-  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter {
++  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter with
++     ListenerBus[MLListener, MLListenEvent]{
+ 
+     SharedReadWrite.validateStages(instance.getStages)
+ 
+-    override protected def saveImpl(path: String): Unit =
++    override protected def saveImpl(path: String): Unit = {
+       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
++      this.addListener(new MLListener {
++        override def onEvent(event: MLListenEvent): Unit = {
++          SparkContext.getOrCreate().listenerBus.post(event)
++        }
++      })
++      postToAll(SavePipelineEvent(instance.uid, path))
++    }
++
++    override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
++      listener.onEvent(event)
++    }
+   }
+ 
+   private class PipelineReader extends MLReader[Pipeline] {
+@@ -303,7 +330,14 @@ class PipelineModel private[ml] (
+   @Since("2.0.0")
+   override def transform(dataset: Dataset[_]): DataFrame = {
+     transformSchema(dataset.schema, logging = true)
+-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
++    val result = stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
++    this.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        SparkContext.getOrCreate().listenerBus.post(event)
++      }
++    })
++    postToAll(TransformEvent(this, dataset))
++    result
+   }
+ 
+   @Since("1.2.0")
+@@ -317,7 +351,7 @@ class PipelineModel private[ml] (
+   }
+ 
+   @Since("1.6.0")
+-  override def write: MLWriter = new PipelineModel.PipelineModelWriter(this)
++  override def write: PipelineModelWriter = new PipelineModel.PipelineModelWriter(this)
+ }
+ 
+ @Since("1.6.0")
+@@ -331,12 +365,25 @@ object PipelineModel extends MLReadable[PipelineModel] {
+   @Since("1.6.0")
+   override def load(path: String): PipelineModel = super.load(path)
+ 
+-  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
++  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter with
++      ListenerBus[MLListener, MLListenEvent] {
+ 
+     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
+ 
+-    override protected def saveImpl(path: String): Unit = SharedReadWrite.saveImpl(instance,
+-      instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
++    override protected def saveImpl(path: String): Unit = {
++      SharedReadWrite.saveImpl(instance,
++        instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
++      this.addListener(new MLListener {
++        override def onEvent(event: MLListenEvent): Unit = {
++          SparkContext.getOrCreate().listenerBus.post(event)
++        }
++      })
++      postToAll(SaveModelEvent(instance.uid, path))
++    }
++
++    override protected def doPostEvent(listener: MLListener, event: MLListenEvent): Unit = {
++      listener.onEvent(event)
++    }
+   }
+ 
+   private class PipelineModelReader extends MLReader[PipelineModel] {
+diff --git a/mllib/src/test/scala/org/apache/spark/ml/PipelineSuite.scala b/mllib/src/test/scala/org/apache/spark/ml/PipelineSuite.scala
+index 7848eae..d054872 100644
+--- a/mllib/src/test/scala/org/apache/spark/ml/PipelineSuite.scala
++++ b/mllib/src/test/scala/org/apache/spark/ml/PipelineSuite.scala
+@@ -18,6 +18,7 @@
+ package org.apache.spark.ml
+ 
+ import scala.collection.JavaConverters._
++import scala.collection.mutable
+ 
+ import org.apache.hadoop.fs.Path
+ import org.mockito.Matchers.{any, eq => meq}
+@@ -91,6 +92,67 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
+     assert(output.eq(dataset4))
+   }
+ 
++  def testWithPipeline(name: String)(f: (
++    DataFrame, Pipeline, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
++    val estimator0 = mock[Estimator[MyModel]]
++    val model0 = mock[MyModel]
++    val transformer1 = mock[Transformer]
++    val estimator2 = mock[Estimator[MyModel]]
++    val model2 = mock[MyModel]
++    val transformer3 = mock[Transformer]
++
++    when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
++    when(model0.copy(any[ParamMap])).thenReturn(model0)
++    when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
++    when(estimator2.copy(any[ParamMap])).thenReturn(estimator2)
++    when(model2.copy(any[ParamMap])).thenReturn(model2)
++    when(transformer3.copy(any[ParamMap])).thenReturn(transformer3)
++
++    val dataset0 = mock[DataFrame]
++    val dataset1 = mock[DataFrame]
++    val dataset2 = mock[DataFrame]
++    val dataset3 = mock[DataFrame]
++    val dataset4 = mock[DataFrame]
++
++    when(dataset0.toDF).thenReturn(dataset0)
++    when(dataset1.toDF).thenReturn(dataset1)
++    when(dataset2.toDF).thenReturn(dataset2)
++    when(dataset3.toDF).thenReturn(dataset3)
++    when(dataset4.toDF).thenReturn(dataset4)
++
++    when(estimator0.fit(meq(dataset0))).thenReturn(model0)
++    when(model0.transform(meq(dataset0))).thenReturn(dataset1)
++    when(model0.parent).thenReturn(estimator0)
++    when(transformer1.transform(meq(dataset1))).thenReturn(dataset2)
++    when(estimator2.fit(meq(dataset2))).thenReturn(model2)
++    when(model2.transform(meq(dataset2))).thenReturn(dataset3)
++    when(model2.parent).thenReturn(estimator2)
++    when(transformer3.transform(meq(dataset3))).thenReturn(dataset4)
++
++    val recorder = mutable.Buffer.empty[MLListenEvent]
++
++    val pipeline = new Pipeline()
++      .setStages(Array(estimator0, transformer1, estimator2, transformer3))
++
++    pipeline.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        recorder += event
++      }
++    })
++    f(dataset0, pipeline, (expected: Seq[MLListenEvent]) => {
++      val actual = recorder.clone()
++      recorder.clear()
++      assert(expected === actual)
++    })
++  }
++
++  testWithPipeline("pipelineJobTracker") { (df, newPipeline, checkEvents) =>
++    val pipelineModel = newPipeline.fit(df)
++
++    checkEvents(CreatePipelineEvent(newPipeline, df) :: CreateModelEvent(
++      pipelineModel) :: Nil)
++  }
++
+   test("pipeline with duplicate stages") {
+     val estimator = mock[Estimator[MyModel]]
+     val pipeline = new Pipeline()
+@@ -128,6 +190,38 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
+       "copy should create an instance with the same parent")
+   }
+ 
++  def testWithPipelineModel(name: String)(f: (
++    DataFrame, PipelineModel, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
++    val dataset0 = mock[DataFrame]
++
++    when(dataset0.toDF).thenReturn(dataset0)
++    val transform0 = mock[Transformer]
++    val model1 = mock[MyModel]
++    val transform1 = mock[Transformer]
++
++    val stages = Array(transform0, model1, transform1)
++    val newPipelineModel = new PipelineModel("pipeline0", stages)
++    val recorder = mutable.Buffer.empty[MLListenEvent]
++
++    newPipelineModel.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        recorder += event
++      }
++    })
++
++    f(dataset0, newPipelineModel, (expected: Seq[MLListenEvent]) => {
++      val actual = recorder.clone()
++      recorder.clear()
++      assert(expected === actual)
++    })
++  }
++
++  testWithPipelineModel(
++    "pipeline model transform tracker") { (df, newPipelineModel, checkEvents) =>
++    val output = newPipelineModel.transform(df)
++    checkEvents(TransformEvent(newPipelineModel, df) :: Nil)
++  }
++
+   test("pipeline model constructors") {
+     val transform0 = mock[Transformer]
+     val model1 = mock[MyModel]
+@@ -154,6 +248,36 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
+     assert(writableStage.getIntParam === writableStage2.getIntParam)
+   }
+ 
++  def testWithPipelineReadWrite(name: String)(f: (
++    MLWriter, String, String, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
++    val path = Math.random().toString
++    val writableStage = new WritableStage("writableStage")
++    val newPipeline = new Pipeline().setStages(Array(writableStage))
++    val uid = newPipeline.uid
++    val pipelineWritter = newPipeline.write
++    val recorder = mutable.Buffer.empty[MLListenEvent]
++
++    pipelineWritter.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        recorder += event
++      }
++    })
++
++    f(pipelineWritter, uid, path, (expected: Seq[MLListenEvent]) => {
++      val actual = recorder.clone()
++      recorder.clear()
++      assert(expected === actual)
++    })
++  }
++
++  testWithPipelineReadWrite(
++    "Pipeline read/write tracker") { (pipelineWritter, uid, path, checkEvents) =>
++
++    pipelineWritter.save(path)
++
++    checkEvents(SavePipelineEvent(uid, path) :: Nil)
++  }
++
+   test("Pipeline read/write with non-Writable stage") {
+     val unWritableStage = new UnWritableStage("unwritableStage")
+     val unWritablePipeline = new Pipeline().setStages(Array(unWritableStage))
+@@ -176,6 +300,37 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
+     assert(writableStage.getIntParam === writableStage2.getIntParam)
+   }
+ 
++  def testWithPipelineModelReadWrite(name: String)(f: (
++    MLWriter, String, String, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
++    val path = Math.random().toString
++    val writableStage = new WritableStage("writableStage")
++    val pipelineModel =
++      new PipelineModel("pipeline_89329329", Array(writableStage.asInstanceOf[Transformer]))
++    val uid = pipelineModel.uid
++    val pipelineModelWritter = pipelineModel.write
++    val recorder = mutable.Buffer.empty[MLListenEvent]
++
++    pipelineModelWritter.addListener(new MLListener {
++      override def onEvent(event: MLListenEvent): Unit = {
++        recorder += event
++      }
++    })
++
++    f(pipelineModelWritter, uid, path, (expected: Seq[MLListenEvent]) => {
++      val actual = recorder.clone()
++      recorder.clear()
++      assert(expected === actual)
++    })
++  }
++
++  testWithPipelineModelReadWrite(
++    "PipelineModel read/write tracker") { (pipelineModelWritter, uid, path, checkEvents) =>
++
++    pipelineModelWritter.save(path)
++
++    checkEvents(SaveModelEvent(uid, path) :: Nil)
++  }
++
+   test("PipelineModel read/write: getStagePath") {
+     val stageUid = "myStage"
+     val stagesDir = new Path("pipeline", "stages").toString
