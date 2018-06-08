@@ -22,13 +22,19 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import com.hortonworks.spark.atlas.sql.SparkStreamingQueryEventProcessor
 import com.hortonworks.spark.atlas.utils.Logging
-import org.apache.spark.SparkConf
 
-class SparkAtlasStreamingQueryEventTracker
-        (sparkConf: SparkConf,
-         atlasClient: AtlasClient,
-         atlasClientConf: AtlasClientConf)
+class SparkAtlasStreamingQueryEventTracker(
+	atlasClient: AtlasClient,
+	atlasClientConf: AtlasClientConf)
   extends StreamingQueryListener with Logging {
+
+  def this(atlasClientConf: AtlasClientConf) = {
+    this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
+  }
+
+  def this() {
+    this(new AtlasClientConf)
+  }
 
   private val streamQueryHashset = new mutable.HashSet[java.util.UUID]
 
