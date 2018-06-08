@@ -22,8 +22,7 @@ import com.hortonworks.spark.atlas._
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.execution.streaming.FileStreamSource
-import org.apache.spark.sql.streaming.SourceProgress
+
 
 class SparkStreamingQueryEventProcessor (
       private[atlas] val atlasClient: AtlasClient,
@@ -37,7 +36,7 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
         val begin = s.description.indexOf('[')
         val end = s.description.indexOf(']')
         val path = s.description.substring(begin + 1, end)
-        logDebug(s"record the input path information $path")
+        logDebug(s"record the streaming query sink input path information $path")
         external.pathToEntity(path)
     }
 
@@ -46,13 +45,18 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
       val begin = e.progress.sink.description.indexOf('[')
       val end = e.progress.sink.description.indexOf(']')
       val path = e.progress.sink.description.substring(begin + 1, end)
-      logDebug(s"record the output path information $path")
+      logDebug(s"record the streaming query sink output path information $path")
       outputEntity = external.pathToEntity(path)
+    }
+
+    val pName = e.progress.name match {
+      case name: String => name
+      case _ => "unknown"
     }
 
     val logMap = Map("executionId" -> e.progress.batchId.toString,
       "details" -> e.progress.json,
-      "sparkPlanDescription" -> s"Spark StreamingQueryPorgress ${e.progress.name}")
+      "sparkPlanDescription" -> s"Spark StreamingQueryPorgress ${pName}")
 
     val entities = {
       // ml related cached object
