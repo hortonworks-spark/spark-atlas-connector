@@ -136,15 +136,5 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with BeforeAn
     pathEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       tempFile.toURI.toString)
   }
-
-  test("test for filename") {
-
-    val path = "file:/tmp/test"
-    val pathEntity = external.pathToEntity(path)
-
-    val path2 = "/tmp/test2/"
-    val path2Entity = external.pathToEntity(path2)
-
-  }
 }
 
