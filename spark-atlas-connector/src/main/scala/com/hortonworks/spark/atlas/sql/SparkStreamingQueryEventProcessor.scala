@@ -35,7 +35,6 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
     val outputEntity = external.pathToEntity(sink.description)
 
     val logMap = Map("executionId" -> e.progress.batchId.toString,
-      "executionTime" -> e.progress.timestamp,
       "details" -> e.progress.json,
       "sparkPlanDescription" -> s"Spark StreamingQueryPorgress ${e.progress.name}")
 
