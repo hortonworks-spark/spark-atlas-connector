@@ -37,6 +37,7 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
         val begin = s.description.indexOf('[')
         val end = s.description.indexOf(']')
         val path = s.description.substring(begin + 1, end)
+        logDebug(s"record the input path information $path")
         external.pathToEntity(path)
     }
 
@@ -45,7 +46,8 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
       val begin = e.progress.sink.description.indexOf('[')
       val end = e.progress.sink.description.indexOf(']')
       val path = e.progress.sink.description.substring(begin + 1, end)
-       outputEntity = external.pathToEntity(path)
+      logDebug(s"record the output path information $path")
+      outputEntity = external.pathToEntity(path)
     }
 
     val logMap = Map("executionId" -> e.progress.batchId.toString,
