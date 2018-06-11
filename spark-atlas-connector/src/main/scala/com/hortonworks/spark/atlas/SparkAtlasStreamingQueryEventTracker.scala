@@ -24,8 +24,8 @@ import com.hortonworks.spark.atlas.sql.SparkStreamingQueryEventProcessor
 import com.hortonworks.spark.atlas.utils.Logging
 
 class SparkAtlasStreamingQueryEventTracker(
-	atlasClient: AtlasClient,
-	atlasClientConf: AtlasClientConf)
+     atlasClient: AtlasClient,
+     atlasClientConf: AtlasClientConf)
   extends StreamingQueryListener with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
