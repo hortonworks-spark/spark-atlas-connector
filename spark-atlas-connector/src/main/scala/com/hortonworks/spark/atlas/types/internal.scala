@@ -229,7 +229,10 @@ object internal extends Logging {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
-    val appName = SparkUtils.sparkSession.sparkContext.appName
+    val appName = SparkUtils.sparkSession.sparkContext.appName match {
+      case "Spark shell" => s"Spark Job + $appId"
+      case default => default + s" $appId"
+    }
     entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, appId)
     entity.setAttribute("name", appName)
     entity.setAttribute("currUser", SparkUtils.currUser())
