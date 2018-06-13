@@ -50,6 +50,7 @@ class SparkAtlasStreamingQueryEventTracker(
     logInfo(s"Track running Spark Streaming query in the Spark Atlas: $event")
     if(!streamQueryHashset.contains(event.progress.runId)) {
       streamingQueryTracker.pushEvent(event)
+      streamQueryHashset.add(event.progress.runId)
     }
   }
 
