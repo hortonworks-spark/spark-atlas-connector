@@ -47,6 +47,9 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
       val path = e.progress.sink.description.substring(begin + 1, end)
       logDebug(s"record the streaming query sink output path information $path")
       outputEntity = external.pathToEntity(path)
+    } else if (e.progress.sink.description.contains("ConsoleSinkProvider")) {
+      logInfo(s"do not track the console output as Atlas entity ${e.progress.sink.description}")
+      return
     }
 
     val pName = e.progress.name match {
