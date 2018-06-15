@@ -35,7 +35,7 @@ class MLPipelineEventProcessor(
   private[atlas] val atlasClient: AtlasClient,
     val conf: AtlasClientConf)
   extends AbstractEventProcessor[SparkListenerEvent] with AtlasEntityUtils with Logging {
-  
+
   override def process(e: SparkListenerEvent): Unit = {
     e.getClass.getName match {
       case name if name.contains("CreatePipelineEvent") =>
