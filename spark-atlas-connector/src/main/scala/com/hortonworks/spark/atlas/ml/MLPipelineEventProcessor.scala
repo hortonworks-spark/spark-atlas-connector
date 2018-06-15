@@ -35,9 +35,7 @@ class MLPipelineEventProcessor(
   private[atlas] val atlasClient: AtlasClient,
     val conf: AtlasClientConf)
   extends AbstractEventProcessor[SparkListenerEvent] with AtlasEntityUtils with Logging {
-
-  private val uri = "hdfs://"
-
+  
   override def process(e: SparkListenerEvent): Unit = {
     e.getClass.getName match {
       case name if name.contains("CreatePipelineEvent") =>
@@ -67,7 +65,7 @@ class MLPipelineEventProcessor(
         pathF.setAccessible(true)
         val path = pathF.get(e).asInstanceOf[String]
 
-        val pipelineDirEntity = internal.mlDirectoryToEntity(uri, path)
+        val pipelineDirEntity = external.pathToEntity(path)
         val pipeline = internal.cachedObjects(uid).asInstanceOf[Pipeline]
 
         val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
@@ -91,7 +89,7 @@ class MLPipelineEventProcessor(
         if (! internal.cachedObjects.contains(s"${uid}_pipelineDirEntity")) {
           logInfo(s"Model Entity is already created")
         } else {
-          val modelDirEntity = internal.mlDirectoryToEntity(uri, path)
+          val modelDirEntity = external.pathToEntity(path)
 
           val pipelineDirEntity = internal.cachedObjects(s"${uid}_pipelineDirEntity")
             .asInstanceOf[AtlasEntity]
@@ -148,7 +146,7 @@ class MLPipelineEventProcessor(
         directoryF.setAccessible(true)
         val directory = directoryF.get(e).asInstanceOf[String]
 
-        val modelDirEntity = internal.mlDirectoryToEntity(uri, directory)
+        val modelDirEntity = external.pathToEntity(directory)
         val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
         val uid = model.uid
         internal.cachedObjects.put(s"${uid}_modelDirEntity", modelDirEntity)
