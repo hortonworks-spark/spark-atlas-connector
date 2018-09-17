@@ -36,7 +36,7 @@ object internal extends Logging {
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
-  def sparkDbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
+  def sparkDbToEntities(dbDefinition: CatalogDatabase, owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
     val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
 
@@ -46,6 +46,7 @@ object internal extends Logging {
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("locationUri", pathEntity)
     dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
+    dbEntity.setAttribute("owner", owner)
     Seq(dbEntity, pathEntity)
   }
 
@@ -103,7 +104,7 @@ object internal extends Logging {
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = sparkDbToEntities(dbDefinition)
+    val dbEntities = sparkDbToEntities(dbDefinition, tableDefinition.owner)
     val sdEntities =
       sparkStorageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
     val schemaEntities =
