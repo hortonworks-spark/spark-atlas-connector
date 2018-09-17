@@ -41,9 +41,9 @@ trait AtlasEntityUtils {
 
   def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
     if (SparkUtils.isHiveEnabled()) {
-      external.hiveDbToEntities(dbDefinition, clusterName)
+      external.hiveDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
     } else {
-      internal.sparkDbToEntities(dbDefinition)
+      internal.sparkDbToEntities(dbDefinition, SparkUtils.currUser())
     }
   }
 

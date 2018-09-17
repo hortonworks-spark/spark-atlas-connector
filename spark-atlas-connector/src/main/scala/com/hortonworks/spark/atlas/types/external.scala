@@ -119,7 +119,9 @@ object external {
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
-  def hiveDbToEntities(dbDefinition: CatalogDatabase, cluster: String): Seq[AtlasEntity] = {
+  def hiveDbToEntities(dbDefinition: CatalogDatabase,
+                       cluster: String,
+                       owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
 
     dbEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
@@ -129,6 +131,7 @@ object external {
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
+    dbEntity.setAttribute("owner", owner)
     Seq(dbEntity)
   }
 
@@ -213,7 +216,7 @@ object external {
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = hiveDbToEntities(dbDefinition, cluster)
+    val dbEntities = hiveDbToEntities(dbDefinition, cluster, tableDefinition.owner)
     val sdEntities = hiveStorageDescToEntities(
       tableDefinition.storage, cluster, db, table
       /* isTempTable = false  Spark doesn't support temp table */)
