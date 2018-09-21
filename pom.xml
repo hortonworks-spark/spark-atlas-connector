@@ -162,6 +162,12 @@
       <groupId>org.apache.atlas</groupId>
       <artifactId>atlas-client-v2</artifactId>
       <version>${atlas.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
