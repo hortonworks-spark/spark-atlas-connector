@@ -144,7 +144,7 @@ class SparkCatalogEventProcessor(
             atlasClient.createEntities(schemaEntities)
 
             val tableEntity = new AtlasEntity(tableType(isHiveTbl))
-            tableEntity.setAttribute("schema", schemaEntities.asJava)
+            tableEntity.setAttribute("spark_schema", schemaEntities.asJava)
             atlasClient.updateEntityWithUniqueAttr(
               tableType(isHiveTbl),
               tableUniqueAttribute(db, table, isHiveTbl),

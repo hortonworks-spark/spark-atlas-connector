@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas.types
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.atlas.AtlasClient
+import org.apache.atlas.AtlasClientV2
 import org.apache.atlas.model.instance.AtlasEntity
 
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
@@ -41,7 +41,7 @@ object internal extends Logging {
     val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, sparkDbUniqueAttribute(dbDefinition.name))
+      "qualifiedName", sparkDbUniqueAttribute(dbDefinition.name))
     dbEntity.setAttribute("name", dbDefinition.name)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("locationUri", pathEntity)
@@ -61,7 +61,7 @@ object internal extends Logging {
     val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
     val pathEntity = storageFormat.locationUri.map { u => external.pathToEntity(u.toString) }
 
-    sdEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    sdEntity.setAttribute("qualifiedName",
       sparkStorageFormatUniqueAttribute(db, table))
     pathEntity.foreach { e => sdEntity.setAttribute("locationUri", e) }
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
@@ -83,7 +83,7 @@ object internal extends Logging {
     schema.map { struct =>
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
 
-      entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      entity.setAttribute("qualifiedName",
         sparkColumnUniqueAttribute(db, table, struct.name))
       entity.setAttribute("name", struct.name)
       entity.setAttribute("type", struct.dataType.typeName)
@@ -112,13 +112,13 @@ object internal extends Logging {
 
     val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
-    tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    tblEntity.setAttribute("qualifiedName",
       sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
     tblEntity.setAttribute("database", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("storage", sdEntities.head)
-    tblEntity.setAttribute("schema", schemaEntities.asJava)
+    tblEntity.setAttribute("spark_schema", schemaEntities.asJava)
     tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
@@ -148,8 +148,8 @@ object internal extends Logging {
     val name = query.getOrElse(sparkProcessUniqueAttribute(executionId))
 
     entity.setAttribute(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, sparkProcessUniqueAttribute(executionId))
-    entity.setAttribute(AtlasClient.NAME, name)
+      "qualifiedName", sparkProcessUniqueAttribute(executionId))
+    entity.setAttribute("name", name)
     entity.setAttribute("executionId", executionId)
     entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("remoteUser", SparkUtils.currSessionUser(qe))
@@ -165,7 +165,7 @@ object internal extends Logging {
   def mlDirectoryToEntity(uri: String, directory: String): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_DIRECTORY_TYPE_STRING)
 
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, s"$uri.$directory")
+    entity.setAttribute("qualifiedName", s"$uri.$directory")
     entity.setAttribute("name", s"$uri.$directory")
     entity.setAttribute("uri", uri)
     entity.setAttribute("directory", directory)
@@ -175,7 +175,7 @@ object internal extends Logging {
   def mlPipelineToEntity(pipeline: Pipeline, directory: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_PIPELINE_TYPE_STRING)
 
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, pipeline.uid)
+    entity.setAttribute("qualifiedName", pipeline.uid)
     entity.setAttribute("name", pipeline.uid)
     entity.setAttribute("directory", directory)
     entity
@@ -185,7 +185,7 @@ object internal extends Logging {
     val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
 
     val uid = model.uid.replaceAll("pipeline", "model")
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
     entity
@@ -199,7 +199,7 @@ object internal extends Logging {
     val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
 
     val uid = pipeline.uid.replaceAll("pipeline", "fit_process")
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("pipeline", pipelineEntity)
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Pipeline entity
@@ -215,7 +215,7 @@ object internal extends Logging {
     val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
 
     val uid = model.uid.replaceAll("pipeline", "transform_process")
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uid)
+    entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("model", modelEntity)
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
@@ -234,7 +234,7 @@ object internal extends Logging {
       case "Spark shell" => s"Spark Job + $appId"
       case default => default + s" $appId"
     }
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, appId)
+    entity.setAttribute("qualifiedName", appId)
     entity.setAttribute("name", appName)
     entity.setAttribute("currUser", SparkUtils.currUser())
     entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
