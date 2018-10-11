@@ -191,38 +191,6 @@ object internal extends Logging {
     entity
   }
 
-  def mlFitProcessToEntity(
-      pipeline: Pipeline,
-      pipelineEntity: AtlasEntity,
-      inputs: List[AtlasEntity],
-      outputs: List[AtlasEntity]): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.ML_FIT_PROCESS_TYPE_STRING)
-
-    val uid = pipeline.uid.replaceAll("pipeline", "fit_process")
-    entity.setAttribute("qualifiedName", uid)
-    entity.setAttribute("name", uid)
-    entity.setAttribute("pipeline", pipelineEntity)
-    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Pipeline entity
-    entity.setAttribute("outputs", outputs.asJava)  // ML model entity
-    entity
-  }
-
-  def mlTransformProcessToEntity(
-      model: PipelineModel,
-      modelEntity: AtlasEntity,
-      inputs: List[AtlasEntity],
-      outputs: List[AtlasEntity]): AtlasEntity = {
-    val entity = new AtlasEntity(metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
-
-    val uid = model.uid.replaceAll("pipeline", "transform_process")
-    entity.setAttribute("qualifiedName", uid)
-    entity.setAttribute("name", uid)
-    entity.setAttribute("model", modelEntity)
-    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
-    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
-    entity
-  }
-
   def etlProcessToEntity(
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
