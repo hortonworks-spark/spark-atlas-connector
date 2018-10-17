@@ -93,11 +93,11 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
 
     atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
 
-    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
 
