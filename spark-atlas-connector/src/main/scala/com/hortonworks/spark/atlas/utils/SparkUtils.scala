@@ -94,6 +94,11 @@ object SparkUtils extends Logging {
     UserGroupInformation.getCurrentUser.getUserName
   }
 
+  def ugi(): UserGroupInformation =
+  {
+    UserGroupInformation.getCurrentUser
+  }
+
   // Get session user name, this is only available for Spark ThriftServer scenario, we should
   // figure out a proper session user name based on connected beeline.
   //
