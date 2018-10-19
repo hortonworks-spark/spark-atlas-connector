@@ -32,7 +32,7 @@ import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with AtlasClient {
 
-  override protected def getNumberOfRetriesPropertyKey: String = {
+   protected def getNumberOfRetriesPropertyKey: String = {
     AtlasClientConf.CLIENT_NUM_RETRIES.key
   }
 
@@ -54,7 +54,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
         SparkUtils.currUser(), entityToReferenceable(e)): HookNotification
     }.toList.asJava
 
-    notifyEntities(createRequests)
+    notifyEntities(createRequests, SparkUtils.ugi())
   }
 
   override protected def doDeleteEntityWithUniqueAttr(
@@ -65,7 +65,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
       entityType,
       org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
       attribute): HookNotification)
-    notifyEntities(deleteRequest.asJava)
+    notifyEntities(deleteRequest.asJava, SparkUtils.ugi())
   }
 
   override protected def doUpdateEntityWithUniqueAttr(
@@ -79,7 +79,7 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
         org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
         attribute,
         entityToReferenceable(entity)): HookNotification)
-    notifyEntities(partialUpdateRequest.asJava)
+    notifyEntities(partialUpdateRequest.asJava, SparkUtils.ugi())
   }
 
   private def entityToReferenceable(entity: AtlasEntity): Referenceable = {
