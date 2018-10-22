@@ -43,18 +43,18 @@ class MLPipelineEventProcessor(
         datasetF.setAccessible(true)
         val dataset = datasetF.get(e).asInstanceOf[Dataset[_]]
 
-        val pipelineF = e.getClass.getDeclaredField("pipeline")
-        pipelineF.setAccessible(true)
-        val pipeline = pipelineF.get(e).asInstanceOf[Pipeline]
+        val uidF = e.getClass.getDeclaredField("uid")
+        uidF.setAccessible(true)
+        val uid = uidF.get(e).toString
 
-        internal.cachedObjects.put(pipeline.uid, pipeline)
-        internal.cachedObjects.put(s"${pipeline.uid}_traindata", dataset)
+        internal.cachedObjects.put(uid, uid)
+        internal.cachedObjects.put(s"${uid}_traindata", dataset)
 
       case name if name.contains("CreateModelEvent") =>
-        val modeF = e.getClass.getDeclaredField("model")
-        modeF.setAccessible(true)
-        val model = modeF.get(e).asInstanceOf[PipelineModel]
-        internal.cachedObjects.put(s"${model.uid}_model", model)
+        val uidF = e.getClass.getDeclaredField("uid")
+        uidF.setAccessible(true)
+        val uid = uidF.get(e).toString
+        internal.cachedObjects.put(s"${uid}_model", uid)
 
       case name if name.contains("SavePipelineEvent") =>
         val uidF = e.getClass.getDeclaredField("uid")
@@ -66,9 +66,9 @@ class MLPipelineEventProcessor(
         val path = pathF.get(e).asInstanceOf[String]
 
         val pipelineDirEntity = external.pathToEntity(path)
-        val pipeline = internal.cachedObjects(uid).asInstanceOf[Pipeline]
+        val pipeline_uid = internal.cachedObjects(uid).toString
 
-        val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+        val pipelineEntity = internal.mlPipelineToEntity(pipeline_uid, pipelineDirEntity)
         atlasClient.createEntities(Seq(pipelineEntity, pipelineDirEntity))
 
         internal.cachedObjects.put(s"${uid}_pipelineDirEntity", pipelineDirEntity)
@@ -95,14 +95,16 @@ class MLPipelineEventProcessor(
             .asInstanceOf[AtlasEntity]
           val pipelineEntity = internal.cachedObjects(s"${uid}_pipelineEntity")
             .asInstanceOf[AtlasEntity]
-          val pipeline = internal.cachedObjects.get(uid).get.asInstanceOf[Pipeline]
+          val pipeline_uid = internal.cachedObjects.get(uid).get.toString
+
           atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
 
-          val model = internal.cachedObjects(s"${uid}_model").asInstanceOf[PipelineModel]
-          val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+          val model_uid = internal.cachedObjects(s"${uid}_model").toString
+
+          val modelEntity = internal.mlModelToEntity(model_uid, modelDirEntity)
           atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
 
-          val trainData = internal.cachedObjects(s"${pipeline.uid}_traindata")
+          val trainData = internal.cachedObjects(s"${pipeline_uid}_traindata")
             .asInstanceOf[Dataset[_]]
 
           val logicalPlan = trainData.queryExecution.analyzed
@@ -124,7 +126,7 @@ class MLPipelineEventProcessor(
           }
 
           val logMap = Map("sparkPlanDescription" ->
-            (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
+            (s"Spark ML training model with pipeline uid: ${pipeline_uid}"))
 
           val processEntity = internal.etlProcessToEntity(
             List(pipelineEntity, tableEntities.head.head),
@@ -138,17 +140,17 @@ class MLPipelineEventProcessor(
         }
 
       case name if name.contains("LoadModelEvent") =>
-        val modeF = e.getClass.getDeclaredField("model")
-        modeF.setAccessible(true)
-        val model = modeF.get(e).asInstanceOf[PipelineModel]
+        val uidF = e.getClass.getDeclaredField("uid")
+        uidF.setAccessible(true)
+        val uid = uidF.get(e).toString
 
         val directoryF = e.getClass.getDeclaredField("directory")
         directoryF.setAccessible(true)
         val directory = directoryF.get(e).asInstanceOf[String]
 
         val modelDirEntity = external.pathToEntity(directory)
-        val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
-        val uid = model.uid
+        val modelEntity = internal.mlModelToEntity(uid, modelDirEntity)
+
         internal.cachedObjects.put(s"${uid}_modelDirEntity", modelDirEntity)
         internal.cachedObjects.put(s"${uid}_modelEntity", modelEntity)
 
