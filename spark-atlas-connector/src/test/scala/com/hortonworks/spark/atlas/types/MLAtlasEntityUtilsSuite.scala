@@ -93,13 +93,13 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
     pipelineEntity.getTypeName should be (metadata.ML_PIPELINE_TYPE_STRING)
     pipelineEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (pipeline.uid)
     pipelineEntity.getAttribute("name") should be (pipeline.uid)
     pipelineEntity.getAttribute("directory") should be (pipelineDirEntity)
 
-    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
     val modelUid = model.uid.replaceAll("pipeline", "model")
     modelEntity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
     modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
