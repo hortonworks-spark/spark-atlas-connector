@@ -125,8 +125,8 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with Befo
     val model = pipeline.fit(trainData)
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
-    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
+    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
 
     val logMap = Map("sparkPlanDescription" ->
       (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
@@ -172,8 +172,8 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with Befo
     val model = pipeline.fit(trainData)
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
-    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
+    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
 
     val logMap = Map("sparkPlanDescription" ->
       (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))

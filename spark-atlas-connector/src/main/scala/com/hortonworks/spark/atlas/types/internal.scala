@@ -172,19 +172,19 @@ object internal extends Logging {
     entity
   }
 
-  def mlPipelineToEntity(pipeline: Pipeline, directory: AtlasEntity): AtlasEntity = {
+  def mlPipelineToEntity(pipeline_uid: String, directory: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_PIPELINE_TYPE_STRING)
 
-    entity.setAttribute("qualifiedName", pipeline.uid)
-    entity.setAttribute("name", pipeline.uid)
+    entity.setAttribute("qualifiedName", pipeline_uid)
+    entity.setAttribute("name", pipeline_uid)
     entity.setAttribute("directory", directory)
     entity
   }
 
-  def mlModelToEntity(model: PipelineModel, directory: AtlasEntity): AtlasEntity = {
+  def mlModelToEntity(model_uid: String, directory: AtlasEntity): AtlasEntity = {
     val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
 
-    val uid = model.uid.replaceAll("pipeline", "model")
+    val uid = model_uid.replaceAll("pipeline", "model")
     entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
     entity.setAttribute("directory", directory)
