@@ -27,7 +27,7 @@
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-atlas-connector-assembly_2.11</artifactId>
+  <artifactId>spark-atlas-connector-assembly</artifactId>
   <packaging>jar</packaging>
 
   <dependencies>
