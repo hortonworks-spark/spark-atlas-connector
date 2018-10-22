@@ -105,30 +105,5 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
     modelEntity.getAttribute("name") should be (modelUid)
     modelEntity.getAttribute("directory") should be (modelDirEntity)
-
-    val inputEntity1 = getTableEntity("tbl1")
-    val inputEntity2 = getTableEntity("tbl2")
-    val fitEntity = internal.mlFitProcessToEntity(
-      pipeline, pipelineEntity, List(inputEntity1, pipelineEntity), List(modelEntity))
-
-    val fitName = pipeline.uid.replaceAll("pipeline", "fit_process")
-    fitEntity.getTypeName should be (metadata.ML_FIT_PROCESS_TYPE_STRING)
-    fitEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (fitName)
-    fitEntity.getAttribute("name") should be (fitName)
-    fitEntity.getAttribute("pipeline") should be (pipelineEntity)
-
-    model.write.overwrite().save(modelDir)
-
-    val df2 = model.transform(df)
-    df2.collect()
-
-    val transformEntity = internal.mlTransformProcessToEntity(
-      model, modelEntity, List(inputEntity1, modelEntity), List(inputEntity2))
-
-    val transformName = model.uid.replaceAll("pipeline", "transform_process")
-    transformEntity.getTypeName should be (metadata.ML_TRANSFORM_PROCESS_TYPE_STRING)
-    transformEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (transformName)
-    transformEntity.getAttribute("name") should be (transformName)
-    transformEntity.getAttribute("model") should be (modelEntity)
   }
 }
