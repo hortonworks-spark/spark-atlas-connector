@@ -85,7 +85,9 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with Befo
 
     FileUtils.deleteDirectory(new File("metastore_db"))
     FileUtils.deleteDirectory(new File("spark-warehouse"))
+    FileUtils.deleteDirectory(new File("tmp"))
     FileUtils.deleteDirectory(new File(dataDir1))
+    FileUtils.deleteDirectory(new File(dataDir2))
     internal.cachedObjects.clear()
 
     super.afterAll()

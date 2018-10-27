@@ -17,6 +17,7 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import java.io.File
 import java.nio.file.Files
 
 import scala.collection.mutable
@@ -26,6 +27,7 @@ import scala.language.postfixOps
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.model.typedef.AtlasTypesDef
+import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -55,6 +57,8 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     sparkSession = null
+
+    FileUtils.deleteDirectory(new File("spark-warehouse"))
 
     super.afterAll()
   }

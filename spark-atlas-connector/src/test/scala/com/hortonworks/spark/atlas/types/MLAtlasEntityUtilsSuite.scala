@@ -17,8 +17,11 @@
 
 package com.hortonworks.spark.atlas.types
 
+import java.io.File
+
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.commons.io.FileUtils
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
@@ -45,6 +48,10 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
     sparkSession = null
+
+    FileUtils.deleteDirectory(new File("spark-warehouse"))
+    FileUtils.deleteDirectory(new File("tmp"))
+
     super.afterAll()
   }
 
