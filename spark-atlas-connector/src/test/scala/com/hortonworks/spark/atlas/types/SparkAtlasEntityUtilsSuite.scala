@@ -32,11 +32,11 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
 
   private var sparkAtlasEntityUtils: AtlasEntityUtils = _
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
+      .config("spark.ui.enabled", "false")
       .getOrCreate()
 
     sparkAtlasEntityUtils = new AtlasEntityUtils {
@@ -44,7 +44,7 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     }
   }
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()

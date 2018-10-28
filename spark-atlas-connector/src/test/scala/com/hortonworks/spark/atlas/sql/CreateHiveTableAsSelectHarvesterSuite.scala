@@ -25,44 +25,27 @@ import scala.util.Random
 
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.types.{external, metadata}
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
-  private var sparkSession: SparkSession = _
+class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val sourceTbl1Name = "source1_" + Random.nextInt(100000)
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
-      .getOrCreate()
 
     sparkSession.sql(s"CREATE TABLE $sourceTblName (name string, age int)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('jerry', 20), ('tom', 15)")
     sparkSession.sql(s"CREATE TABLE $sourceTbl1Name (name string, salary int)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceTbl1Name VALUES ('jerry', 10), ('tom', 20)")
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
-
-    super.afterAll()
   }
 
   test("CREATE TABLE dest AS SELECT [] FROM source") {

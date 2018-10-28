@@ -25,40 +25,23 @@ import scala.util.Random
 
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveDirCommand
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class InsertIntoHiveDirHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
-  private var sparkSession: SparkSession = _
+class InsertIntoHiveDirHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
-      .getOrCreate()
 
     sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('a'), ('b'), ('c')")
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
-
-    super.afterAll()
   }
 
   test("INSERT OVERWRITE DIRECTORY path...") {

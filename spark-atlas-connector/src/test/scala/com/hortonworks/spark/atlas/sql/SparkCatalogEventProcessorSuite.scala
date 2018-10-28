@@ -44,15 +44,15 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
   private val atlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
+      .config("spark.ui.enabled", "false")
       .getOrCreate()
   }
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()

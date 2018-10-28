@@ -22,36 +22,24 @@ import java.nio.file.Files
 import scala.collection.JavaConverters._
 
 import org.apache.atlas.AtlasClient
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{FunSuite, Matchers}
 
-import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
+import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils, WithHiveSupport}
 
-class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
   import TestUtils._
-
-  private var sparkSession: SparkSession = _
 
   private var hiveAtlasEntityUtils: AtlasEntityUtils = _
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
-      .getOrCreate()
-
     hiveAtlasEntityUtils = new AtlasEntityUtils {
       override def conf: AtlasClientConf = new AtlasClientConf
     }
   }
 
   override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
     hiveAtlasEntityUtils = null
     super.afterAll()
   }
