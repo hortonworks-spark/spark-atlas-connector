@@ -38,8 +38,8 @@
     <minJavaVersion>1.8</minJavaVersion>
     <maxJavaVersion>1.8</maxJavaVersion>
     <test.redirectToFile>true</test.redirectToFile>
-    <scalatest.version>2.2.4</scalatest.version>
-    <mockito.version>1.9.5</mockito.version>
+    <scalatest.version>3.0.3</scalatest.version>
+    <mockito.version>1.10.19</mockito.version>
     <integration.test.enabled>false</integration.test.enabled>
     <jersey.version>1.19</jersey.version>
   </properties>
