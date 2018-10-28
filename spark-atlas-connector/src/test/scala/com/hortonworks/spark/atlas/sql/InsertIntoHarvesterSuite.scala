@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import java.io.File
 import java.util
 
 import scala.collection.JavaConverters._
@@ -25,19 +24,18 @@ import scala.util.Random
 
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
-import org.apache.spark.sql.SparkSession
-import org.scalatest.{BeforeAndAfterAll, Matchers, FunSuite}
+import org.scalatest.{Matchers, FunSuite}
 
 import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
-  private var sparkSession: SparkSession = _
+class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+
   private val dataBase = "sac"
   private val sourceHiveTblName = "source_h_" + Random.nextInt(100000)
   private val sourceSparkTblName = "source_s_" + Random.nextInt(100000)
@@ -52,12 +50,8 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
   private val outputTable3 = "output3_" + Random.nextInt(100000)
   private val bigTable = "big_" + Random.nextInt(100000)
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .enableHiveSupport()
-      .getOrCreate()
 
     sparkSession.sql(s"DROP DATABASE IF EXISTS $dataBase Cascade")
     sparkSession.sql(s"CREATE DATABASE $dataBase")
@@ -88,13 +82,6 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with BeforeAndAfte
 
   override def afterAll(): Unit = {
     sparkSession.sql(s"DROP DATABASE IF EXISTS $dataBase Cascade")
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
 
     super.afterAll()
   }

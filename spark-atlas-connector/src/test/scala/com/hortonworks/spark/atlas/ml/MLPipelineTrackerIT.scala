@@ -21,31 +21,15 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.scalatest.{BeforeAndAfterAll, Matchers}
-import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient}
+import org.scalatest.Matchers
+
+import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient, WithHiveSupport}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 
-class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAfterAll {
-  private var sparkSession: SparkSession = _
+class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupport {
   private val atlasClient = new RestAtlasClient(atlasClientConf)
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
-      .getOrCreate()
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-  }
 
   // Return table related entities as a Sequence.
   // The first one is table entity, followed by

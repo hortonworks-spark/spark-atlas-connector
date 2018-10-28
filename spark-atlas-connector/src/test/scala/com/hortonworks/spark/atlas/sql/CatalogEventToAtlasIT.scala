@@ -39,11 +39,10 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
 
   private var processor: SparkCatalogEventProcessor = _
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
     processor =
       new SparkCatalogEventProcessor(new RestAtlasClient(atlasClientConf), atlasClientConf)

@@ -37,7 +37,6 @@ class SparkUtilsSuite extends FunSuite with Matchers with BeforeAndAfter {
   test("get unique prefix when using in-memory catalog") {
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
 
     SparkUtils.getUniqueQualifiedPrefix() should be (sparkSession.sparkContext.applicationId + ".")
@@ -47,7 +46,8 @@ class SparkUtilsSuite extends FunSuite with Matchers with BeforeAndAfter {
   ignore("get unique prefix when using hive catalog") {
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
+      .enableHiveSupport()
+      .config("spark.ui.enabled", "false")
       .getOrCreate()
 
     val hiveConf = new HiveConf(sparkSession.sparkContext.hadoopConfiguration, classOf[HiveConf])

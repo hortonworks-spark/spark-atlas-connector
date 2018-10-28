@@ -38,18 +38,17 @@ class KafkaClientIT extends BaseResourceIT with Matchers {
 
   private var tracker: SparkAtlasEventTracker = _
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
 
     sparkSession = SparkSession.builder()
       .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
       .getOrCreate()
 
     tracker = new SparkAtlasEventTracker(new KafkaAtlasClient(atlasClientConf), atlasClientConf)
   }
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     sparkSession.stop()
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()

@@ -30,35 +30,20 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.command.{ExecutedCommandExec, LoadDataCommand}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class LoadDataHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
 
-  private var sparkSession: SparkSession = _
+class LoadDataHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
-      .getOrCreate()
 
     sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
-
-    super.afterAll()
   }
 
   test("LOAD DATA [LOCAL] INPATH path source") {

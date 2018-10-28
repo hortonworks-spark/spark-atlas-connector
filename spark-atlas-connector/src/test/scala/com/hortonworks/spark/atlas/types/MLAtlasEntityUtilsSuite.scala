@@ -25,35 +25,13 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.TestUtils._
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
-
-  private var sparkSession: SparkSession = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
-      .getOrCreate()
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
-    FileUtils.deleteDirectory(new File("tmp"))
-
-    super.afterAll()
-  }
+class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
 
   def getTableEntity(tableName: String): AtlasEntity = {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
@@ -112,5 +90,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfter
     modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
     modelEntity.getAttribute("name") should be (modelUid)
     modelEntity.getAttribute("directory") should be (modelDirEntity)
+
+    FileUtils.deleteDirectory(new File("tmp"))
   }
 }

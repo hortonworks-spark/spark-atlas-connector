@@ -17,47 +17,28 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import java.io.File
 import java.util
 
 import scala.collection.JavaConverters._
 import scala.util.Random
-
 import org.apache.atlas.AtlasClient
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.command.{ExecutedCommandExec, CreateViewCommand}
-import org.scalatest.{BeforeAndAfterAll, Matchers, FunSuite}
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExecutedCommandExec}
+import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas.WithHiveSupport
 
-class CreateViewHarvesterSuite extends FunSuite with Matchers with BeforeAndAfterAll {
-  private var sparkSession: SparkSession = _
+
+class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val destinationViewName = "destination_" + Random.nextInt(100000)
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "hive")
-      .getOrCreate()
 
     sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
     sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('lucy'), ('tom')")
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
-
-    super.afterAll()
   }
 
   test("CREATE VIEW FROM TABLE") {

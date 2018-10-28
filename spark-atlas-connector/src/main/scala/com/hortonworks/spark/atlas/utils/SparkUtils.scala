@@ -50,7 +50,7 @@ object SparkUtils extends Logging {
   }
 
   def isHiveEnabled(): Boolean = {
-    sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "hive") == "hive"
+    sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "in-memory") == "hive"
   }
 
   /**
