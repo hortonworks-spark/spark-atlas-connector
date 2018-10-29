@@ -21,7 +21,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
-import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
@@ -90,7 +90,7 @@ class SparkExecutionPlanProcessor(
 
       case r: WriteToDataSourceV2Exec =>
         r.writer match {
-          case w: InternalRowMicroBatchWriter =>
+          case w: MicroBatchWriter =>
             try {
               val streamWriter = w.getClass.getMethod("writer").invoke(w)
               streamWriter match {
