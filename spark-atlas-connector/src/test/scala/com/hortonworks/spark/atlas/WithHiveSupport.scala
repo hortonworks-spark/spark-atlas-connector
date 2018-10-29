@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas
 
 import java.io.File
+import java.nio.file.Files
 
 import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.SparkSession
@@ -27,25 +28,47 @@ trait WithHiveSupport extends BeforeAndAfterAll { self: Suite =>
 
   protected var sparkSession: SparkSession = _
 
+  private var metastoreDir: String = _
+  private var warehouseDir: String = _
+
+  private def cleanupAnyExistingSession(): Unit = {
+    val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
+    if (session.isDefined) {
+      session.get.sessionState.catalog.reset()
+      session.get.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
+  }
+
   override protected def beforeAll(): Unit = {
     super.beforeAll()
 
+    cleanupAnyExistingSession()
+
+    metastoreDir = Files.createTempDirectory("sac-metastore-").toString
+    warehouseDir = Files.createTempDirectory("sac-warehouse-").toString
+    System.setProperty("derby.system.home", metastoreDir)
     sparkSession = SparkSession.builder()
       .master("local")
       .appName(this.getClass.getCanonicalName)
       .enableHiveSupport()
       .config("spark.ui.enabled", "false")
+      .config("spark.sql.warehouse.dir", warehouseDir)
       .getOrCreate()
   }
 
   override protected def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-
-    FileUtils.deleteDirectory(new File("metastore_db"))
-    FileUtils.deleteDirectory(new File("spark-warehouse"))
+    try {
+      sparkSession.sessionState.catalog.reset()
+      sparkSession.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    } finally {
+      sparkSession = null
+      FileUtils.deleteDirectory(new File(warehouseDir))
+    }
+    System.clearProperty("spark.driver.port")
 
     super.afterAll()
   }
