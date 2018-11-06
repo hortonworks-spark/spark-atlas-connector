@@ -20,46 +20,48 @@ package org.apache.spark.sql.kafka010.atlas
 import scala.collection.mutable.ListBuffer
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
-import org.apache.spark.sql.kafka010.{KafkaSourceRDDPartition, KafkaStreamWriter}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.kafka010.{KafkaContinuousInputPartition, KafkaMicroBatchInputPartition, KafkaSourceRDDPartition, KafkaStreamWriterFactory}
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
+
+import scala.collection.mutable
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
 
-  def harvest(node: KafkaStreamWriter, writer: WriteToDataSourceV2Exec,
-    qd: QueryDetail) : Seq[AtlasEntity] = {
+  def extractTopic(writer: MicroBatchWriter): Option[String] = {
+    // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
+    // Hopefully KafkaStreamWriterFactory is a case class instead, so we can extract
+    // topic information from there.
+    // The cost of createWriterFactory is tiny (case class object creation) for this case,
+    // and we can find the way to cache it once we find the cost is not ignorable.
+    writer.createWriterFactory() match {
+      case KafkaStreamWriterFactory(tp, _, _) => tp
+      case _ => None
+    }
+  }
+
+  def harvest(targetTopic: Option[String], writer: WriteToDataSourceV2Exec,
+              qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
     val read_from_topics = new ListBuffer[String]()
     val tChildren = writer.query.collectLeaves()
-    val inputsEntities = tChildren.flatMap{
-      case r: RDDScanExec =>
-        r.rdd.partitions.map {
-          case e: KafkaSourceRDDPartition =>
-            val topic = e.offsetRange.topic
-            read_from_topics += topic
-            external.kafkaToEntity(clusterName, topic)
-        }.toSeq.flatten
+    val topics: Set[String] = tChildren.flatMap {
+      case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
+      case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
+      case _ => Nil
+    }.toSet
+
+    val inputsEntities: Seq[AtlasEntity] = topics.toList.flatMap { topic =>
+      external.kafkaToEntity(clusterName, topic)
     }
 
-    // destination topic
-    var destTopic = None: Option[String]
-    try {
-      val topicField = node.getClass.getDeclaredField("topic")
-      topicField.setAccessible(true)
-      destTopic = topicField.get(node).asInstanceOf[Option[String]]
-    } catch {
-      case e: NoSuchMethodException =>
-        logDebug(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
-      case e: Exception =>
-        logDebug(s"Can not get topic, please update topic of KafkaStreamWriter: ${e.toString}")
-    }
-
-    val outputEntities = if (destTopic.isDefined) {
-      external.kafkaToEntity(clusterName, destTopic.get)
+    val outputEntities = if (targetTopic.isDefined) {
+      external.kafkaToEntity(clusterName, targetTopic.get)
     } else {
       Seq.empty
     }
@@ -70,8 +72,8 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       e => pDescription.append(e).append(" ")
     }
 
-    if(destTopic.isDefined) {
-      pDescription.append(") Topics written into( ").append(destTopic.get).append(" )")
+    if (targetTopic.isDefined) {
+      pDescription.append(") Topics written into( ").append(targetTopic.get).append(" )")
     } else {
       logInfo(s"Can not get dest topic")
     }
@@ -98,8 +100,38 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
         inputTablesEntities, outputTableEntities, logMap)
 
       Seq(pEntity) ++ inputsEntities ++ outputEntities
-
     }
+  }
 
+  private def extractSourceTopicsFromDataSourceV1(r: RDDScanExec) = {
+    val topics = new mutable.HashSet[String]()
+    r.rdd.partitions.foreach {
+      case e: KafkaSourceRDDPartition =>
+        val topic = e.offsetRange.topic
+        topics += topic
+    }
+    topics
+  }
+
+  private def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec) = {
+    val topics = new mutable.HashSet[String]()
+    r.inputRDDs().foreach(rdd => rdd.partitions.foreach {
+      case e: DataSourceRDDPartition[_] =>
+        e.inputPartition match {
+          case e1: KafkaMicroBatchInputPartition =>
+            val topic = e1.offsetRange.topicPartition.topic()
+            topics += topic
+
+          case e1: KafkaContinuousInputPartition =>
+            val topic = e1.topicPartition.topic()
+            topics += topic
+
+          case _ =>
+        }
+
+      case _ =>
+    })
+
+    topics
   }
 }
