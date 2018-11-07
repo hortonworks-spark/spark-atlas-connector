@@ -25,7 +25,6 @@ import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
-
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -94,7 +93,12 @@ class SparkExecutionPlanProcessor(
             try {
               val streamWriter = w.getClass.getMethod("writer").invoke(w)
               streamWriter match {
-                case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
+                case _: KafkaStreamWriter =>
+                  // We don't know the overhead of createWriterFactory() for all data sources,
+                  // so pay the overhead of reflection instead of calling createWriterFactory,
+                  // and call `createWriterFactory()` only if the datasource is spark-sql-kafka.
+                  val topic = KafkaHarvester.extractTopic(w)
+                  KafkaHarvester.harvest(topic, r, qd)
                 case _ => Seq.empty
               }
             } catch {
