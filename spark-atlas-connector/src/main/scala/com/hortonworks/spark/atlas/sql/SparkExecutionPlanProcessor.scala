@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
