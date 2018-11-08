@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.scalatest.{Matchers, FunSuite}
 
-import com.hortonworks.spark.atlas.types.external
+import com.hortonworks.spark.atlas.types.{metadata, external}
 import com.hortonworks.spark.atlas.WithHiveSupport
 
 
@@ -137,7 +137,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     inputs.size() should be (1)
 
     val inputTbl = inputs.asScala.head
-    inputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
+    inputTbl.getTypeName should be (metadata.TABLE_TYPE_STRING)
     inputTbl.getAttribute("name") should be (sourceSparkTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"$dataBase.$sourceSparkTblName")
@@ -179,7 +179,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
     outputs.size() should be (1)
     val outputTbl = outputs.asScala.head
-    outputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
+    outputTbl.getTypeName should be (metadata.TABLE_TYPE_STRING)
     outputTbl.getAttribute("name") should be (destinationSparkTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"$dataBase.$destinationSparkTblName")
@@ -203,7 +203,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     inputs.size() should be (1)
 
     val inputTbl = inputs.asScala.head
-    inputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
+    inputTbl.getTypeName should be (metadata.TABLE_TYPE_STRING)
     inputTbl.getAttribute("name") should be (sourceSparkTblName)
     inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"$dataBase.$sourceSparkTblName")
@@ -212,7 +212,7 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
     outputs.size() should be (1)
     val outputTbl = outputs.asScala.head
-    outputTbl.getTypeName should not be external.HIVE_TABLE_TYPE_STRING
+    outputTbl.getTypeName should be (metadata.TABLE_TYPE_STRING)
     outputTbl.getAttribute("name") should be (destinationSparkTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"$dataBase.$destinationSparkTblName")
