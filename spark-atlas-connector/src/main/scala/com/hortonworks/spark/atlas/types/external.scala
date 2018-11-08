@@ -111,11 +111,11 @@ object external {
     Seq(kafkaEntity)
   }
 
-  // ================== Hive entities =====================
-  val HIVE_DB_TYPE_STRING = "hive_db"
-  val HIVE_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
-  val HIVE_COLUMN_TYPE_STRING = "hive_column"
-  val HIVE_TABLE_TYPE_STRING = "hive_table"
+  // ================== Spark's Hive Catalog entities =====================
+  val HIVE_DB_TYPE_STRING = "spark_db"
+  val HIVE_STORAGEDESC_TYPE_STRING = "spark_storagedesc"
+  val HIVE_COLUMN_TYPE_STRING = "spark_column"
+  val HIVE_TABLE_TYPE_STRING = "spark_table"
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
