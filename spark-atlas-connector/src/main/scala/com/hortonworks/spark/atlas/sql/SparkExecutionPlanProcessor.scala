@@ -23,9 +23,7 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
-
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -91,17 +89,13 @@ class SparkExecutionPlanProcessor(
       case r: WriteToDataSourceV2Exec =>
         r.writer match {
           case w: InternalRowMicroBatchWriter =>
-            try {
-              val streamWriter = w.getClass.getMethod("writer").invoke(w)
-              streamWriter match {
-                case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
-                case _ => Seq.empty
-              }
-            } catch {
-              case _: NoSuchMethodException =>
-                logDebug("Can not get KafkaStreamWriter, so can not create Kafka topic " +
-                  s"entities: ${qd.qe}")
-                Seq.empty
+            // Unfortunately, we cannot determine whether writer is kafka or not, before calling
+            // `createInternalRowWriterFactory()`. We have no option, have to take the risk.
+            val (isKafkaWriter, topic) = KafkaHarvester.extractTopic(w)
+            if (isKafkaWriter) {
+              KafkaHarvester.harvest(topic, r, qd)
+            } else {
+              Seq.empty
             }
 
           case _ =>

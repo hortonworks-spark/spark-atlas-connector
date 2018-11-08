@@ -33,6 +33,7 @@
     <atlas.version>1.1.0</atlas.version>
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
+    <kafka.version>0.10.0.1</kafka.version>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
     <minJavaVersion>1.8</minJavaVersion>
@@ -142,6 +143,21 @@
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${spark.version}</version>
       <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-sql-kafka-0-10_${scala.binary.version}</artifactId>
+      <version>${spark.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka_${scala.binary.version}</artifactId>
+      <version>${kafka.version}</version>
       <scope>test</scope>
     </dependency>
 
