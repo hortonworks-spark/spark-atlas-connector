@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.kafka010.atlas
 
-import scala.collection.mutable.ListBuffer
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
@@ -48,15 +47,14 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
   def harvest(targetTopic: Option[String], writer: WriteToDataSourceV2Exec,
               qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
-    val read_from_topics = new ListBuffer[String]()
     val tChildren = writer.query.collectLeaves()
-    val topics: Set[String] = tChildren.flatMap {
+    val sourceTopics: Set[String] = tChildren.flatMap {
       case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
       case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
       case _ => Nil
     }.toSet
 
-    val inputsEntities: Seq[AtlasEntity] = topics.toList.flatMap { topic =>
+    val inputsEntities: Seq[AtlasEntity] = sourceTopics.toList.flatMap { topic =>
       external.kafkaToEntity(clusterName, topic)
     }
 
@@ -67,13 +65,11 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     }
 
     // create process entity
-    val pDescription = StringBuilder.newBuilder.append("Topics subscribed( ")
-    read_from_topics.sorted.flatMap{
-      e => pDescription.append(e).append(" ")
-    }
+    val strSourceTopics = sourceTopics.toList.sorted.mkString(", ")
+    val pDescription = StringBuilder.newBuilder.append(s"Topics subscribed( $strSourceTopics )")
 
     if (targetTopic.isDefined) {
-      pDescription.append(") Topics written into( ").append(targetTopic.get).append(" )")
+      pDescription.append(s" Topics written into( ${targetTopic.get} )")
     } else {
       logInfo(s"Can not get dest topic")
     }
