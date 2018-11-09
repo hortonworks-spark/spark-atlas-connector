@@ -94,6 +94,10 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   }
 
   private def initializeSparkModel(): Boolean = {
+    if (!atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_ENABLED).toBoolean) {
+      logWarn("Spark Atlas Connector is disabled.")
+      return false
+    }
     try {
       val checkModelInStart = atlasClientConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
       if (checkModelInStart) {
