@@ -32,6 +32,7 @@
     <spark.version>2.3.2</spark.version>
     <atlas.version>1.1.0</atlas.version>
     <scala.version>2.11.8</scala.version>
+    <maven.version>3.5.4</maven.version>
     <scala.binary.version>2.11</scala.binary.version>
     <kafka.version>0.10.0.1</kafka.version>
     <MaxPermGen>512m</MaxPermGen>
