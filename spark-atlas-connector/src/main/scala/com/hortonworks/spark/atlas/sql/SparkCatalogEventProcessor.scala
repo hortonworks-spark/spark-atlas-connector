@@ -36,6 +36,8 @@ class SparkCatalogEventProcessor(
 
   override protected def process(e: ExternalCatalogEvent): Unit = {
     e match {
+      case CreateDatabasePreEvent(_) => // No-op
+
       case CreateDatabaseEvent(db) =>
         val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
         val entities = dbToEntities(dbDefinition)
@@ -43,7 +45,9 @@ class SparkCatalogEventProcessor(
         logInfo(s"Created db entity $db")
 
       case DropDatabasePreEvent(db) =>
-        cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
+        if (SparkUtils.getExternalCatalog().databaseExists(db)) {
+          cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
+        }
 
       case DropDatabaseEvent(db) =>
         atlasClient.deleteEntityWithUniqueAttr(dbType, dbUniqueAttribute(db))
@@ -56,6 +60,8 @@ class SparkCatalogEventProcessor(
         }
 
         logInfo(s"Deleted db entity $db")
+
+      case CreateTablePreEvent(_, _) => // No-op
 
       // TODO. We should also not create/alter view table in Atlas
       case CreateTableEvent(db, table) =>
