@@ -90,7 +90,7 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   }
 
   override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-    logWarn(s"Fail to execute query: {$qe}, {$funcName}", exception)
+    // No-op: SAC is one of the listener.
   }
 
   private def initializeSparkModel(): Boolean = {
