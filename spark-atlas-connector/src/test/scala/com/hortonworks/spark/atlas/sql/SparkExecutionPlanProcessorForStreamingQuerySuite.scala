@@ -18,24 +18,19 @@
 package com.hortonworks.spark.atlas.sql
 
 import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicLong
 
+import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
-import com.sun.jersey.core.util.MultivaluedMapImpl
+import com.hortonworks.spark.atlas.AtlasClientConf
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.atlas.model.typedef.AtlasTypesDef
-import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
-import org.apache.spark.sql.util.QueryExecutionListener
-
-import scala.collection.convert.Wrappers.SeqWrapper
-import scala.collection.mutable
 
 class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
+  import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+
   val brokerProps: Map[String, Object] = Map[String, Object]()
   var testUtils: KafkaTestUtils = _
 
@@ -63,14 +58,6 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     super.afterAll()
   }
 
-  class DirectProcessSparkExecutionPlanProcessor(
-      atlasClient: AtlasClient,
-      atlasClientConf: AtlasClientConf)
-    extends SparkExecutionPlanProcessor(atlasClient, atlasClientConf) {
-
-    override def process(qd: QueryDetail): Unit = super.process(qd)
-  }
-
   test("Kafka source(s) to kafka sink - micro-batch query") {
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
@@ -83,6 +70,14 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     topics.foreach(testUtils.createTopic(_, 10, overwrite = true))
 
     val tempDir = Files.createTempDirectory("spark-atlas-kafka-harvester")
+
+    // remove temporary directory in shutdown
+    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+      new Runnable {
+        override def run(): Unit = {
+          Files.deleteIfExists(tempDir)
+        }
+      }, 10)
 
     val df = spark.readStream
       .format("kafka")
@@ -97,14 +92,6 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
       .option("topic", topicToWrite)
       .option("checkpointLocation", tempDir.toAbsolutePath.toString)
       .start()
-
-    // remove temporary directory in shutdown
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      new Runnable {
-        override def run(): Unit = {
-          Files.deleteIfExists(tempDir)
-        }
-      }, 10)
 
     try {
       sendMessages(topicsToRead)
@@ -138,34 +125,27 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
 
   private def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Seq[AtlasEntity])
     : Unit = {
-    val kafkaTopicEntities = entities.filter(p => p.getTypeName.equals(KAFKA_TOPIC_STRING))
-
+    val kafkaTopicEntities = listAtlasEntitiesAsType(entities, KAFKA_TOPIC_STRING)
     assert(kafkaTopicEntities.size === topics.size)
-    assert(kafkaTopicEntities.map(_.getAttribute("name").toString()).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(_.getAttribute("topic").toString()).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(_.getAttribute("uri").toString()).toSet === topics.toSet)
+
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "name")).toSet === topics.toSet)
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "topic")).toSet === topics.toSet)
+    assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === topics.toSet)
   }
 
   private def assertEntitySparkProcessType(topicsToRead: Seq[String], topicToWrite: String,
                                            entities: Seq[AtlasEntity], queryDetail: QueryDetail)
     : Unit = {
-    val processEntities = entities.filter { p =>
-      p.getTypeName.equals(metadata.PROCESS_TYPE_STRING)
-    }
+    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
 
-    assert(processEntities.size === 1)
-    val processEntity = processEntities.head
-
-    val inputs = processEntity.getAttribute("inputs")
-      .asInstanceOf[SeqWrapper[AtlasEntity]].underlying
-    val outputs = processEntity.getAttribute("outputs")
-      .asInstanceOf[SeqWrapper[AtlasEntity]].underlying
+    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
+    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
 
     assert(!inputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
     assert(!outputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
 
-    assert(inputs.map(_.getAttribute("name")).toSet === topicsToRead.toSet)
-    assert(outputs.map(_.getAttribute("name")).toSet === Seq(topicToWrite).toSet)
+    assert(inputs.map(getStringAttribute(_, "name")).toSet === topicsToRead.toSet)
+    assert(outputs.map(getStringAttribute(_, "name")).toSet === Seq(topicToWrite).toSet)
 
     // verify others
     val expectedMap = Map(
@@ -178,44 +158,5 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     expectedMap.foreach { case (key, value) =>
       assert(processEntity.getAttribute(key) === value)
     }
-  }
-
-  class AtlasQueryExecutionListener extends QueryExecutionListener {
-    private val executionId = new AtomicLong(0L)
-    val queryDetails = new mutable.MutableList[QueryDetail]()
-
-    override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-      queryDetails += QueryDetail(qe, executionId.getAndIncrement(), durationNs)
-    }
-
-    override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-      fail(exception)
-    }
-
-    def clear(): Unit = {
-      queryDetails.clear()
-    }
-  }
-
-  class CreateEntitiesTrackingAtlasClient extends AtlasClient {
-    val createdEntities = new mutable.ListBuffer[AtlasEntity]()
-
-    override def createAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit = {}
-
-    override def getAtlasTypeDefs(searchParams: MultivaluedMapImpl): AtlasTypesDef = {
-      new AtlasTypesDef()
-    }
-
-    override def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit = {}
-
-    override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
-      createdEntities ++= entities
-    }
-
-    override protected def doDeleteEntityWithUniqueAttr(entityType: String,
-                                                        attribute: String): Unit = {}
-
-    override protected def doUpdateEntityWithUniqueAttr(entityType: String, attribute: String,
-                                                        entity: AtlasEntity): Unit = {}
   }
 }
