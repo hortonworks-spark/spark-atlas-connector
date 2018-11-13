@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.catalog._
 
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
@@ -45,8 +46,11 @@ class SparkCatalogEventProcessor(
         logInfo(s"Created db entity $db")
 
       case DropDatabasePreEvent(db) =>
-        if (SparkUtils.getExternalCatalog().databaseExists(db)) {
+        try {
           cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
+        } catch {
+          case _: NoSuchDatabaseException =>
+            logInfo(s"Spark already deleted the database: $db")
         }
 
       case DropDatabaseEvent(db) =>
@@ -71,11 +75,23 @@ class SparkCatalogEventProcessor(
         logInfo(s"Created table entity $table")
 
       case DropTablePreEvent(db, table) =>
-        val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-        cachedObject.put(
-          tableUniqueAttribute(db, table, isHiveTable(tableDefinition)), tableDefinition)
+        try {
+          val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
+          cachedObject.put(
+            tableUniqueAttribute(db, table, isHiveTable(tableDefinition)), tableDefinition)
+        } catch {
+          case _: NoSuchTableException =>
+            logInfo(s"Spark already deleted the table: $db.$table")
+        }
 
       case DropTableEvent(db, table) =>
+        // Delete table
+        atlasClient.deleteEntityWithUniqueAttr(
+          tableType(true),
+          tableUniqueAttribute(db, table, true))
+        logInfo(s"Deleted table entity $table")
+
+        // Try to delete the related entities from Spark-side
         cachedObject.remove(tableUniqueAttribute(db, table, isHiveTable = true))
           .orElse(cachedObject.remove(tableUniqueAttribute(db, table, isHiveTable = false)))
           .foreach { o =>
@@ -83,15 +99,15 @@ class SparkCatalogEventProcessor(
             val isHiveTbl = isHiveTable(tblDef)
 
             atlasClient.deleteEntityWithUniqueAttr(
-              tableType(isHiveTbl), tableUniqueAttribute(db, table, isHiveTbl))
-            atlasClient.deleteEntityWithUniqueAttr(
               storageFormatType(isHiveTbl), storageFormatUniqueAttribute(db, table, isHiveTbl))
+            logInfo(s"Deleted storage entity for $db.$table")
             tblDef.schema.foreach { f =>
               atlasClient.deleteEntityWithUniqueAttr(
                 columnType(isHiveTbl), columnUniqueAttribute(db, table, f.name, isHiveTbl))
+              logInfo(s"Deleted column entity $db.$table.${f.name}")
             }
+
           }
-        logInfo(s"Deleted table entity $table")
 
       case RenameTableEvent(db, name, newName) =>
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, newName)
