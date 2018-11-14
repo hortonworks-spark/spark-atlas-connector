@@ -23,7 +23,7 @@ import java.util.Date
 
 import scala.collection.JavaConverters._
 
-import org.apache.atlas.{AtlasClient, AtlasConstants}
+import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.lang.RandomStringUtils
@@ -50,10 +50,10 @@ object external {
     }
 
     val fsPath = new Path(uri)
-    entity.setAttribute(AtlasClient.NAME,
+    entity.setAttribute("name",
       Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
     entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, uri.toString)
+    entity.setAttribute("qualifiedName", uri.toString)
     if (uri.getScheme == "hdfs") {
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
     }
@@ -87,11 +87,11 @@ object external {
   val HBASE_COLUMN_STRING = "hbase_column"
 
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
-      : Seq[AtlasEntity] = {
+  : Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
-    hbaseEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    hbaseEntity.setAttribute("qualifiedName",
       getTableQualifiedName(cluster, nameSpace, tableName))
-    hbaseEntity.setAttribute(AtlasClient.NAME, tableName.toLowerCase)
+    hbaseEntity.setAttribute("name", tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
@@ -102,9 +102,9 @@ object external {
 
   def kafkaToEntity(cluster: String, topicName: String): Seq[AtlasEntity] = {
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
-    kafkaEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    kafkaEntity.setAttribute("qualifiedName",
       topicName.toLowerCase + '@' + cluster)
-    kafkaEntity.setAttribute(AtlasClient.NAME, topicName.toLowerCase)
+    kafkaEntity.setAttribute("name", topicName.toLowerCase)
     kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     kafkaEntity.setAttribute("uri", topicName.toLowerCase)
     kafkaEntity.setAttribute("topic", topicName.toLowerCase)
@@ -119,68 +119,71 @@ object external {
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
-  def hiveDbToEntities(dbDefinition: CatalogDatabase, cluster: String): Seq[AtlasEntity] = {
+  def hiveDbToEntities(dbDefinition: CatalogDatabase,
+                       cluster: String,
+                       owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
 
-    dbEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    dbEntity.setAttribute("qualifiedName",
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
-    dbEntity.setAttribute(AtlasClient.NAME, dbDefinition.name.toLowerCase)
+    dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
+    dbEntity.setAttribute("owner", owner)
     Seq(dbEntity)
   }
 
   def hiveStorageDescUniqueAttribute(
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): String = {
+                                      cluster: String,
+                                      db: String,
+                                      table: String,
+                                      isTempTable: Boolean = false): String = {
     hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
   }
 
   def hiveStorageDescToEntities(
-      storageFormat: CatalogStorageFormat,
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): Seq[AtlasEntity] = {
+                                 storageFormat: CatalogStorageFormat,
+                                 cluster: String,
+                                 db: String,
+                                 table: String,
+                                 isTempTable: Boolean = false): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    sdEntity.setAttribute("qualifiedName",
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    storageFormat.serde.foreach(sdEntity.setAttribute(AtlasClient.NAME, _))
+    storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
     storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
     Seq(sdEntity)
   }
 
   def hiveColumnUniqueAttribute(
-      cluster: String,
-      db: String,
-      table: String,
-      column: String,
-      isTempTable: Boolean = false): String = {
+                                 cluster: String,
+                                 db: String,
+                                 table: String,
+                                 column: String,
+                                 isTempTable: Boolean = false): String = {
     val tableName = hiveTableUniqueAttribute(cluster, db, table, isTempTable)
     val parts = tableName.split("@")
     s"${parts(0)}.${column.toLowerCase}@${parts(1)}"
   }
 
   def hiveSchemaToEntities(
-      schema: StructType,
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): List[AtlasEntity] = {
+                            schema: StructType,
+                            cluster: String,
+                            db: String,
+                            table: String,
+                            isTempTable: Boolean = false): List[AtlasEntity] = {
     schema.map { struct =>
       val entity = new AtlasEntity(HIVE_COLUMN_TYPE_STRING)
 
-      entity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+      entity.setAttribute("qualifiedName",
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute(AtlasClient.NAME, struct.name)
+      entity.setAttribute("name", struct.name)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("comment", struct.getComment())
       entity
@@ -188,10 +191,10 @@ object external {
   }
 
   def hiveTableUniqueAttribute(
-      cluster: String,
-      db: String,
-      table: String,
-      isTemporary: Boolean = false): String = {
+                                cluster: String,
+                                db: String,
+                                table: String,
+                                isTemporary: Boolean = false): String = {
     val tableName = if (isTemporary) {
       if (SessionState.get() != null && SessionState.get().getSessionId != null) {
         s"${table}_temp-${SessionState.get().getSessionId}"
@@ -206,14 +209,14 @@ object external {
   }
 
   def hiveTableToEntities(
-      tableDefinition: CatalogTable,
-      cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+                           tableDefinition: CatalogTable,
+                           cluster: String,
+                           mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
     val db = tableDefinition.identifier.database.getOrElse("default")
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = hiveDbToEntities(dbDefinition, cluster)
+    val dbEntities = hiveDbToEntities(dbDefinition, cluster, tableDefinition.owner)
     val sdEntities = hiveStorageDescToEntities(
       tableDefinition.storage, cluster, db, table
       /* isTempTable = false  Spark doesn't support temp table */)
@@ -221,10 +224,10 @@ object external {
       tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
-    tblEntity.setAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+    tblEntity.setAttribute("qualifiedName",
       hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
-    tblEntity.setAttribute(AtlasClient.NAME, table)
-    tblEntity.setAttribute(AtlasClient.OWNER, tableDefinition.owner)
+    tblEntity.setAttribute("name", table)
+    tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
     tblEntity.setAttribute("lastAccessTime", new Date(tableDefinition.lastAccessTime))
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))

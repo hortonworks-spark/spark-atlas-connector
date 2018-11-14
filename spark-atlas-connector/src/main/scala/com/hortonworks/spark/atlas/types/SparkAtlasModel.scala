@@ -33,10 +33,10 @@ object SparkAtlasModel extends Logging {
   import classifications._
 
   private[atlas] case class GroupedTypesDef(
-      classificationDefsToUpdate: List[AtlasClassificationDef],
-      classificationDefsToCreate: List[AtlasClassificationDef],
-      entityDefsToUpdate: List[AtlasEntityDef],
-      entityDefsToCreate: List[AtlasEntityDef])
+                                             classificationDefsToUpdate: List[AtlasClassificationDef],
+                                             classificationDefsToCreate: List[AtlasClassificationDef],
+                                             entityDefsToUpdate: List[AtlasEntityDef],
+                                             entityDefsToCreate: List[AtlasEntityDef])
 
   val allTypes = Map(
     DB_TYPE_STRING -> DB_TYPE,
@@ -47,9 +47,6 @@ object SparkAtlasModel extends Logging {
     ML_DIRECTORY_TYPE_STRING -> ML_DIRECTORY_TYPE,
     ML_PIPELINE_TYPE_STRING -> ML_PIPELINE_TYPE,
     ML_MODEL_TYPE_STRING -> ML_MODEL_TYPE,
-    PROCESS_ETL_TYPE_STRING -> ETL_PROCESS_TYPE,
-    ML_FIT_PROCESS_TYPE_STRING -> ML_FIT_PROCESS_TYPE,
-    ML_TRANSFORM_PROCESS_TYPE_STRING -> ML_TRANSFORM_PROCESS_TYPE,
     DIMENSION_CLASSIFICATION -> DIMENSION_CLASSIFICATION_DEF,
     FACT_CLASSIFICATION -> FACT_CLASSIFICATION_DEF,
     FS_CLASSIFICATION -> FS_CLASSIFICATION_DEF,
@@ -83,7 +80,7 @@ object SparkAtlasModel extends Logging {
 
     if (groupedTypes.classificationDefsToCreate.nonEmpty ||
       groupedTypes.entityDefsToCreate.nonEmpty) {
-       val typeDefs = AtlasTypeUtil.getTypesDef(List.empty[AtlasEnumDef].asJava,
+      val typeDefs = AtlasTypeUtil.getTypesDef(List.empty[AtlasEnumDef].asJava,
         List.empty[AtlasStructDef].asJava,
         groupedTypes.classificationDefsToCreate.asJava,
         groupedTypes.entityDefsToCreate.asJava)

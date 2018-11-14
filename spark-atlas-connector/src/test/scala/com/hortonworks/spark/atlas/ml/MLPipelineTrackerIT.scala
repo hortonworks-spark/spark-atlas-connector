@@ -21,31 +21,15 @@ import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.scalatest.{BeforeAndAfterAll, Matchers}
-import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient}
+import org.scalatest.Matchers
+
+import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient, WithHiveSupport}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 
-class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAfterAll {
-  private var sparkSession: SparkSession = _
+class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupport {
   private val atlasClient = new RestAtlasClient(atlasClientConf)
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sparkSession = SparkSession.builder()
-      .master("local")
-      .config("spark.sql.catalogImplementation", "in-memory")
-      .getOrCreate()
-  }
-
-  override def afterAll(): Unit = {
-    sparkSession.stop()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-    sparkSession = null
-  }
 
   // Return table related entities as a Sequence.
   // The first one is table entity, followed by
@@ -93,11 +77,11 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
 
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
 
     atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
 
-    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
+    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
 
     atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
 
@@ -107,27 +91,5 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with BeforeAndAft
     atlasClient.createEntities(tableEntities1)
     atlasClient.createEntities(tableEntities2)
 
-    val fitEntity = internal.mlFitProcessToEntity(
-      pipeline,
-      pipelineEntity,
-      List(pipelineEntity, tableEntities1.head),
-      List(modelEntity))
-
-    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity,
-      pipelineEntity, modelEntity, fitEntity) ++ tableEntities1)
-
-    model.write.overwrite().save(modelDir)
-
-    val df2 = model.transform(df)
-    df2.collect()
-
-    val transformEntity = internal.mlTransformProcessToEntity(
-      model,
-      modelEntity,
-      List(modelEntity, tableEntities1.head),
-      List(tableEntities2.head))
-
-    atlasClient.createEntities(Seq(modelDirEntity, modelEntity, transformEntity)
-      ++ tableEntities1 ++ tableEntities2)
   }
 }

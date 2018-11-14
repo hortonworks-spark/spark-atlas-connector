@@ -33,7 +33,7 @@ import com.hortonworks.spark.atlas.types.SparkAtlasModel
 import com.hortonworks.spark.atlas.utils.Logging
 
 class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasClientConf)
-    extends SparkListener with QueryExecutionListener with Logging {
+    extends SparkListener with QueryExecutionListener  with Logging {
 
   def this(atlasClientConf: AtlasClientConf) = {
     this(AtlasClient.atlasClient(atlasClientConf), atlasClientConf)
@@ -64,7 +64,8 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
 
   private val executionId = new AtomicLong(0L)
 
-  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+  override def onOtherEvent
+  (event: SparkListenerEvent): Unit = {
     if (!shouldContinue) {
       // No op if our tracker is failed to initialize itself
       return

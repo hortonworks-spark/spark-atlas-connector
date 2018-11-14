@@ -18,7 +18,6 @@
 package com.hortonworks.spark.atlas.types
 
 import com.google.common.collect.{ImmutableMap, ImmutableSet}
-import org.apache.atlas.AtlasClient
 import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
@@ -33,9 +32,6 @@ object metadata {
   val ML_DIRECTORY_TYPE_STRING = "spark_ml_directory"
   val ML_PIPELINE_TYPE_STRING = "spark_ml_pipeline"
   val ML_MODEL_TYPE_STRING = "spark_ml_model"
-  val PROCESS_ETL_TYPE_STRING = "spark_etl_process"
-  val ML_FIT_PROCESS_TYPE_STRING = "spark_ml_fit_process"
-  val ML_TRANSFORM_PROCESS_TYPE_STRING = "spark_ml_transform_process"
 
   import external._
 
@@ -46,7 +42,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef(
@@ -59,7 +55,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("Referenceable"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("inputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("outputFormat", new AtlasStringType),
@@ -80,7 +76,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("type", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("nullable", new AtlasBooleanType),
     AtlasTypeUtil.createOptionalAttrDef("metadata", new AtlasStringType),
@@ -88,7 +84,7 @@ object metadata {
       "table",
       TABLE_TYPE_STRING,
       AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
-      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "schema")))
+      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "spark_schema")))
 
   // ========= Table type =========
   val TABLE_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -97,13 +93,13 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("database", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "storage", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "schema",
+      "spark_schema",
       "array<spark_column>",
       AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDef("provider", new AtlasStringType),
@@ -127,7 +123,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("Process"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
@@ -142,7 +138,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("uri", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", new AtlasStringType))
 
@@ -153,7 +149,7 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
@@ -165,51 +161,9 @@ object metadata {
     METADATA_VERSION,
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
+      "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 
-  // ========== ML Fit Process type ==========
-  val ML_FIT_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
-    ML_FIT_PROCESS_TYPE_STRING,
-    "",
-    METADATA_VERSION,
-    ImmutableSet.of("Process"),
-    AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("pipeline", ML_PIPELINE_TYPE_STRING),
-//    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-//    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
-
-  // ========== ML Fit Process type ==========
-  val ML_TRANSFORM_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
-    ML_TRANSFORM_PROCESS_TYPE_STRING,
-    "",
-    METADATA_VERSION,
-    ImmutableSet.of("Process"),
-    AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("model", ML_MODEL_TYPE_STRING),
-//    AtlasTypeUtil.createOptionalAttrDef("startTime", new AtlasLongType),
-//    AtlasTypeUtil.createOptionalAttrDef("endTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
-
-  // ========== ML Process type ==========
-  val ETL_PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(
-    PROCESS_ETL_TYPE_STRING,
-    "",
-    METADATA_VERSION,
-    ImmutableSet.of("Process"),
-    AtlasTypeUtil.createUniqueRequiredAttrDef(
-      AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME, new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
-    AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 }

@@ -21,20 +21,20 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
-import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
+import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.kafka010.KafkaStreamWriter
+import org.apache.spark.sql.kafka010.{KafkaStreamWriter, KafkaStreamWriterFactory}
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
-
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
 case class QueryDetail(qe: QueryExecution, executionId: Long,
-  executionTime: Long, query: Option[String] = None)
+                       executionTime: Long, query: Option[String] = None)
 
 class SparkExecutionPlanProcessor(
-    private[atlas] val atlasClient: AtlasClient,
-    val conf: AtlasClientConf)
+                                   private[atlas] val atlasClient: AtlasClient,
+                                   val conf: AtlasClientConf)
   extends AbstractEventProcessor[QueryDetail] with Logging {
 
   // TODO: We should handle OVERWRITE to remove the old lineage.
@@ -88,13 +88,21 @@ class SparkExecutionPlanProcessor(
             Seq.empty
         }
 
+
       case r: WriteToDataSourceV2Exec =>
+        val ww = r.writer
         r.writer match {
           case w: InternalRowMicroBatchWriter =>
             try {
-              val streamWriter = w.getClass.getMethod("writer").invoke(w)
+              val streamWriter = w.getClass.getMethod("writer").invoke( w)
               streamWriter match {
-                case sw: KafkaStreamWriter => KafkaHarvester.harvest(sw, r, qd)
+                case _: KafkaStreamWriter =>
+                  // We don't know the overhead of createWriterFactory() for all data sources,
+                  // so pay the overhead of reflection instead of calling createWriterFactory,
+                  // and call `createWriterFactory()` only if the datasource is spark-sql-kafka.
+                  val topic = KafkaHarvester.extractTopic(
+                              streamWriter.asInstanceOf[KafkaStreamWriter])
+                  KafkaHarvester.harvest(topic, r, qd)
                 case _ => Seq.empty
               }
             } catch {
@@ -107,27 +115,26 @@ class SparkExecutionPlanProcessor(
           case _ =>
             Seq.empty
         }
-
       case _ =>
         Seq.empty
 
-        // Case 5. FROM ... INSERT (OVERWRITE) INTO t2 INSERT INTO t3
-        // CASE LLAP:
-        //    case r: RowDataSourceScanExec
-        //        if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
-        //      println("close hive connection via " + r.relation.getClass.getCanonicalName)
+      // Case 5. FROM ... INSERT (OVERWRITE) INTO t2 INSERT INTO t3
+      // CASE LLAP:
+      //    case r: RowDataSourceScanExec
+      //        if (r.relation.getClass.getCanonicalName.endsWith("dd")) =>
+      //      println("close hive connection via " + r.relation.getClass.getCanonicalName)
 
-      } ++ {
-        qd.qe.sparkPlan match {
-          case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
-            CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
-              d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
+    } ++ {
+      qd.qe.sparkPlan match {
+        case d: DataWritingCommandExec if d.cmd.isInstanceOf[InsertIntoHiveDirCommand] =>
+          CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
+            d.cmd.asInstanceOf[InsertIntoHiveDirCommand], qd)
 
-          case _ =>
-            Seq.empty
-        }
+        case _ =>
+          Seq.empty
       }
-
-      atlasClient.createEntities(entities)
     }
+
+    atlasClient.createEntities(entities)
+  }
 }
