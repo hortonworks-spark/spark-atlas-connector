@@ -59,6 +59,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
   }
 
   test("Kafka source(s) to kafka sink - micro-batch query") {
+    // NOTE: We can't test custom Atlas cluster here, because it requires Spark 2.3 to be patched.
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val topicsToRead = Seq("sparkread1", "sparkread2", "sparkread3")
@@ -127,7 +128,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
   }
 
   private def waitForBatchCompleted(query: StreamingQuery, listener: AtlasQueryExecutionListener)
-  : Unit = {
+    : Unit = {
     import org.scalatest.time.SpanSugar._
     eventually(timeout(10.seconds)) {
       query.processAllAvailable()
