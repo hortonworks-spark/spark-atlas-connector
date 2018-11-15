@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTa
 import org.apache.spark.sql.catalyst.catalog._
 
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
-import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
+import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, metadata}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventProcessor(
@@ -71,8 +71,16 @@ class SparkCatalogEventProcessor(
       case CreateTableEvent(db, table) =>
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
         val tableEntities = tableToEntities(tableDefinition)
-        atlasClient.createEntities(tableEntities)
-        logDebug(s"Created table entity $table")
+        if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+          atlasClient.createEntities(tableEntities)
+          logDebug(s"Created table entity $table with columns")
+        } else {
+          // We should handle both cases. The type values will be changed later.
+          val excludedTypes = Seq(external.HIVE_COLUMN_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
+          val cleanedEntities = tableEntities.filterNot(e => excludedTypes.contains(e.getTypeName))
+          atlasClient.createEntities(cleanedEntities)
+          logDebug(s"Created table entity $table without columns")
+        }
 
       case DropTablePreEvent(db, table) =>
         try {
@@ -101,12 +109,14 @@ class SparkCatalogEventProcessor(
             atlasClient.deleteEntityWithUniqueAttr(
               storageFormatType(isHiveTbl), storageFormatUniqueAttribute(db, table, isHiveTbl))
             logDebug(s"Deleted storage entity for $db.$table")
-            tblDef.schema.foreach { f =>
-              atlasClient.deleteEntityWithUniqueAttr(
-                columnType(isHiveTbl), columnUniqueAttribute(db, table, f.name, isHiveTbl))
-              logDebug(s"Deleted column entity $db.$table.${f.name}")
-            }
 
+            if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+              tblDef.schema.foreach { f =>
+                atlasClient.deleteEntityWithUniqueAttr(
+                  columnType(isHiveTbl), columnUniqueAttribute(db, table, f.name, isHiveTbl))
+                logDebug(s"Deleted column entity $db.$table.${f.name}")
+              }
+            }
           }
 
       case RenameTableEvent(db, name, newName) =>

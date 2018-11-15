@@ -120,15 +120,19 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall(processor.dbType) == 1)
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
+        assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+      }
     }
 
     SparkUtils.getExternalCatalog().renameTable("db1", "tbl1", "tbl2")
     processor.pushEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-      assert(atlasClient.updateEntityCall(processor.columnType(isHiveTbl)) == 1)
+      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+        assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+        assert(atlasClient.updateEntityCall(processor.columnType(isHiveTbl)) == 1)
+      }
       assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
     }
 
