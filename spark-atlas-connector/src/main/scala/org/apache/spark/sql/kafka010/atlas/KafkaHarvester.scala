@@ -30,25 +30,30 @@ import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import scala.collection.mutable
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
+  val CONFIG_CUSTOM_CLUSTER_NAME: String = "atlas.cluster.name"
+
   override val conf: AtlasClientConf = new AtlasClientConf
 
-  def extractTopic(writer: MicroBatchWriter): Option[String] = {
+  def extractTopic(writer: MicroBatchWriter): Option[KafkaTopicInformation] = {
     // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
     // Hopefully KafkaStreamWriterFactory is a case class instead, so we can extract
-    // topic information from there.
+    // topic information from there, as well as producer parameters.
     // The cost of createWriterFactory is tiny (case class object creation) for this case,
     // and we can find the way to cache it once we find the cost is not ignorable.
     writer.createWriterFactory() match {
-      case KafkaStreamWriterFactory(tp, _, _) => tp
+      case KafkaStreamWriterFactory(Some(tp), params, _) =>
+        Some(KafkaTopicInformation(tp, params.get(CONFIG_CUSTOM_CLUSTER_NAME)))
       case _ => None
     }
   }
 
-  def harvest(targetTopic: Option[String], writer: WriteToDataSourceV2Exec,
-              qd: QueryDetail) : Seq[AtlasEntity] = {
+  def harvest(
+      targetTopic: Option[KafkaTopicInformation],
+      writer: WriteToDataSourceV2Exec,
+      qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
     val tChildren = writer.query.collectLeaves()
-    val sourceTopics: Set[String] = tChildren.flatMap {
+    val sourceTopics: Set[KafkaTopicInformation] = tChildren.flatMap {
       case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
       case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
       case _ => Nil
@@ -65,11 +70,14 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     }
 
     // create process entity
-    val strSourceTopics = sourceTopics.toList.sorted.mkString(", ")
+    val strSourceTopics = sourceTopics.toList
+      .map(KafkaTopicInformation.getQualifiedName(_, clusterName)).sorted.mkString(", ")
+
     val pDescription = StringBuilder.newBuilder.append(s"Topics subscribed( $strSourceTopics )")
 
     if (targetTopic.isDefined) {
-      pDescription.append(s" Topics written into( ${targetTopic.get} )")
+      val strTargetTopic = KafkaTopicInformation.getQualifiedName(targetTopic.get, clusterName)
+      pDescription.append(s" Topics written into( $strTargetTopic )")
     } else {
       logInfo(s"Can not get dest topic")
     }
@@ -99,28 +107,33 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def extractSourceTopicsFromDataSourceV1(r: RDDScanExec) = {
-    val topics = new mutable.HashSet[String]()
+  private def extractSourceTopicsFromDataSourceV1(r: RDDScanExec): Seq[KafkaTopicInformation] = {
+    val topics = new mutable.HashSet[KafkaTopicInformation]()
     r.rdd.partitions.foreach {
       case e: KafkaSourceRDDPartition =>
         val topic = e.offsetRange.topic
-        topics += topic
+        topics += KafkaTopicInformation(topic, None)
     }
-    topics
+    topics.toSeq
   }
 
-  private def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec) = {
-    val topics = new mutable.HashSet[String]()
+  private def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec)
+    : Seq[KafkaTopicInformation] = {
+    val topics = new mutable.HashSet[KafkaTopicInformation]()
     r.inputRDDs().foreach(rdd => rdd.partitions.foreach {
       case e: DataSourceRDDPartition[_] =>
         e.inputPartition match {
           case e1: KafkaMicroBatchInputPartition =>
             val topic = e1.offsetRange.topicPartition.topic()
-            topics += topic
+            val customClusterName = e1.executorKafkaParams.get(CONFIG_CUSTOM_CLUSTER_NAME)
+              .asInstanceOf[String]
+            topics += KafkaTopicInformation(topic, Option(customClusterName))
 
           case e1: KafkaContinuousInputPartition =>
             val topic = e1.topicPartition.topic()
-            topics += topic
+            val customClusterName = e1.kafkaParams.get(CONFIG_CUSTOM_CLUSTER_NAME)
+              .asInstanceOf[String]
+            topics += KafkaTopicInformation(topic, Option(customClusterName))
 
           case _ =>
         }
@@ -128,6 +141,6 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       case _ =>
     })
 
-    topics
+    topics.toSeq
   }
 }

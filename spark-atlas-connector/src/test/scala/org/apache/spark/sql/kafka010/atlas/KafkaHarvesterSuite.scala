@@ -40,6 +40,8 @@ import scala.collection.convert.Wrappers.SeqWrapper
 import scala.collection.mutable
 
 class KafkaHarvesterSuite extends StreamTest {
+  import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+
   val brokerProps = Map[String, Object]()
 
   val producerParams = Map[String, String]()
@@ -61,13 +63,28 @@ class KafkaHarvesterSuite extends StreamTest {
     super.afterAll()
   }
 
-  test("Extract Kafka topic from MicroBatchWriter") {
+  test("Extract Kafka topic from MicroBatchWriter - no custom atlas cluster name") {
     val topic = Some("hello")
 
     val writer = new KafkaStreamWriter(topic, producerParams, kafkaWriteSchema)
     val microBatchWriter = new MicroBatchWriter(0L, writer)
 
-    assert(KafkaHarvester.extractTopic(microBatchWriter) === topic)
+    assert(KafkaHarvester.extractTopic(microBatchWriter) ===
+      Some(KafkaTopicInformation(topic.get, None)))
+  }
+
+  test("Extract Kafka topic from MicroBatchWriter - custom atlas cluster name") {
+    val topic = Some("hello")
+
+    val customAtlasClusterName = "newCluster"
+    val newProducerParams = producerParams +
+      (KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME -> customAtlasClusterName)
+
+    val writer = new KafkaStreamWriter(topic, newProducerParams, kafkaWriteSchema)
+    val microBatchWriter = new MicroBatchWriter(0L, writer)
+
+    assert(KafkaHarvester.extractTopic(microBatchWriter) ===
+      Some(KafkaTopicInformation(topic.get, Some(customAtlasClusterName))))
   }
 
   test("No Kafka topic information in WriterFactory") {
@@ -125,17 +142,32 @@ class KafkaHarvesterSuite extends StreamTest {
       KafkaHarvester.harvest(topic, exec, qd)
     }
 
-    def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Seq[AtlasEntity]): Unit = {
+    def assertEntitiesKafkaTopicType(topics: Seq[KafkaTopicInformation],
+                                     entities: Seq[AtlasEntity]): Unit = {
       val kafkaTopicEntities = entities.filter(p => p.getTypeName.equals(KAFKA_TOPIC_STRING))
 
+      val expectedTopicNames = topics.map(_.topicName).toSet
+      val expectedClusterNames = topics.map(_.clusterName.getOrElse("primary")).toSet
+      val expectedQualifiedNames = topics.map { ti =>
+        KafkaTopicInformation.getQualifiedName(ti, "primary")
+      }.toSet
+
       assert(kafkaTopicEntities.size === topics.size)
-      assert(kafkaTopicEntities.map(_.getAttribute("name").toString()).toSet === topics.toSet)
-      assert(kafkaTopicEntities.map(_.getAttribute("topic").toString()).toSet === topics.toSet)
-      assert(kafkaTopicEntities.map(_.getAttribute("uri").toString()).toSet === topics.toSet)
+      assert(kafkaTopicEntities.map(_.getAttribute("name").toString()).toSet === expectedTopicNames)
+      assert(kafkaTopicEntities.map(_.getAttribute("topic").toString()).toSet ===
+        expectedTopicNames)
+      assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === expectedTopicNames)
+      assert(kafkaTopicEntities.map(getStringAttribute(_, "clusterName")).toSet ===
+        expectedClusterNames)
+      assert(kafkaTopicEntities.map(getStringAttribute(_, "qualifiedName")).toSet ===
+        expectedQualifiedNames)
     }
 
-    def assertEntitySparkProcessType(topicsToRead: Seq[String], topicToWrite: String,
-                                     entities: Seq[AtlasEntity], queryDetail: QueryDetail): Unit = {
+    def assertEntitySparkProcessType(
+        topicsToRead: Seq[KafkaTopicInformation],
+        topicToWrite: KafkaTopicInformation,
+        entities: Seq[AtlasEntity],
+        queryDetail: QueryDetail): Unit = {
       val processEntities = entities.filter { p =>
         p.getTypeName.equals(metadata.PROCESS_TYPE_STRING)
       }
@@ -151,8 +183,11 @@ class KafkaHarvesterSuite extends StreamTest {
       assert(!inputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
       assert(!outputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
 
-      assert(inputs.map(_.getAttribute("name")).toSet === topicsToRead.toSet)
-      assert(outputs.map(_.getAttribute("name")).toSet === Seq(topicToWrite).toSet)
+      assert(inputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
+        topicsToRead.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet)
+
+      assert(outputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
+        Seq(topicToWrite).map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet)
 
       // verify others
       val expectedMap = Map(
@@ -168,7 +203,11 @@ class KafkaHarvesterSuite extends StreamTest {
     }
 
     val topicsToRead = Seq("sparkread1", "sparkread2", "sparkread3")
+    val clusterNameForSources = "source"
+
     val topicToWrite = "sparkwrite"
+    val clusterNameForSink = "sink"
+
     val topics = topicsToRead :+ topicToWrite
 
     val brokerAddress = testUtils.brokerAddress
@@ -180,9 +219,17 @@ class KafkaHarvesterSuite extends StreamTest {
 
     val tempDir = Files.createTempDirectory("spark-atlas-kafka-harvester")
 
+    val topicsToReadWithClusterInfo = topicsToRead.map { tp =>
+      KafkaTopicInformation(tp, Some(clusterNameForSources))
+    }
+    val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite, Some(clusterNameForSink))
+
+    val topicsWithClusterInfo = topicsToReadWithClusterInfo ++ Seq(topicToWriteWithClusterInfo)
+
     val df = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
+      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, clusterNameForSources)
       .option("subscribe", topicsToRead.mkString(","))
       .option("startingOffsets", "earliest")
       .load()
@@ -190,6 +237,7 @@ class KafkaHarvesterSuite extends StreamTest {
     val query = df.writeStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
+      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, clusterNameForSink)
       .option("topic", topicToWrite)
       .option("checkpointLocation", tempDir.toAbsolutePath.toString)
       .start()
@@ -209,8 +257,9 @@ class KafkaHarvesterSuite extends StreamTest {
       val queryDetail = listener.queryDetails.head
       val atlasEntities = executeHarvest(queryDetail)
 
-      assertEntitiesKafkaTopicType(topics, atlasEntities)
-      assertEntitySparkProcessType(topicsToRead, topicToWrite, atlasEntities, queryDetail)
+      assertEntitiesKafkaTopicType(topicsWithClusterInfo, atlasEntities)
+      assertEntitySparkProcessType(topicsToReadWithClusterInfo, topicToWriteWithClusterInfo,
+        atlasEntities, queryDetail)
     } finally {
       query.stop()
     }
