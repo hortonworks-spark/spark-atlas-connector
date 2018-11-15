@@ -20,6 +20,7 @@ package org.apache.spark.sql.kafka010.atlas
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicLong
 
+import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.metadata
@@ -78,7 +79,7 @@ class KafkaHarvesterSuite extends StreamTest {
 
     val customAtlasClusterName = "newCluster"
     val newProducerParams = producerParams +
-      (KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME -> customAtlasClusterName)
+      (AtlasClientConf.CLUSTER_NAME.key -> customAtlasClusterName)
 
     val writer = new KafkaStreamWriter(topic, newProducerParams, kafkaWriteSchema)
     val microBatchWriter = new MicroBatchWriter(0L, writer)
@@ -229,7 +230,7 @@ class KafkaHarvesterSuite extends StreamTest {
     val df = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, clusterNameForSources)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, clusterNameForSources)
       .option("subscribe", topicsToRead.mkString(","))
       .option("startingOffsets", "earliest")
       .load()
@@ -237,7 +238,7 @@ class KafkaHarvesterSuite extends StreamTest {
     val query = df.writeStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, clusterNameForSink)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, clusterNameForSink)
       .option("topic", topicToWrite)
       .option("checkpointLocation", tempDir.toAbsolutePath.toString)
       .start()

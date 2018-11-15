@@ -30,8 +30,6 @@ import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import scala.collection.mutable
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
-  val CONFIG_CUSTOM_CLUSTER_NAME: String = "atlas.cluster.name"
-
   override val conf: AtlasClientConf = new AtlasClientConf
 
   def extractTopic(writer: MicroBatchWriter): Option[KafkaTopicInformation] = {
@@ -42,7 +40,7 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     // and we can find the way to cache it once we find the cost is not ignorable.
     writer.createWriterFactory() match {
       case KafkaStreamWriterFactory(Some(tp), params, _) =>
-        Some(KafkaTopicInformation(tp, params.get(CONFIG_CUSTOM_CLUSTER_NAME)))
+        Some(KafkaTopicInformation(tp, params.get(AtlasClientConf.CLUSTER_NAME.key)))
       case _ => None
     }
   }
@@ -125,13 +123,13 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
         e.inputPartition match {
           case e1: KafkaMicroBatchInputPartition =>
             val topic = e1.offsetRange.topicPartition.topic()
-            val customClusterName = e1.executorKafkaParams.get(CONFIG_CUSTOM_CLUSTER_NAME)
+            val customClusterName = e1.executorKafkaParams.get(AtlasClientConf.CLUSTER_NAME.key)
               .asInstanceOf[String]
             topics += KafkaTopicInformation(topic, Option(customClusterName))
 
           case e1: KafkaContinuousInputPartition =>
             val topic = e1.topicPartition.topic()
-            val customClusterName = e1.kafkaParams.get(CONFIG_CUSTOM_CLUSTER_NAME)
+            val customClusterName = e1.kafkaParams.get(AtlasClientConf.CLUSTER_NAME.key)
               .asInstanceOf[String]
             topics += KafkaTopicInformation(topic, Option(customClusterName))
 

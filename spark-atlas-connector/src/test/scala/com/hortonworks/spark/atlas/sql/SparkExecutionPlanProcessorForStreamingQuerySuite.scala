@@ -97,7 +97,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     val df2 = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, customClusterName)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
       .option("subscribe", topicsToRead2.mkString(","))
       .option("startingOffsets", "earliest")
       .load()
@@ -105,7 +105,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     val query = df.union(df2).writeStream
       .format("kafka")
       .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + KafkaHarvester.CONFIG_CUSTOM_CLUSTER_NAME, customClusterName)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
       .option("topic", topicToWrite)
       .option("checkpointLocation", tempDir.toAbsolutePath.toString)
       .start()
