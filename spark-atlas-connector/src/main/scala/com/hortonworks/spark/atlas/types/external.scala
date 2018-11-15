@@ -22,7 +22,6 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -31,8 +30,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
 
 object external {
   // External metadata types used to link with external entities
@@ -100,14 +99,19 @@ object external {
   // ================ Kafka entities =======================
   val KAFKA_TOPIC_STRING = "kafka_topic"
 
-  def kafkaToEntity(cluster: String, topicName: String): Seq[AtlasEntity] = {
+  def kafkaToEntity(cluster: String, topic: KafkaTopicInformation): Seq[AtlasEntity] = {
+    val topicName = topic.topicName.toLowerCase
+    val clusterName = topic.clusterName match {
+      case Some(customName) => customName
+      case None => cluster
+    }
+
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
-    kafkaEntity.setAttribute("qualifiedName",
-      topicName.toLowerCase + '@' + cluster)
-    kafkaEntity.setAttribute("name", topicName.toLowerCase)
-    kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    kafkaEntity.setAttribute("uri", topicName.toLowerCase)
-    kafkaEntity.setAttribute("topic", topicName.toLowerCase)
+    kafkaEntity.setAttribute("qualifiedName", topicName + '@' + clusterName)
+    kafkaEntity.setAttribute("name", topicName)
+    kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, clusterName)
+    kafkaEntity.setAttribute("uri", topicName)
+    kafkaEntity.setAttribute("topic", topicName)
     Seq(kafkaEntity)
   }
 
