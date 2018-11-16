@@ -84,8 +84,8 @@ object internal extends Logging {
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
 
       entity.setAttribute("qualifiedName",
-        sparkColumnUniqueAttribute(db, table, struct.name))
-      entity.setAttribute("name", struct.name)
+        sparkColumnUniqueAttribute(db, table, struct.name.toLowerCase))
+      entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("nullable", struct.nullable)
       entity.setAttribute("metadata", struct.metadata.toString())
