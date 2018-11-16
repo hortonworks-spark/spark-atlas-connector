@@ -187,7 +187,7 @@ object external {
 
       entity.setAttribute("qualifiedName",
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute("name", struct.name)
+      entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("comment", struct.getComment())
       entity

@@ -112,7 +112,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = false)
 
     val tableDefinition =
-      createTable("db1", "tbl1", new StructType().add("id", LongType), CatalogStorageFormat.empty)
+      createTable("db1", "tbl1", new StructType().add("ID", LongType), CatalogStorageFormat.empty)
     val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateTableEvent("db1", "tbl1"))
@@ -122,6 +122,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
       if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
         assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
+        assert("id" === atlasClient.processedEntity.getAttribute("name"))
         assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
       }
     }
