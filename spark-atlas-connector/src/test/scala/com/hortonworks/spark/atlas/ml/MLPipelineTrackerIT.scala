@@ -24,12 +24,14 @@ import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.Matchers
 
-import com.hortonworks.spark.atlas.{BaseResourceIT, RestAtlasClient, WithHiveSupport}
+import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient, WithHiveSupport}
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 
 class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupport {
   private val atlasClient = new RestAtlasClient(atlasClientConf)
+
+  def clusterName: String = atlasClientConf.get(AtlasClientConf.CLUSTER_NAME)
 
   // Return table related entities as a Sequence.
   // The first one is table entity, followed by
@@ -41,7 +43,8 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
       .add("user", StringType, false)
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
-    val tableEntities = internal.sparkTableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntities =
+      internal.sparkTableToEntities(tableDefinition, clusterName, Some(dbDefinition))
 
     tableEntities
   }

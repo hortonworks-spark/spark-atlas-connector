@@ -19,10 +19,11 @@ package com.hortonworks.spark.atlas.types
 
 import scala.collection.JavaConverters._
 
-import org.apache.atlas.AtlasClient
+import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
+
 import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
 
 class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
@@ -61,6 +62,8 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     val pathEntity = dbEntities.tail.head
     dbEntity.getTypeName should be (metadata.DB_TYPE_STRING)
     dbEntity.getAttribute("name") should be ("db1")
+    dbEntity.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (
+      AtlasConstants.DEFAULT_CLUSTER_NAME)
     dbEntity.getAttribute("locationUri") should be (pathEntity)
     pathEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "hdfs:///test/db/db1")
