@@ -132,6 +132,7 @@ object external {
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
+    dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity)
   }
 
@@ -228,6 +229,7 @@ object external {
       hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
     tblEntity.setAttribute("name", table)
     tblEntity.setAttribute("owner", tableDefinition.owner)
+    tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
     tblEntity.setAttribute("lastAccessTime", new Date(tableDefinition.lastAccessTime))
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))

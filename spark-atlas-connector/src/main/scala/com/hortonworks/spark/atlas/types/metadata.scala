@@ -110,6 +110,7 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef(
       "bucketSpec", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef("owner", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("ownerType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("createTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("lastAccessTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef(
