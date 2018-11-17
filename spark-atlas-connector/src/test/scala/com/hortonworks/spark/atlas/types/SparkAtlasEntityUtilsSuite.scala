@@ -25,6 +25,7 @@ import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
+import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   import TestUtils._
@@ -127,6 +128,8 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     tableEntity.getTypeName should be (metadata.TABLE_TYPE_STRING)
     tableEntity.getAttribute("name") should be ("tbl1")
     tableEntity.getAttribute("db") should be (dbEntity)
+    tableEntity.getAttribute("owner") should be (SparkUtils.currUser())
+    tableEntity.getAttribute("ownerType") should be ("USER")
     tableEntity.getAttribute("storage") should be (sdEntity)
     tableEntity.getAttribute("spark_schema") should be (schemaEntities.asJava)
   }
