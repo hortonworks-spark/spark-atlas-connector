@@ -153,7 +153,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
 
       // new table entity
-      val outputEntities = tableToEntities(node.tableDesc)
+      val outputEntities = tableToEntities(node.tableDesc.copy(owner = SparkUtils.currUser()))
 
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
