@@ -19,7 +19,7 @@ package com.hortonworks.spark.atlas.types
 
 import java.io.File
 
-import org.apache.atlas.AtlasClient
+import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.io.FileUtils
 import org.apache.spark.ml.Pipeline
@@ -41,7 +41,8 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
 
-    val tableEntities = internal.sparkTableToEntities(tableDefinition, Some(dbDefinition))
+    val tableEntities = internal.sparkTableToEntities(
+      tableDefinition, AtlasConstants.DEFAULT_CLUSTER_NAME, Some(dbDefinition))
     val tableEntity = tableEntities.head
 
     tableEntity

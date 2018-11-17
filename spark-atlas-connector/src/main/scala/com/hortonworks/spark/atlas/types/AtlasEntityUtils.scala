@@ -43,7 +43,7 @@ trait AtlasEntityUtils {
     if (SparkUtils.isHiveEnabled()) {
       external.hiveDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
     } else {
-      internal.sparkDbToEntities(dbDefinition, SparkUtils.currUser())
+      internal.sparkDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
     }
   }
 
@@ -132,7 +132,7 @@ trait AtlasEntityUtils {
     if (isHiveTable(tableDefinition)) {
       external.hiveTableToEntities(tableDefinition, clusterName, mockDbDefinition)
     } else {
-      internal.sparkTableToEntities(tableDefinition, mockDbDefinition)
+      internal.sparkTableToEntities(tableDefinition, clusterName, mockDbDefinition)
     }
   }
 
