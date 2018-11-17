@@ -117,7 +117,7 @@ object internal extends Logging {
     tblEntity.setAttribute("qualifiedName",
       sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
-    tblEntity.setAttribute("database", dbEntities.head)
+    tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("storage", sdEntities.head)
     tblEntity.setAttribute("spark_schema", schemaEntities.asJava)

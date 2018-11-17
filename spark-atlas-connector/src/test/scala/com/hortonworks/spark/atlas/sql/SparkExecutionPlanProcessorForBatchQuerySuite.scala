@@ -80,7 +80,7 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
     assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
 
     // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "database")
+    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
     assert(databaseEntity === databaseEntityInTable)
 
     val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")

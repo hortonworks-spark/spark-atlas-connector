@@ -96,7 +96,7 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("database", DB_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("db", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "storage", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
