@@ -32,6 +32,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.WithHiveSupport
+import com.hortonworks.spark.atlas.utils.SparkUtils
 
 
 class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
@@ -83,6 +84,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val outputTable = outputs.asScala.head
     outputTable.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     outputTable.getAttribute("name") should be (destTblName)
+    outputTable.getAttribute("owner") should be (SparkUtils.currUser())
+    outputTable.getAttribute("ownerType") should be ("USER")
     outputTable.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       s"default.$destTblName@primary")
   }
@@ -119,6 +122,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val outputTable = outputs.asScala.head
     outputTable.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     outputTable.getAttribute("name") should be (destTblName)
+    outputTable.getAttribute("owner") should be (SparkUtils.currUser())
+    outputTable.getAttribute("ownerType") should be ("USER")
     outputTable.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       s"default.$destTblName@primary")
   }
@@ -157,6 +162,8 @@ class CreateHiveTableAsSelectHarvesterSuite extends FunSuite with Matchers with 
     val outputTable = outputs.asScala.head
     outputTable.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     outputTable.getAttribute("name") should be (destTblName)
+    outputTable.getAttribute("owner") should be (SparkUtils.currUser())
+    outputTable.getAttribute("ownerType") should be ("USER")
     outputTable.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       s"default.$destTblName@primary")
   }
