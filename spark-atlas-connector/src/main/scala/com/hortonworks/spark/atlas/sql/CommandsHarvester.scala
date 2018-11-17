@@ -145,6 +145,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           case r if r.getClass.getCanonicalName.endsWith(HBASE_RELATION_CLASS_NAME) =>
             getHBaseEntity(r)
         }
+        case _: OneRowRelation =>
+          Seq.empty
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
