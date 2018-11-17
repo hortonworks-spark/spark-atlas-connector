@@ -23,6 +23,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.types.StructType
 
+import com.hortonworks.spark.atlas.utils.SparkUtils
+
 object TestUtils {
   def createDB(name: String, location: String): CatalogDatabase = {
     CatalogDatabase(name, "", new URI(location), Map.empty)
@@ -49,6 +51,8 @@ object TestUtils {
       CatalogTableType.MANAGED,
       storage,
       schema,
-      provider = if (isHiveTable) Some("hive") else None)
+      provider = if (isHiveTable) Some("hive") else None,
+      bucketSpec = None,
+      owner = SparkUtils.currUser())
   }
 }

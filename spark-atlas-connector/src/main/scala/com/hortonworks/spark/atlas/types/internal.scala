@@ -48,6 +48,7 @@ object internal extends Logging {
     dbEntity.setAttribute("locationUri", pathEntity)
     dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
+    dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity, pathEntity)
   }
 
@@ -126,6 +127,7 @@ object internal extends Logging {
     tableDefinition.bucketSpec.foreach(
       b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
     tblEntity.setAttribute("owner", tableDefinition.owner)
+    tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", tableDefinition.createTime)
     tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
     tblEntity.setAttribute("properties", tableDefinition.properties.asJava)

@@ -67,6 +67,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
       entity should not be (null)
       entity.getAttribute("name") should be ("db1")
       entity.getAttribute("owner") should be (SparkUtils.currUser())
+      entity.getAttribute("ownerType") should be ("USER")
     }
 
     // Drop DB from external catalog to make sure we also delete the corresponding Atlas entity
