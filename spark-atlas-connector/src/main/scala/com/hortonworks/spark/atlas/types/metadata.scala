@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.types
 
 import com.google.common.collect.{ImmutableMap, ImmutableSet}
+import org.apache.atlas.AtlasConstants
 import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
@@ -43,6 +44,7 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef(

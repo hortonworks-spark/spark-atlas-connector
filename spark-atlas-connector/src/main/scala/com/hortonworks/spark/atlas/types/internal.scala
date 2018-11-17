@@ -20,13 +20,12 @@ package com.hortonworks.spark.atlas.types
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
-import org.apache.atlas.AtlasClientV2
+import org.apache.atlas.AtlasConstants
 import org.apache.atlas.model.instance.AtlasEntity
 
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.ml.{Pipeline, PipelineModel}
 
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -36,12 +35,14 @@ object internal extends Logging {
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
-  def sparkDbToEntities(dbDefinition: CatalogDatabase, owner: String): Seq[AtlasEntity] = {
+  def sparkDbToEntities(dbDefinition: CatalogDatabase, cluster: String, owner: String)
+    : Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
     val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute(
       "qualifiedName", sparkDbUniqueAttribute(dbDefinition.name))
+    dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("name", dbDefinition.name)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("locationUri", pathEntity)
@@ -99,12 +100,13 @@ object internal extends Logging {
 
   def sparkTableToEntities(
       tableDefinition: CatalogTable,
+      clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
     val db = tableDefinition.identifier.database.getOrElse("default")
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = sparkDbToEntities(dbDefinition, tableDefinition.owner)
+    val dbEntities = sparkDbToEntities(dbDefinition, clusterName, tableDefinition.owner)
     val sdEntities =
       sparkStorageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
     val schemaEntities =
