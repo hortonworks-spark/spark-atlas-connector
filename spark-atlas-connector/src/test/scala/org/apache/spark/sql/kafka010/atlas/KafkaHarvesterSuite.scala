@@ -144,7 +144,7 @@ class KafkaHarvesterSuite extends StreamTest {
     }
 
     def assertEntitiesKafkaTopicType(topics: Seq[KafkaTopicInformation],
-                                     entities: Seq[AtlasEntity]): Unit = {
+                                     entities: Set[AtlasEntity]): Unit = {
       val kafkaTopicEntities = entities.filter(p => p.getTypeName.equals(KAFKA_TOPIC_STRING))
 
       val expectedTopicNames = topics.map(_.topicName).toSet
@@ -167,8 +167,8 @@ class KafkaHarvesterSuite extends StreamTest {
     def assertEntitySparkProcessType(
         topicsToRead: Seq[KafkaTopicInformation],
         topicToWrite: KafkaTopicInformation,
-        entities: Seq[AtlasEntity],
-        queryDetail: QueryDetail): Unit = {
+        entities: Set[AtlasEntity],
+        queryDetails: Seq[QueryDetail]): Unit = {
       val processEntities = entities.filter { p =>
         p.getTypeName.equals(metadata.PROCESS_TYPE_STRING)
       }
@@ -184,23 +184,31 @@ class KafkaHarvesterSuite extends StreamTest {
       assert(!inputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
       assert(!outputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
 
-      assert(inputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
-        topicsToRead.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet)
+      // unfortunately each batch recognizes topics which topics are having records to process
+      // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+      assert(inputs.map(getStringAttribute(_, "qualifiedName")).toSet.subsetOf(
+        topicsToRead.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet))
 
       assert(outputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
         Seq(topicToWrite).map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet)
 
       // verify others
-      val expectedMap = Map(
-        "executionId" -> queryDetail.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-        "executionTime" -> queryDetail.executionTime.toString,
-        "details" -> queryDetail.qe.toString()
-      )
+      // it is OK if there's a matching query detail: since only one is exactly
+      // matched to 'spark_process' entity
+      val anyMatchingFound = queryDetails.exists { queryDetail =>
+        val expectedMap = Map(
+          "executionId" -> queryDetail.executionId.toString,
+          "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
+          "executionTime" -> queryDetail.executionTime.toString,
+          "details" -> queryDetail.qe.toString()
+        )
 
-      expectedMap.foreach { case (key, value) =>
-        assert(processEntity.getAttribute(key) === value)
+        expectedMap.forall { case (key, value) =>
+          processEntity.getAttribute(key) == value
+        }
       }
+
+      assert(anyMatchingFound)
     }
 
     val topicsToRead = Seq("sparkread1", "sparkread2", "sparkread3")
@@ -255,15 +263,47 @@ class KafkaHarvesterSuite extends StreamTest {
       sendMessages(topicsToRead)
       waitForBatchCompleted(query, listener)
 
-      val queryDetail = listener.queryDetails.head
-      val atlasEntities = executeHarvest(queryDetail)
+      import org.scalatest.time.SpanSugar._
+      var queryDetails: Seq[QueryDetail] = null
+      var entitySet: Set[AtlasEntity] = null
+      eventually(timeout(10.seconds)) {
+        queryDetails = listener.queryDetails
 
-      assertEntitiesKafkaTopicType(topicsWithClusterInfo, atlasEntities)
+        val atlasEntities = queryDetails.flatMap(executeHarvest)
+        logInfo(s"Count of created entities (with duplication): ${atlasEntities.size}")
+        entitySet = getUniqueEntities(atlasEntities)
+        logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
+
+        // spark_process, topic to write, topics to read
+        assert(entitySet.size == topicsToRead.size + 2)
+      }
+
+      assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
       assertEntitySparkProcessType(topicsToReadWithClusterInfo, topicToWriteWithClusterInfo,
-        atlasEntities, queryDetail)
+        entitySet, queryDetails)
     } finally {
       query.stop()
     }
+  }
+
+  private def getUniqueEntities(entities: Seq[AtlasEntity]): Set[AtlasEntity] = {
+    // same entities must be taken only once, and it is not likely to be done with equals
+    // because pseudo guid is generated per each creation and 'equals' checks this value
+    // so we take 'typeName' and 'qualifiedName' as a unique qualifier
+
+    // (type, qualifier) -> AtlasEntity first occurred
+    val entitiesMap = new scala.collection.mutable.HashMap[(String, String), AtlasEntity]()
+
+    entities.foreach { entity =>
+      val typeName = entity.getTypeName
+      val qualifiedName = getStringAttribute(entity, "qualifiedName")
+      val mapKey = (typeName, qualifiedName)
+      if (!entitiesMap.contains(mapKey)) {
+        entitiesMap.put(mapKey, entity)
+      }
+    }
+
+    entitiesMap.values.toSet
   }
 
   private class FakeStreamWriter extends StreamWriter {
