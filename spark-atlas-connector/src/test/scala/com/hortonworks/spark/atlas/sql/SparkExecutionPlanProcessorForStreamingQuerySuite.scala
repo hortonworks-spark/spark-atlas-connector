@@ -97,12 +97,24 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
       sendMessages(topicsToRead)
       waitForBatchCompleted(query, testHelperQueryListener)
 
-      val queryDetail = testHelperQueryListener.queryDetails.head
-      planProcessor.process(queryDetail)
-      val entities = atlasClient.createdEntities
+      import org.scalatest.time.SpanSugar._
+      var queryDetails: Seq[QueryDetail] = null
+      var entitySet: Set[AtlasEntity] = null
+      eventually(timeout(10.seconds)) {
+        queryDetails = testHelperQueryListener.queryDetails
+        queryDetails.foreach(planProcessor.process)
 
-      assertEntitiesKafkaTopicType(topics, entities)
-      assertEntitySparkProcessType(topicsToRead, topicToWrite, entities, queryDetail)
+        val createdEntities = atlasClient.createdEntities
+        logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
+        entitySet = getUniqueEntities(createdEntities)
+        logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
+
+        // spark_process, topic to write, topics to read
+        assert(entitySet.size == topicsToRead.size + 2)
+      }
+
+      assertEntitiesKafkaTopicType(topics, entitySet)
+      assertEntitySparkProcessType(topicsToRead, topicToWrite, entitySet, queryDetails)
     } finally {
       query.stop()
     }
@@ -123,9 +135,9 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     }
   }
 
-  private def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Seq[AtlasEntity])
+  private def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Set[AtlasEntity])
     : Unit = {
-    val kafkaTopicEntities = listAtlasEntitiesAsType(entities, KAFKA_TOPIC_STRING)
+    val kafkaTopicEntities = listAtlasEntitiesAsType(entities.toSeq, KAFKA_TOPIC_STRING)
     assert(kafkaTopicEntities.size === topics.size)
 
     assert(kafkaTopicEntities.map(getStringAttribute(_, "name")).toSet === topics.toSet)
@@ -133,10 +145,12 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === topics.toSet)
   }
 
-  private def assertEntitySparkProcessType(topicsToRead: Seq[String], topicToWrite: String,
-                                           entities: Seq[AtlasEntity], queryDetail: QueryDetail)
-    : Unit = {
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
+  private def assertEntitySparkProcessType(
+      topicsToRead: Seq[String],
+      topicToWrite: String,
+      entities: Set[AtlasEntity],
+      queryDetails: Seq[QueryDetail]): Unit = {
+    val processEntity = getOnlyOneEntity(entities.toSeq, metadata.PROCESS_TYPE_STRING)
 
     val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
     val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
@@ -147,16 +161,50 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
     assert(inputs.map(getStringAttribute(_, "name")).toSet === topicsToRead.toSet)
     assert(outputs.map(getStringAttribute(_, "name")).toSet === Seq(topicToWrite).toSet)
 
-    // verify others
-    val expectedMap = Map(
-      "executionId" -> queryDetail.executionId.toString,
-      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
-      "details" -> queryDetail.qe.toString()
-    )
+    // unfortunately each batch recognizes topics which topics are having records to process
+    // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+    assert(inputs.map(getStringAttribute(_, "qualifiedName")).toSet.subsetOf(
+      topicsToRead.map(_ + "@primary").toSet))
 
-    expectedMap.foreach { case (key, value) =>
-      assert(processEntity.getAttribute(key) === value)
+    assert(outputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
+      Seq(topicToWrite).map(_ + "@primary").toSet)
+
+    // verify others
+    // it is OK if there's a matching query detail: since only one is exactly
+    // matched to 'spark_process' entity
+    val anyMatchingFound = queryDetails.exists { queryDetail =>
+      val expectedMap = Map(
+        "executionId" -> queryDetail.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
+        "executionTime" -> queryDetail.executionTime.toString,
+        "details" -> queryDetail.qe.toString()
+      )
+
+      expectedMap.forall { case (key, value) =>
+        processEntity.getAttribute(key) == value
+      }
     }
+
+    assert(anyMatchingFound)
+  }
+
+  private def getUniqueEntities(entities: Seq[AtlasEntity]): Set[AtlasEntity] = {
+    // same entities must be taken only once, and it is not likely to be done with equals
+    // because pseudo guid is generated per each creation and 'equals' checks this value
+    // so we take 'typeName' and 'qualifiedName' as a unique qualifier
+
+    // (type, qualifier) -> AtlasEntity first occurred
+    val entitiesMap = new scala.collection.mutable.HashMap[(String, String), AtlasEntity]()
+
+    entities.foreach { entity =>
+      val typeName = entity.getTypeName
+      val qualifiedName = getStringAttribute(entity, "qualifiedName")
+      val mapKey = (typeName, qualifiedName)
+      if (!entitiesMap.contains(mapKey)) {
+        entitiesMap.put(mapKey, entity)
+      }
+    }
+
+    entitiesMap.values.toSet
   }
 }
