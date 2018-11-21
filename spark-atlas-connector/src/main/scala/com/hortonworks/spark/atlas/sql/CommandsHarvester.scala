@@ -77,9 +77,11 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
       } else {
         // create process entity
+        // Atlas doesn't support cycle here.
+        val cleanedOutput = cleanOutput(inputTablesEntities, outputTableEntities)
         val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+          inputTablesEntities, cleanedOutput, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ cleanedOutput
       }
     }
   }
@@ -121,9 +123,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       if (internal.cachedObjects.contains("model_uid")) {
         internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
       } else {
+        val cleanedOutput = cleanOutput(inputTablesEntities, outputEntities)
         val processEntity = internal.etlProcessToEntity(
-          inputTablesEntities, List(outputEntities.head), logMap)
-          Seq(processEntity) ++ inputsEntities.flatten ++ outputEntities
+          inputTablesEntities, cleanedOutput.headOption.toList, logMap)
+          Seq(processEntity) ++ inputsEntities.flatten ++ cleanedOutput
         }
     }
   }
