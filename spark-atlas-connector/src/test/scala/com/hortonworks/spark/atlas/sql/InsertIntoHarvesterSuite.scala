@@ -119,6 +119,33 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
       s"$dataBase.$destinationHiveTblName@primary")
   }
 
+  test("INSERT INTO HIVE TABLE FROM HIVE TABLE (Cyclic)") {
+    val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
+      s"SELECT * FROM $destinationHiveTblName").queryExecution
+    val qd = QueryDetail(qe, 0L, 0L)
+
+    assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
+    val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
+    assert(node.cmd.isInstanceOf[InsertIntoHiveTable])
+    val cmd = node.cmd.asInstanceOf[InsertIntoHiveTable]
+
+    val entities = CommandsHarvester.InsertIntoHiveTableHarvester.harvest(cmd, qd)
+    val pEntity = entities.head
+
+    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
+    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
+    inputs.size() should be (1)
+
+    val inputTbl = inputs.asScala.head
+    inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
+    inputTbl.getAttribute("name") should be (destinationHiveTblName)
+    inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+      s"$dataBase.$destinationHiveTblName@primary")
+
+    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
+    assert(pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]].isEmpty)
+  }
+
   test("INSERT INTO HIVE TABLE FROM SPARK TABLE") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
       s"SELECT * FROM $sourceSparkTblName").queryExecution
@@ -216,6 +243,33 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     outputTbl.getAttribute("name") should be (destinationSparkTblName)
     outputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"$dataBase.$destinationSparkTblName")
+  }
+
+  test("INSERT INTO SPARK TABLE FROM SPARK TABLE (Cyclic)") {
+    val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
+      s"SELECT * FROM $destinationSparkTblName").queryExecution
+    val qd = QueryDetail(qe, 0L, 0L)
+
+    assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
+    val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
+    assert(node.cmd.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+    val cmd = node.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+
+    val entities = CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(cmd, qd)
+    val pEntity = entities.head
+
+    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
+    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
+    inputs.size() should be (1)
+
+    val inputTbl = inputs.asScala.head
+    inputTbl.getTypeName should be (metadata.TABLE_TYPE_STRING)
+    inputTbl.getAttribute("name") should be (destinationSparkTblName)
+    inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
+      s"$dataBase.$destinationSparkTblName")
+
+    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
+    assert(pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]].isEmpty)
   }
 
   test("INSERT INTO TABLE FROM MULTIPLE TABLES") {

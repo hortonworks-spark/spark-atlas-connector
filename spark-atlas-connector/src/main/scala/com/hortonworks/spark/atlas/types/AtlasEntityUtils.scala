@@ -161,4 +161,15 @@ trait AtlasEntityUtils {
 
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)
+
+  // If there is cycle, return empty output entity list
+  def cleanOutput(inputs: Seq[AtlasEntity], outputs: Seq[AtlasEntity]): List[AtlasEntity] = {
+    val qualifiedNames = inputs.map(e => e.getAttribute("qualifiedName"))
+    val isCycle = outputs.exists(x => qualifiedNames.contains(x.getAttribute("qualifiedName")))
+    if (isCycle) {
+      List.empty
+    } else {
+      outputs.toList
+    }
+  }
 }
