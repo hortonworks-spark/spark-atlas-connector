@@ -22,6 +22,7 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
+
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -30,8 +31,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-import com.hortonworks.spark.atlas.utils.SparkUtils
 import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
+
+import com.hortonworks.spark.atlas.AtlasClient
+import com.hortonworks.spark.atlas.utils.SparkUtils
 
 object external {
   // External metadata types used to link with external entities
@@ -245,5 +248,24 @@ object external {
     tblEntity.setAttribute("columns", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  // ================== Hive entities (Hive Warehouse Connector) =====================
+  val HWC_TABLE_TYPE_STRING = "hive_table"
+
+  def hwcTableUniqueAttribute(
+      cluster: String,
+      db: String,
+      tableName: String): String = {
+    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
+  }
+
+  def hwcTableToEntities(
+      db: String,
+      table: String,
+      cluster: String): Seq[AtlasEntity] = {
+    val entity = AtlasClient.atlasClient().findEntity(
+      HWC_TABLE_TYPE_STRING, hwcTableUniqueAttribute(cluster, db, table))
+    Option(entity).toSeq
   }
 }

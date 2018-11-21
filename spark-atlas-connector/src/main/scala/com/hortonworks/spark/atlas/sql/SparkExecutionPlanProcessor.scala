@@ -17,14 +17,17 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.kafka010.KafkaStreamWriter
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
+import org.apache.spark.sql.kafka010.KafkaStreamWriter
+
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -108,8 +111,8 @@ class SparkExecutionPlanProcessor(
                 Seq.empty
             }
 
-          case _ =>
-            Seq.empty
+          case w: DataSourceWriter =>
+            HWCSupport.extract(r, qd).getOrElse(Seq.empty)
         }
 
       case _ =>
@@ -134,4 +137,34 @@ class SparkExecutionPlanProcessor(
 
       atlasClient.createEntities(entities)
     }
+
+}
+
+object HWCSupport {
+  val BATCH_READ_SOURCE =
+    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseConnector"
+  val BATCH_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseDataSourceWriter"
+  val BATCH_STREAM_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataSourceWriter"
+  val STREAM_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
+
+  def extract(plan: WriteToDataSourceV2Exec, qd: QueryDetail): Option[Seq[AtlasEntity]] = {
+    plan.writer match {
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
+        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) =>
+        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
+        Some(HWCStreamingHarvester.harvest(plan, qd))
+
+      case _ => None
+    }
+  }
 }
