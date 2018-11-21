@@ -264,6 +264,8 @@ object external {
       db: String,
       table: String,
       cluster: String): Seq[AtlasEntity] = {
+    // For HWC tables, we're not going to create new Hive table entities within Spark side.
+    // Therefore, it finds the existing Hive table entities.
     val entity = AtlasClient.atlasClient().findEntity(
       HWC_TABLE_TYPE_STRING, hwcTableUniqueAttribute(cluster, db, table))
     Option(entity).toSeq

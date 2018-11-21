@@ -140,6 +140,29 @@ class SparkExecutionPlanProcessor(
 
 }
 
+/**
+ * Extracts Atlas entities related with Hive Warehouse Connector plans.
+ *
+ * Hive Warehouse Connector currently supports four types of operations:
+ *   1. SQL / DataFrame Read (batch read)
+ *   2. SQL / DataFrame Write (batch write)
+ *   3. SQL / DataFrame Write in streaming manner (batch write in streaming)
+ *   4. Structured Streaming Write (streaming write)
+ *
+ * For 1., it is supported by looking logical plans (if available) or physical
+ * plans up at `HWCEntities` for every execution plan being processed above
+ * when it's possible.
+ *
+ * For 2. and 3., it checks only when the execution plan is `WriteToDataSourceV2Exec`.
+ * It checks the write implementation of DataSourceV2 is HWC or not and dispatches to harvest
+ * appropriate entities.
+ *
+ * For 4., it is same as 2. and 3. but it reuses Kafka harvester to handle input sources
+ * under the hood when it dispatches to harvest.
+ *
+ * See also HCC article, "Integrating Apache Hive with Apache Spark - Hive Warehouse Connector"
+ * https://goo.gl/p3EXhz
+ */
 object HWCSupport {
   val BATCH_READ_SOURCE =
     "com.hortonworks.spark.sql.hive.llap.HiveWarehouseConnector"

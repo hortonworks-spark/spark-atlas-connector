@@ -459,7 +459,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
     def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
       if (batchReadSourceClass.isDefined) {
-
         val (db, tableName) = getDbTableNames(
           options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
         external.hwcTableToEntities(db, tableName, clusterName)
@@ -519,7 +518,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
 
     // This logic was ported from HWC's `SchemaUtil.getDbTableNames`
-    private def getDbTableNames(db: String, nameStr: String): Tuple2[String, String] = {
+    private def getDbTableNames(db: String, nameStr: String): (String, String) = {
       val nameParts = nameStr.split("\\.")
       if (nameParts.length == 1) {
         // hive.table(<unqualified_tableName>) so fill in db from default session db
