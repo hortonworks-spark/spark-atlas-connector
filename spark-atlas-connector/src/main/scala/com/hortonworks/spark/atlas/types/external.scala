@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
 
+import com.hortonworks.spark.atlas.AtlasClient
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 object external {
@@ -242,5 +243,26 @@ object external {
     tblEntity.setAttribute("columns", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  // ================== Hive entities (Hive Warehouse Connector) =====================
+  val HWC_TABLE_TYPE_STRING = "hive_table"
+
+  def hwcTableUniqueAttribute(
+      cluster: String,
+      db: String,
+      tableName: String): String = {
+    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
+  }
+
+  def hwcTableToEntities(
+      db: String,
+      table: String,
+      cluster: String): Seq[AtlasEntity] = {
+    // For HWC tables, we're not going to create new Hive table entities within Spark side.
+    // Therefore, it finds the existing Hive table entities.
+    val entity = AtlasClient.atlasClient().findEntity(
+      HWC_TABLE_TYPE_STRING, hwcTableUniqueAttribute(cluster, db, table))
+    Option(entity).toSeq
   }
 }

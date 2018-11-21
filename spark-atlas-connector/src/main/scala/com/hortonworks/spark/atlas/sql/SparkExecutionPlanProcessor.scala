@@ -26,7 +26,10 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
+import org.apache.spark.sql.kafka010.KafkaStreamWriter
+
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.Logging
@@ -102,8 +105,8 @@ class SparkExecutionPlanProcessor(
               Seq.empty
             }
 
-          case _ =>
-            Seq.empty
+          case w: DataSourceWriter =>
+            HWCSupport.extract(r, qd).getOrElse(Seq.empty)
         }
 
       case _ =>
@@ -154,4 +157,57 @@ class SparkExecutionPlanProcessor(
         logDebug(s"Created entities without columns")
       }
     }
+
+}
+
+/**
+ * Extracts Atlas entities related with Hive Warehouse Connector plans.
+ *
+ * Hive Warehouse Connector currently supports four types of operations:
+ *   1. SQL / DataFrame Read (batch read)
+ *   2. SQL / DataFrame Write (batch write)
+ *   3. SQL / DataFrame Write in streaming manner (batch write in streaming)
+ *   4. Structured Streaming Write (streaming write)
+ *
+ * For 1., it is supported by looking logical plans (if available) or physical
+ * plans up at `HWCEntities` for every execution plan being processed above
+ * when it's possible.
+ *
+ * For 2. and 3., it checks only when the execution plan is `WriteToDataSourceV2Exec`.
+ * It checks the write implementation of DataSourceV2 is HWC or not and dispatches to harvest
+ * appropriate entities.
+ *
+ * For 4., it is same as 2. and 3. but it reuses Kafka harvester to handle input sources
+ * under the hood when it dispatches to harvest.
+ *
+ * See also HCC article, "Integrating Apache Hive with Apache Spark - Hive Warehouse Connector"
+ * https://goo.gl/p3EXhz
+ */
+object HWCSupport {
+  val BATCH_READ =
+    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseDataSourceReader"
+  val BATCH_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseDataSourceWriter"
+  val BATCH_STREAM_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataSourceWriter"
+  val STREAM_WRITE =
+    "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
+
+  def extract(plan: WriteToDataSourceV2Exec, qd: QueryDetail): Option[Seq[AtlasEntity]] = {
+    plan.writer match {
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
+        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) =>
+        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+
+      case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
+        Some(HWCStreamingHarvester.harvest(plan, qd))
+
+      case _ => None
+    }
+  }
 }

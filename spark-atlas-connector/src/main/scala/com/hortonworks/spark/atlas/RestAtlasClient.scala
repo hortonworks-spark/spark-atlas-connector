@@ -62,6 +62,10 @@ class RestAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasClient {
     client.updateAtlasTypeDefs(typeDefs)
   }
 
+  override def findEntity(typeName: String, qualifiedName: String): AtlasEntity = {
+    client.getEntityByAttribute(typeName, Map("qualifiedName" -> qualifiedName).asJava).getEntity
+  }
+
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     val entitesWithExtInfo = new AtlasEntitiesWithExtInfo()
     entities.foreach(entitesWithExtInfo.addEntity)

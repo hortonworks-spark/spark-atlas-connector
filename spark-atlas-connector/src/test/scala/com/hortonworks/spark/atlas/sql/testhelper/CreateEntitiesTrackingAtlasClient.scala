@@ -44,4 +44,6 @@ class CreateEntitiesTrackingAtlasClient extends AtlasClient {
 
   override protected def doUpdateEntityWithUniqueAttr(entityType: String, attribute: String,
                                                       entity: AtlasEntity): Unit = {}
+
+  override def findEntity(typeNang: String, qualifiedName: String): AtlasEntity = { null }
 }
