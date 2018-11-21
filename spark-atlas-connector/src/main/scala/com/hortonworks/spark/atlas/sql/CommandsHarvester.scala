@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectComm
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -428,8 +428,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object HWCEntities extends Logging {
-    import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
-
     private def maybeClass(name: String): Option[Class[_]] = try {
       Some(Class.forName(name))
     } catch {
