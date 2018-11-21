@@ -21,17 +21,19 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-import org.apache.atlas.model.instance.AtlasEntity
 
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec}
+import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateViewCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
@@ -61,6 +63,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case r: HiveTableRelation => tableToEntities(r.tableMeta)
         case v: View => tableToEntities(v.desc)
         case l: LogicalRelation => tableToEntities(l.catalogTable.get)
+        case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -101,6 +104,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
             case _ => Seq.empty
           }
+        case HWCEntities(hwcEntities) => hwcEntities
         case local: LocalRelation =>
           logInfo("Local Relation to store Spark ML pipelineModel")
           Seq.empty
@@ -147,6 +151,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         }
         case _: OneRowRelation =>
           Seq.empty
+        case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -186,6 +191,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           l.catalogTable.map(tableToEntities(_)).getOrElse {
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq
           }
+        case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -246,6 +252,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case f: FileSourceScanExec =>
           f.tableIdentifier.map(prepareEntities).getOrElse(
             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+        case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -310,6 +317,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
           case e => Seq.empty
         }
+        case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -376,5 +384,153 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       "executionTime" -> qd.executionTime.toString,
       "details" -> qd.qe.toString(),
       "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+  }
+
+  object HWCHarvester extends Harvester[WriteToDataSourceV2Exec] {
+    override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
+      // Source table entity
+      val inputsEntities = qd.qe.sparkPlan.collectLeaves().map {
+        case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
+          Try {
+            val method = h.getClass.getMethod("relation")
+            method.setAccessible(true)
+            val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
+            tableToEntities(relation.tableMeta)
+          }.getOrElse(Seq.empty)
+
+        case f: FileSourceScanExec =>
+          f.tableIdentifier.map(prepareEntities).getOrElse(
+            f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+        case HWCEntities(hwcEntities) => hwcEntities
+        case e =>
+          logWarn(s"Missing unknown leaf node: $e")
+          Seq.empty
+      }
+
+      // Supports Spark HWC (destination table entity)
+      val outputEntities = HWCEntities.getHWCEntity(node.writer)
+
+      // Creates process entity
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val outputTableEntities = outputEntities.toList
+      val logMap = getPlanInfo(qd)
+
+      // ML related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
+      } else {
+        // Creates process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+      }
+    }
+  }
+
+  object HWCEntities extends Logging {
+    private def maybeClass(name: String): Option[Class[_]] = try {
+      Some(Class.forName(name))
+    } catch {
+      case _: ClassNotFoundException => None
+    }
+
+    private val batchReadSourceClass: Option[Class[_]] =
+      maybeClass(HWCSupport.BATCH_READ_SOURCE)
+
+    private val batchWriteClass: Option[Class[_]] = maybeClass(HWCSupport.BATCH_WRITE)
+    private val batchStreamWriteClass: Option[Class[_]] =
+      maybeClass(HWCSupport.BATCH_STREAM_WRITE)
+
+    private val streamWriteClass: Option[Class[_]] = maybeClass(HWCSupport.STREAM_WRITE)
+
+    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+      case ds: DataSourceV2Relation
+          if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
+        Some(getHWCEntity(ds.options))
+      case _ => None
+    }
+
+    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+      case ds: DataSourceV2ScanExec
+          if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
+        Some(getHWCEntity(ds.options))
+      case _ => None
+    }
+
+    def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+      if (batchReadSourceClass.isDefined) {
+        val (db, tableName) = getDbTableNames(
+          options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
+        external.hwcTableToEntities(db, tableName, clusterName)
+      } else {
+        logWarn(s"Class ${HWCSupport.BATCH_READ_SOURCE} is not found")
+        Seq.empty
+      }
+    }
+
+    def getHWCEntity(r: DataSourceWriter): Seq[AtlasEntity] = r match {
+      case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_WRITE) =>
+        if (batchWriteClass.isDefined) {
+          val f = r.getClass.getDeclaredField("options")
+          f.setAccessible(true)
+          val options = f.get(r).asInstanceOf[java.util.Map[String, String]]
+          val (db, tableName) = getDbTableNames(
+            options.getOrDefault("default.db", "default"), options.getOrDefault("table", ""))
+          external.hwcTableToEntities(db, tableName, clusterName)
+        } else {
+          logWarn(s"Class ${HWCSupport.BATCH_WRITE} is not found")
+          Seq.empty
+        }
+
+      case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_STREAM_WRITE) =>
+        if (batchStreamWriteClass.isDefined) {
+          val dbField = r.getClass.getDeclaredField("db")
+          dbField.setAccessible(true)
+          val db = dbField.get(r).asInstanceOf[String]
+
+          val tableField = r.getClass.getDeclaredField("table")
+          tableField.setAccessible(true)
+          val table = tableField.get(r).asInstanceOf[String]
+
+          external.hwcTableToEntities(db, table, clusterName)
+        } else {
+          logWarn(s"Class ${HWCSupport.BATCH_WRITE} is not found")
+          Seq.empty
+        }
+
+      case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.STREAM_WRITE) =>
+        if (streamWriteClass.isDefined) {
+          val dbField = r.getClass.getDeclaredField("db")
+          dbField.setAccessible(true)
+          val db = dbField.get(r).asInstanceOf[String]
+
+          val tableField = r.getClass.getDeclaredField("table")
+          tableField.setAccessible(true)
+          val table = tableField.get(r).asInstanceOf[String]
+
+          external.hwcTableToEntities(db, table, clusterName)
+        } else {
+          logWarn(s"Class ${HWCSupport.STREAM_WRITE} is not found")
+          Seq.empty
+        }
+
+      case _ => Seq.empty
+    }
+
+    // This logic was ported from HWC's `SchemaUtil.getDbTableNames`
+    private def getDbTableNames(db: String, nameStr: String): (String, String) = {
+      val nameParts = nameStr.split("\\.")
+      if (nameParts.length == 1) {
+        // hive.table(<unqualified_tableName>) so fill in db from default session db
+        (db, nameStr)
+      }
+      else if (nameParts.length == 2) {
+        // hive.table(<qualified_tableName>) so use the provided db
+        (nameParts(0), nameParts(1))
+      } else {
+        throw new IllegalArgumentException(
+          "Table name should be specified as either <table> or <db.table>")
+      }
+    }
   }
 }

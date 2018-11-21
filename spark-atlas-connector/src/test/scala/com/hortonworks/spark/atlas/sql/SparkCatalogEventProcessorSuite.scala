@@ -163,6 +163,8 @@ class FirehoseAtlasClient(conf: AtlasClientConf) extends AtlasClient {
     new AtlasTypesDef()
   }
 
+  override def findEntity(typeNang: String, qualifiedName: String): AtlasEntity = { null }
+
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     entities.foreach { e =>
       createEntityCall(e.getTypeName) =
@@ -184,5 +186,6 @@ class FirehoseAtlasClient(conf: AtlasClientConf) extends AtlasClient {
       attribute: String): Unit = {
     deleteEntityCall(entityType) = deleteEntityCall.getOrElse(entityType, 0) + 1
   }
+
 }
 

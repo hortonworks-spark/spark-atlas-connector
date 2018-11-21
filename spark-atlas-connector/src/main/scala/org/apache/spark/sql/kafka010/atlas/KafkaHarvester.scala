@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.kafka010.atlas
 
+import scala.collection.mutable
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.kafka010.{KafkaContinuousInputPartition, KafkaMicroBatchInputPartition, KafkaSourceRDDPartition, KafkaStreamWriterFactory}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
+
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 
-import scala.collection.mutable
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
@@ -50,16 +52,8 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       writer: WriteToDataSourceV2Exec,
       qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
-    val tChildren = writer.query.collectLeaves()
-    val sourceTopics: Set[KafkaTopicInformation] = tChildren.flatMap {
-      case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
-      case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
-      case _ => Nil
-    }.toSet
-
-    val inputsEntities: Seq[AtlasEntity] = sourceTopics.toList.flatMap { topic =>
-      external.kafkaToEntity(clusterName, topic)
-    }
+    val sourceTopics = extractSourceTopics(writer)
+    val inputsEntities: Seq[AtlasEntity] = extractInputEntities(sourceTopics)
 
     val outputEntities = if (targetTopic.isDefined) {
       external.kafkaToEntity(clusterName, targetTopic.get)
@@ -67,6 +61,28 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       Seq.empty
     }
 
+    val logMap = makeLogMap(sourceTopics, targetTopic, qd)
+    makeProcessEntities(inputsEntities, outputEntities, logMap)
+  }
+
+  def extractSourceTopics(node: WriteToDataSourceV2Exec): Set[KafkaTopicInformation] = {
+    node.query.collectLeaves().flatMap {
+      case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
+      case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
+      case _ => Nil
+    }.toSet
+  }
+
+  def extractInputEntities(
+       sourceTopics: Set[KafkaTopicInformation]): Seq[AtlasEntity] = {
+    sourceTopics
+      .toList.flatMap { topic => external.kafkaToEntity(clusterName, topic) }
+  }
+
+  def makeLogMap(
+      sourceTopics: Set[KafkaTopicInformation],
+      targetTopic: Option[KafkaTopicInformation],
+      qd: QueryDetail): Map[String, String] = {
     // create process entity
     val strSourceTopics = sourceTopics.toList
       .map(KafkaTopicInformation.getQualifiedName(_, clusterName)).sorted.mkString(", ")
@@ -80,15 +96,20 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       logInfo(s"Can not get dest topic")
     }
 
-    val inputTablesEntities = inputsEntities.toList
-    val outputTableEntities = outputEntities.toList
-
-    val logMap = Map(
+    Map(
       "executionId" -> qd.executionId.toString,
       "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
       "executionTime" -> qd.executionTime.toString,
       "details" -> qd.qe.toString(),
       "sparkPlanDescription" -> pDescription.toString())
+  }
+
+  def makeProcessEntities(
+      inputsEntities: Seq[AtlasEntity],
+      outputEntities: Seq[AtlasEntity],
+      logMap: Map[String, String]): Seq[AtlasEntity] = {
+    val inputTablesEntities = inputsEntities.toList
+    val outputTableEntities = outputEntities.toList
 
     // ml related cached object
     if (internal.cachedObjects.contains("model_uid")) {
