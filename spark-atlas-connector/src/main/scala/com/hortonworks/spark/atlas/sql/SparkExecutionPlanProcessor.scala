@@ -26,6 +26,7 @@ import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.kafka010.KafkaStreamWriter
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
+import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.Logging
 
 case class QueryDetail(qe: QueryExecution, executionId: Long,
@@ -132,6 +133,24 @@ class SparkExecutionPlanProcessor(
         }
       }
 
-      atlasClient.createEntities(entities)
+      if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+        atlasClient.createEntities(entities)
+        logDebug(s"Created entities with columns")
+      } else {
+        // We should handle both cases. The type values will be changed later.
+        val dbTypes = Seq(external.HIVE_TABLE_TYPE_STRING, metadata.TABLE_TYPE_STRING)
+        val excludedTypes = Seq(external.HIVE_COLUMN_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
+        val cleanedEntities = entities
+          .filterNot(e => excludedTypes.contains(e.getTypeName))
+          .map {
+            case e if dbTypes.contains(e.getTypeName) =>
+              e.removeAttribute("columns")
+              e
+            case e => e
+          }
+
+        atlasClient.createEntities(cleanedEntities)
+        logDebug(s"Created entities without columns")
+      }
     }
 }
