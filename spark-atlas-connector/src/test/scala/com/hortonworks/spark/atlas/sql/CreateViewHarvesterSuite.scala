@@ -33,6 +33,7 @@ import com.hortonworks.spark.atlas.WithHiveSupport
 class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val destinationViewName = "destination_" + Random.nextInt(100000)
+  private val destinationViewName2 = "destination_" + Random.nextInt(100000)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -71,5 +72,29 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     outputView.getAttribute("name") should be (destinationViewName)
     outputView.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
       s"default.$destinationViewName")
+  }
+
+  test("CREATE VIEW without source") {
+    val qe = sparkSession.sql(s"CREATE VIEW $destinationViewName2 " +
+      s"AS SELECT 1").queryExecution
+    val qd = QueryDetail(qe, 0L, 0L)
+
+    assert(qe.sparkPlan.isInstanceOf[ExecutedCommandExec])
+    val node = qe.sparkPlan.asInstanceOf[ExecutedCommandExec]
+    assert(node.cmd.isInstanceOf[CreateViewCommand])
+    val cmd = node.cmd.asInstanceOf[CreateViewCommand]
+
+    val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
+    val pEntity = entities.head
+    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
+    assert(pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]].size() == 0)
+
+    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
+    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
+    outputs.size() should be (1)
+    val outputView = outputs.asScala.head
+    outputView.getAttribute("name") should be (destinationViewName2)
+    outputView.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should endWith (
+      s"default.$destinationViewName2")
   }
 }
