@@ -69,7 +69,7 @@ object metadata {
       "table",
       TABLE_TYPE_STRING,
       AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
-      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "storage")))
+      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "sd")))
 
   // ========= Column type =========
   val COLUMN_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -99,7 +99,7 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("db", DB_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "storage", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
+      "sd", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "spark_schema",
       "array<spark_column>",
