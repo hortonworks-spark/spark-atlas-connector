@@ -77,7 +77,13 @@ class SparkCatalogEventProcessor(
         } else {
           // We should handle both cases. The type values will be changed later.
           val excludedTypes = Seq(external.HIVE_COLUMN_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
-          val cleanedEntities = tableEntities.filterNot(e => excludedTypes.contains(e.getTypeName))
+          val cleanedEntities = tableEntities
+            .filterNot(e => excludedTypes.contains(e.getTypeName))
+            .map { e =>
+              e.removeAttribute("columns")
+              e.removeAttribute("spark_schema")
+              e
+            }
           atlasClient.createEntities(cleanedEntities)
           logDebug(s"Created table entity $table without columns")
         }

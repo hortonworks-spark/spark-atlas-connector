@@ -17,6 +17,9 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import scala.collection.convert.Wrappers.SeqWrapper
+
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
@@ -135,6 +138,14 @@ class SparkExecutionPlanProcessor(
           .map {
             case e if dbTypes.contains(e.getTypeName) =>
               e.removeAttribute("columns")
+              e
+            case e if e.getTypeName.equals(metadata.PROCESS_TYPE_STRING) =>
+              Seq(e.getAttribute("inputs"), e.getAttribute("outputs")).foreach { list =>
+                list.asInstanceOf[SeqWrapper[AtlasEntity]].underlying.foreach { o =>
+                  o.removeAttribute("columns")
+                  o.removeAttribute("spark_schema")
+                }
+              }
               e
             case e => e
           }
