@@ -281,15 +281,20 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: CreateViewCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       // from table entities
       val child = node.child.asInstanceOf[Project].child
-      val fromTableIdentifier = child.asInstanceOf[UnresolvedRelation].tableIdentifier
-      val inputEntities = prepareEntities(fromTableIdentifier)
+      val inputEntities = child match {
+        case r: UnresolvedRelation => prepareEntities(r.tableIdentifier)
+        case _: OneRowRelation => Seq.empty
+        case n =>
+          logWarn(s"Unknown leaf node: $n")
+          Seq.empty
+      }
 
       // new view entities
       val viewIdentifier = node.name
       val outputEntities = prepareEntities(viewIdentifier)
 
       // create process entity
-      val inputTableEntity = List(inputEntities.head)
+      val inputTableEntity = inputEntities.headOption.toList
       val outputTableEntity = List(outputEntities.head)
       val logMap = getPlanInfo(qd)
 
