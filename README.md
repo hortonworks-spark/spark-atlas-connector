@@ -50,6 +50,9 @@ Also make sure atlas configuration file `atlas-application.properties` is in the
 
 If you're using cluster mode, please also ship this conf file to the remote Drive using `--files atlas-application.properties`.
 
+Spark Atlas Connector supports two types of Atlas clients, "kafka" and "rest". You can configure which type of client via setting `atlas.client.type` to whether `kafka` or `rest`.
+The default value is `kafka` which provides stable and secured way of publishing changes. Atlas has embedded Kafka instance so you can test it out in test environment, but it's encouraged to use external kafka cluster in production. If you don't have Kafka cluster in production, you may want to set client to `rest`.
+
 To Use it in Secure Environment
 ===
 
