@@ -23,12 +23,15 @@ import scala.collection.JavaConverters._
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.hook.AtlasHook
 import org.apache.atlas.model.typedef.AtlasTypesDef
-import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.atlas.v1.model.notification.HookNotificationV1
 import org.apache.atlas.v1.model.notification.HookNotificationV1.{EntityCreateRequest, EntityDeleteRequest}
 import org.apache.atlas.v1.model.instance.Referenceable
 import org.apache.atlas.model.notification.HookNotification
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import org.apache.atlas.AtlasClientV2.API_V2
+import org.apache.atlas.model.instance.AtlasEntity.{AtlasEntitiesWithExtInfo, AtlasEntityWithExtInfo}
+import org.apache.atlas.model.notification.HookNotification.{EntityCreateRequestV2, EntityDeleteRequestV2, EntityPartialUpdateRequestV2}
 
 class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with AtlasClient {
 
@@ -49,62 +52,39 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
   }
 
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
-    val createRequests = entities.map { e =>
-      new EntityCreateRequest(
-        SparkUtils.currUser(), entityToReferenceable(e)): HookNotification
-    }.toList.asJava
+    val entitiesWithExtInfo = new AtlasEntitiesWithExtInfo()
+    entities.foreach(entitiesWithExtInfo.addEntity)
+    val createRequest = new EntityCreateRequestV2(
+      SparkUtils.currUser(), entitiesWithExtInfo): HookNotification
 
-    notifyEntities(createRequests, SparkUtils.ugi())
+    notifyEntities(Seq(createRequest).asJava, SparkUtils.ugi())
   }
 
   override protected def doDeleteEntityWithUniqueAttr(
       entityType: String,
       attribute: String): Unit = {
-    val deleteRequest = List(new EntityDeleteRequest(
+    val deleteRequest = new EntityDeleteRequestV2(
       SparkUtils.currUser(),
-      entityType,
-      org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-      attribute): HookNotification)
-    notifyEntities(deleteRequest.asJava, SparkUtils.ugi())
+      Seq(new AtlasObjectId(entityType,
+        org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
+        attribute)).asJava
+    ): HookNotification
+
+    notifyEntities(Seq(deleteRequest).asJava, SparkUtils.ugi())
   }
 
   override protected def doUpdateEntityWithUniqueAttr(
       entityType: String,
       attribute: String,
       entity: AtlasEntity): Unit = {
-    val partialUpdateRequest = List(
-      new HookNotificationV1.EntityPartialUpdateRequest(
-        SparkUtils.currUser(),
-        entityType,
+    val partialUpdateRequest = new EntityPartialUpdateRequestV2(
+      SparkUtils.currUser(),
+      new AtlasObjectId(entityType,
         org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-        attribute,
-        entityToReferenceable(entity)): HookNotification)
-    notifyEntities(partialUpdateRequest.asJava, SparkUtils.ugi())
-  }
+        attribute),
+      new AtlasEntityWithExtInfo(entity)
+    ): HookNotification
 
-  private def entityToReferenceable(entity: AtlasEntity): Referenceable = {
-    val classifications = Option(entity.getClassifications).map { s =>
-      s.asScala.map(_.getTypeName)
-    }.getOrElse(List.empty)
-
-    val referenceable = new Referenceable(entity.getTypeName, classifications: _*)
-
-    val convertedAttributes = entity.getAttributes.asScala.mapValues {
-      case e: AtlasEntity =>
-        entityToReferenceable(e)
-
-      case l: util.Collection[_] =>
-        val list = new util.ArrayList[Referenceable]()
-        l.asScala.foreach {
-          case e: AtlasEntity =>
-            list.add(entityToReferenceable(e))
-        }
-        list
-
-      case o => o
-    }
-    convertedAttributes.foreach { kv => referenceable.set(kv._1, kv._2) }
-
-    referenceable
+    notifyEntities(Seq(partialUpdateRequest).asJava, SparkUtils.ugi())
   }
 }
