@@ -467,9 +467,26 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
     def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
       if (batchReadSourceClass.isDefined) {
-        val (db, tableName) = getDbTableNames(
-          options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
-        external.hwcTableToEntities(db, tableName, clusterName)
+        if (options.contains("query")) {
+          val sql = options("query")
+          // HACK ALERT! Currently SAC and HWC only know the query that has to be pushed down
+          // to Hive side so here we don't know which tables are to be proceeded. To work around,
+          // we use Spark's parser driver to identify tables. Once we know the table
+          // identifiers by this, it looks up Hive entities to find Hive tables out.
+          val parsedPlan = org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+          parsedPlan.collectLeaves().flatMap {
+            case r: UnresolvedRelation => external.hwcTableToEntities(
+              r.tableIdentifier.database.getOrElse("default"), r.tableIdentifier.table, clusterName)
+            case _: OneRowRelation => Seq.empty
+            case n =>
+              logWarn(s"Unknown leaf node: $n")
+              Seq.empty
+          }
+        } else {
+          val (db, tableName) = getDbTableNames(
+            options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
+          external.hwcTableToEntities(db, tableName, clusterName)
+        }
       } else {
         logWarn(s"Class ${HWCSupport.BATCH_READ_SOURCE} is not found")
         Seq.empty
