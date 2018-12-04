@@ -28,8 +28,8 @@ import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 class SparkCatalogEventProcessor(
-                                  private[atlas] val atlasClient: AtlasClient,
-                                  val conf: AtlasClientConf)
+    private[atlas] val atlasClient: AtlasClient,
+    val conf: AtlasClientConf)
   extends AbstractEventProcessor[ExternalCatalogEvent] with AtlasEntityUtils with Logging {
 
   private val cachedObject = new mutable.WeakHashMap[String, Object]
@@ -144,7 +144,7 @@ class SparkCatalogEventProcessor(
             atlasClient.createEntities(schemaEntities)
 
             val tableEntity = new AtlasEntity(tableType(isHiveTbl))
-            tableEntity.setAttribute("spark_schema", schemaEntities.asJava)
+            tableEntity.setAttribute("schema", schemaEntities.asJava)
             atlasClient.updateEntityWithUniqueAttr(
               tableType(isHiveTbl),
               tableUniqueAttribute(db, table, isHiveTbl),

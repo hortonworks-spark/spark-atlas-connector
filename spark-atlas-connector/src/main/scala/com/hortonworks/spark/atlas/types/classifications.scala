@@ -31,10 +31,10 @@ object classifications {
   val STREAM_CLASSIFICATION = "StreamAccess"
 
   val DIMENSION_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
-    DIMENSION_CLASSIFICATION,
-    "Dimension Classification",
-    metadata.METADATA_VERSION,
-    ImmutableSet.of[String]())
+      DIMENSION_CLASSIFICATION,
+      "Dimension Classification",
+      metadata.METADATA_VERSION,
+      ImmutableSet.of[String]())
 
   val FACT_CLASSIFICATION_DEF = AtlasTypeUtil.createTraitTypeDef(
     FACT_CLASSIFICATION,

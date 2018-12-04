@@ -22,23 +22,25 @@ import java.util
 
 import scala.util.Random
 import scala.collection.JavaConverters._
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.commons.io.FileUtils
 import org.apache.atlas.model.instance.AtlasEntity
 
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.Tokenizer
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 
-import com.hortonworks.spark.atlas.{BaseResourceIT, WithHiveSupport}
+import com.hortonworks.spark.atlas.BaseResourceIT
 import com.hortonworks.spark.atlas.sql.{CommandsHarvester, QueryDetail}
 import com.hortonworks.spark.atlas.types.internal
 
 
-class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with WithHiveSupport {
+class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with BeforeAndAfterAll {
+
+  private var sparkSession: SparkSession = _
 
   private val dataDir1 = "target/dir1/orc/"
   private val dataDir2 = "target/dir2/orc/"
@@ -47,8 +49,12 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
   private val sourceSparkTblName = "source_s_" + Random.nextInt(100000)
   private val sourceSparkTblName2 = "source_s_" + Random.nextInt(100000)
 
-  override protected def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
+    sparkSession = SparkSession.builder()
+      .master("local")
+      .config("spark.sql.catalogImplementation", "hive")
+      .getOrCreate()
 
     val input = Seq(
         (1, "abc test1 123"),
@@ -72,9 +78,14 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
   }
 
   override def afterAll(): Unit = {
-    FileUtils.deleteDirectory(new File("tmp"))
+    sparkSession.stop()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    sparkSession = null
+
+    FileUtils.deleteDirectory(new File("metastore_db"))
+    FileUtils.deleteDirectory(new File("spark-warehouse"))
     FileUtils.deleteDirectory(new File(dataDir1))
-    FileUtils.deleteDirectory(new File(dataDir2))
     internal.cachedObjects.clear()
 
     super.afterAll()
@@ -114,8 +125,8 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val model = pipeline.fit(trainData)
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
-    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
 
     val logMap = Map("sparkPlanDescription" ->
       (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))
@@ -161,8 +172,8 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val model = pipeline.fit(trainData)
     pipeline.write.overwrite().save(pipelineDir)
 
-    val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
-    val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
+    val pipelineEntity = internal.mlPipelineToEntity(pipeline, pipelineDirEntity)
+    val modelEntity = internal.mlModelToEntity(model, modelDirEntity)
 
     val logMap = Map("sparkPlanDescription" ->
       (s"Spark ML training model with pipeline uid: ${pipeline.uid}"))

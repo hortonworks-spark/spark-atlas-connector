@@ -21,31 +21,17 @@ import scala.collection.mutable.ListBuffer
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
-import org.apache.spark.sql.kafka010.{KafkaSourceRDDPartition, KafkaStreamWriter, KafkaStreamWriterFactory}
+import org.apache.spark.sql.kafka010.{KafkaSourceRDDPartition, KafkaStreamWriter}
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
-import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
 
-  def extractTopic(writer: KafkaStreamWriter): Option[String] = {
-    // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
-    // Hopefully KafkaStreamWriterFactory is a case class instead, so we can extract
-    // topic information from there.
-    // The cost of createWriterFactory is tiny (case class object creation) for this case,
-    // and we can find the way to cache it once we find the cost is not ignorable.
-    writer.createInternalRowWriterFactory() match {
-
-      case   KafkaStreamWriterFactory(tp, _, _) => tp
-      case _ => None
-    }
-  }
-
-  def harvest(targetTopic: Option[String], writer: WriteToDataSourceV2Exec,
-              qd: QueryDetail) : Seq[AtlasEntity] = {
+  def harvest(node: KafkaStreamWriter, writer: WriteToDataSourceV2Exec,
+    qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
     val read_from_topics = new ListBuffer[String]()
     val tChildren = writer.query.collectLeaves()
@@ -59,8 +45,21 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
         }.toSeq.flatten
     }
 
-    val outputEntities = if (targetTopic.isDefined) {
-      external.kafkaToEntity(clusterName, targetTopic.get)
+    // destination topic
+    var destTopic = None: Option[String]
+    try {
+      val topicField = node.getClass.getDeclaredField("topic")
+      topicField.setAccessible(true)
+      destTopic = topicField.get(node).asInstanceOf[Option[String]]
+    } catch {
+      case e: NoSuchMethodException =>
+        logDebug(s"Can not get topic, so can not create Kafka topic entities: ${qd.qe}")
+      case e: Exception =>
+        logDebug(s"Can not get topic, please update topic of KafkaStreamWriter: ${e.toString}")
+    }
+
+    val outputEntities = if (destTopic.isDefined) {
+      external.kafkaToEntity(clusterName, destTopic.get)
     } else {
       Seq.empty
     }
@@ -71,8 +70,8 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       e => pDescription.append(e).append(" ")
     }
 
-    if (targetTopic.isDefined) {
-      pDescription.append(") Topics written into( ").append(targetTopic.get).append(" )")
+    if(destTopic.isDefined) {
+      pDescription.append(") Topics written into( ").append(destTopic.get).append(" )")
     } else {
       logInfo(s"Can not get dest topic")
     }

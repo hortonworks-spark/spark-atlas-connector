@@ -41,9 +41,9 @@ trait AtlasEntityUtils {
 
   def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
     if (SparkUtils.isHiveEnabled()) {
-      external.hiveDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
+      external.hiveDbToEntities(dbDefinition, clusterName)
     } else {
-      internal.sparkDbToEntities(dbDefinition, SparkUtils.currUser())
+      internal.sparkDbToEntities(dbDefinition)
     }
   }
 
@@ -64,10 +64,10 @@ trait AtlasEntityUtils {
   }
 
   def storageFormatToEntities(
-                               storageFormat: CatalogStorageFormat,
-                               db: String,
-                               table: String,
-                               isHiveTable: Boolean): Seq[AtlasEntity] = {
+      storageFormat: CatalogStorageFormat,
+      db: String,
+      table: String,
+      isHiveTable: Boolean): Seq[AtlasEntity] = {
     if (isHiveTable) {
       external.hiveStorageDescToEntities(storageFormat, clusterName, db, table)
     } else {
@@ -92,10 +92,10 @@ trait AtlasEntityUtils {
   }
 
   def schemaToEntities(
-                        schema: StructType,
-                        db: String,
-                        table: String,
-                        isHiveTable: Boolean): List[AtlasEntity] = {
+      schema: StructType,
+      db: String,
+      table: String,
+      isHiveTable: Boolean): List[AtlasEntity] = {
     if (isHiveTable) {
       external.hiveSchemaToEntities(schema, clusterName, db, table)
     } else {
@@ -104,10 +104,10 @@ trait AtlasEntityUtils {
   }
 
   def columnUniqueAttribute(
-                             db: String,
-                             table: String,
-                             col: String,
-                             isHiveTable: Boolean): String = {
+      db: String,
+      table: String,
+      col: String,
+      isHiveTable: Boolean): String = {
     if (isHiveTable) {
       external.hiveColumnUniqueAttribute(clusterName, db, table, col)
     } else {
@@ -127,8 +127,8 @@ trait AtlasEntityUtils {
     tableDefinition.provider.contains("hive")
 
   def tableToEntities(
-                       tableDefinition: CatalogTable,
-                       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+      tableDefinition: CatalogTable,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
     if (isHiveTable(tableDefinition)) {
       external.hiveTableToEntities(tableDefinition, clusterName, mockDbDefinition)
     } else {
@@ -151,12 +151,12 @@ trait AtlasEntityUtils {
   def processType: String = metadata.PROCESS_TYPE_STRING
 
   def processToEntity(
-                       qe: QueryExecution,
-                       executionId: Long,
-                       executionTime: Long,
-                       inputs: List[AtlasEntity],
-                       outputs: List[AtlasEntity],
-                       query: Option[String] = None): AtlasEntity =
+      qe: QueryExecution,
+      executionId: Long,
+      executionTime: Long,
+      inputs: List[AtlasEntity],
+      outputs: List[AtlasEntity],
+      query: Option[String] = None): AtlasEntity =
     internal.sparkProcessToEntity(qe, executionId, executionTime, inputs, outputs, query)
 
   def processUniqueAttribute(executionId: Long): String =

@@ -33,7 +33,7 @@ abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll {
   private var client: AtlasClientV2 = null
   protected val atlasClientConf = new AtlasClientConf
 
-  override protected def beforeAll(): Unit = {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
 
