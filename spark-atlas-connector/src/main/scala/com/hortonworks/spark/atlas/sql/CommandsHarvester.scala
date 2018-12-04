@@ -475,8 +475,11 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           // identifiers by this, it looks up Hive entities to find Hive tables out.
           val parsedPlan = org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
           parsedPlan.collectLeaves().flatMap {
-            case r: UnresolvedRelation => external.hwcTableToEntities(
-              r.tableIdentifier.database.getOrElse("default"), r.tableIdentifier.table, clusterName)
+            case r: UnresolvedRelation =>
+              val db = r.tableIdentifier.database.getOrElse(
+                options.getOrElse("default.db", "default"))
+              val tableName = r.tableIdentifier.table
+              external.hwcTableToEntities(db, tableName, clusterName)
             case _: OneRowRelation => Seq.empty
             case n =>
               logWarn(s"Unknown leaf node: $n")
