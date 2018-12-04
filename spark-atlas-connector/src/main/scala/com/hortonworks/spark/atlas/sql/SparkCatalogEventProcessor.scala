@@ -172,22 +172,42 @@ class SparkCatalogEventProcessor(
         kind match {
           case "table" =>
             val tableEntities = tableToEntities(tableDefinition)
-            atlasClient.createEntities(tableEntities)
-            logDebug(s"Updated table entity $table")
+            if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+              atlasClient.createEntities(tableEntities)
+              logDebug(s"Updated table entity $table with columns")
+            } else {
+              // We should handle both cases. The type values will be changed later.
+              val excludedTypes = Seq(external.HIVE_COLUMN_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
+              val cleanedEntities = tableEntities
+                .filterNot(e => excludedTypes.contains(e.getTypeName))
+                .map { e =>
+                  e.removeAttribute("columns")
+                  e.removeAttribute("spark_schema")
+                  e
+                }
+              atlasClient.createEntities(cleanedEntities)
+              logDebug(s"Updated table entity $table without columns")
+            }
 
           case "dataSchema" =>
-            val isHiveTbl = isHiveTable(tableDefinition)
-            val schemaEntities =
-              schemaToEntities(tableDefinition.schema, db, table, isHiveTbl)
-            atlasClient.createEntities(schemaEntities)
+            if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+              val isHiveTbl = isHiveTable(tableDefinition)
+              val schemaEntities =
+                schemaToEntities(tableDefinition.schema, db, table, isHiveTbl)
+              atlasClient.createEntities(schemaEntities)
 
-            val tableEntity = new AtlasEntity(tableType(isHiveTbl))
-            tableEntity.setAttribute("spark_schema", schemaEntities.asJava)
-            atlasClient.updateEntityWithUniqueAttr(
-              tableType(isHiveTbl),
-              tableUniqueAttribute(db, table, isHiveTbl),
-              tableEntity)
-            logDebug(s"Updated table schema")
+              val tableEntity = new AtlasEntity(tableType(isHiveTbl))
+              tableEntity.setAttribute("spark_schema", schemaEntities.asJava)
+              atlasClient.updateEntityWithUniqueAttr(
+                tableType(isHiveTbl),
+                tableUniqueAttribute(db, table, isHiveTbl),
+                tableEntity)
+              logDebug(s"Updated table schema")
+            } else {
+              // We don't mind updating spark column
+              logDebug(s"Detected updating of table schema but ignored: " +
+                s"spark column is disabled")
+            }
 
           case "stats" =>
             logDebug(s"Stats update will not be tracked here")
