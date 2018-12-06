@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 
@@ -87,6 +87,26 @@ object SparkUtils extends Logging {
     val catalog = sparkSession.sharedState.externalCatalog
     require(catalog != null, "catalog is null")
     catalog
+  }
+
+  /**
+   * Get the catalog table of current active SparkSession if needed.
+   */
+  def getCatalogTableIfNeeded(tableDefinition: CatalogTable): CatalogTable = {
+    // Let's assume that input catalog table does not have full information
+    // if both owner and last access time are default values (empty string and -1)
+    if (tableDefinition.owner == "" && tableDefinition.lastAccessTime == -1) {
+      try {
+        SparkUtils.getExternalCatalog().getTable(
+          tableDefinition.identifier.database.getOrElse("default"),
+          tableDefinition.identifier.table)
+      } catch {
+        case e: Throwable =>
+          tableDefinition
+      }
+    } else {
+      tableDefinition
+    }
   }
 
   // Get the user name of current context.

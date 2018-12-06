@@ -217,9 +217,10 @@ object external {
   }
 
   def hiveTableToEntities(
-      tableDefinition: CatalogTable,
+      _tableDefinition: CatalogTable,
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val tableDefinition = SparkUtils.getCatalogTableIfNeeded(_tableDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))

@@ -100,9 +100,10 @@ object internal extends Logging {
   }
 
   def sparkTableToEntities(
-      tableDefinition: CatalogTable,
+      _tableDefinition: CatalogTable,
       clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val tableDefinition = SparkUtils.getCatalogTableIfNeeded(_tableDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))

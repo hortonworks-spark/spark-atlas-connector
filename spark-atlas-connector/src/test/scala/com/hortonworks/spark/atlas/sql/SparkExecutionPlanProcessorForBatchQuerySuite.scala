@@ -85,16 +85,17 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
 
     val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
 
-    // we're expecting two file system entities:
-    // one for input file, another one for database warehouse
+    // we're expecting three file system entities:
+    // one for input file, one for database warehouse, and one for output table (under
+    // database warehouse since it's a managed table).
     val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
-    assert(fsEntities.size === 2)
+    assert(fsEntities.size === 3)
 
     // database warehouse
     assert(fsEntities.contains(databaseLocationFsEntity))
 
     val inputFsEntities = fsEntities.filterNot(_ == databaseLocationFsEntity)
-    assert(inputFsEntities.size === 1)
+    assert(inputFsEntities.size === 2)
 
     // input file
     val inputFsEntity = inputFsEntities.head
