@@ -35,7 +35,7 @@ trait AtlasClient extends Logging {
 
   def findEntity(typeNang: String, qualifiedName: String): AtlasEntity
 
-  final def createEntities(entities: Seq[AtlasEntity]): Unit = {
+  final def createEntities(entities: Seq[AtlasEntity]): Unit = this.synchronized {
     if (entities.isEmpty) {
       return
     }
@@ -50,7 +50,8 @@ trait AtlasClient extends Logging {
 
   protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit
 
-  final def deleteEntityWithUniqueAttr(entityType: String, attribute: String): Unit = {
+  final def deleteEntityWithUniqueAttr(
+      entityType: String, attribute: String): Unit = this.synchronized {
     try {
       doDeleteEntityWithUniqueAttr(entityType, attribute)
     } catch {
@@ -64,7 +65,7 @@ trait AtlasClient extends Logging {
   final def updateEntityWithUniqueAttr(
       entityType: String,
       attribute: String,
-      entity: AtlasEntity): Unit = {
+      entity: AtlasEntity): Unit = this.synchronized {
     try {
       doUpdateEntityWithUniqueAttr(entityType, attribute, entity)
     } catch {
