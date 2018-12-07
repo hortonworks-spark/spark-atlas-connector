@@ -90,22 +90,17 @@ object SparkUtils extends Logging {
   }
 
   /**
-   * Get the catalog table of current active SparkSession if needed.
+   * Get the catalog table of current external catalog if exists; otherwise, it returns
+   * the input catalog table as is.
    */
-  def getCatalogTableIfNeeded(tableDefinition: CatalogTable): CatalogTable = {
-    // Let's assume that input catalog table does not have full information
-    // if both owner and last access time are default values (empty string and -1)
-    if (tableDefinition.owner == "" && tableDefinition.lastAccessTime == -1) {
-      try {
-        SparkUtils.getExternalCatalog().getTable(
-          tableDefinition.identifier.database.getOrElse("default"),
-          tableDefinition.identifier.table)
-      } catch {
-        case e: Throwable =>
-          tableDefinition
-      }
-    } else {
-      tableDefinition
+  def getCatalogTableIfExistent(tableDefinition: CatalogTable): CatalogTable = {
+    try {
+      SparkUtils.getExternalCatalog().getTable(
+        tableDefinition.identifier.database.getOrElse("default"),
+        tableDefinition.identifier.table)
+    } catch {
+      case e: Throwable =>
+        tableDefinition
     }
   }
 
