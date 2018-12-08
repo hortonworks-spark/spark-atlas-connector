@@ -330,7 +330,17 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
               case e => Seq.empty
             }
             case HWCEntities(hwcEntities) => hwcEntities
-            case e => Seq.empty
+            case e =>
+              // SPARK-24867 wraps the whole plan at Spark 2.3.2.
+              // TODO: Remove duplicated code here and above.
+              e.collectLeaves().flatMap {
+                case r: HiveTableRelation => tableToEntities(r.tableMeta)
+                case v: View => tableToEntities(v.desc)
+                case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
+                  catalogTable.map(tableToEntities(_)).getOrElse(
+                    fileRelation.inputFiles.map(external.pathToEntity).toSeq)
+                case _ => Seq.empty
+              }
         }
         case HWCEntities(hwcEntities) => hwcEntities
         case e =>
