@@ -34,8 +34,8 @@ To use it, you will need to make this jar accessible in Spark Driver, also confi
 
 ```
 spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
-
 spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
+spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
 For example, when you're using spark-shell, you can start the Spark like:
@@ -43,7 +43,8 @@ For example, when you're using spark-shell, you can start the Spark like:
 ```shell
 bin/spark-shell --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \
 --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
---conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
+--conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+--conf spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
 Also make sure atlas configuration file `atlas-application.properties` is in the Driver's classpath. For example, putting this file into `<SPARK_HOME>/conf`.
@@ -76,8 +77,10 @@ When running on cluster node, you will also need to distribute this keytab, belo
 
 ```shell
  ./bin/spark-submit --class <class_name> \
-  --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \ --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+  --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \
+  --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
   --conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
+  --conf spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker \
   --master yarn-cluster \
   --principal spark-test@EXAMPLE.COM \
   --keytab ./spark.headless.keytab \
