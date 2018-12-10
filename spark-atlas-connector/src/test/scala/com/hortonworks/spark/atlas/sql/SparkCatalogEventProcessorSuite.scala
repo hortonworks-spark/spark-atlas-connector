@@ -142,7 +142,10 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     SparkUtils.getExternalCatalog().alterTable(newTableDefinition)
     processor.pushEvent(AlterTableEvent("db1", "tbl2", "table"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.createEntityCall(processor.dbType) == 2)
+      // no creation on db type and storage format entities
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
       if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
         assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
@@ -153,6 +156,10 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
 
     processor.pushEvent(AlterTableEvent("db1", "tbl2", "dataSchema"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
+      // no creation on db type and storage format entities
+      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+
       if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
         assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
         assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) >= 2)

@@ -22,7 +22,6 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -32,8 +31,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
-
-import com.hortonworks.spark.atlas.AtlasClient
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 object external {
@@ -249,6 +247,24 @@ object external {
     tblEntity.setAttribute("columns", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  def hiveTableToEntitiesForAlterTable(
+      tblDefination: CatalogTable,
+      cluster: String,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val typesToPick = Seq(HIVE_TABLE_TYPE_STRING, HIVE_COLUMN_TYPE_STRING)
+    val entities = hiveTableToEntities(tblDefination, cluster, mockDbDefinition)
+
+    val dbEntity = entities.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
+    val sdEntity = entities.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
+    val tableEntity = entities.filter(e => e.getTypeName.equals(HIVE_TABLE_TYPE_STRING)).head
+
+    // override attribute with reference - Atlas should already have these entities
+    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    entities.filter(e => typesToPick.contains(e.getTypeName))
   }
 
   // ================== Hive entities (Hive Warehouse Connector) =====================
