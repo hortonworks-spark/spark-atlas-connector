@@ -130,7 +130,6 @@ object internal extends Logging {
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", tableDefinition.createTime)
-    tblEntity.setAttribute("lastAccessTime", tableDefinition.lastAccessTime)
     tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
