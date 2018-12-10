@@ -233,7 +233,6 @@ object external {
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
-    tblEntity.setAttribute("lastAccessTime", new Date(tableDefinition.lastAccessTime))
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("sd", sdEntities.head)
