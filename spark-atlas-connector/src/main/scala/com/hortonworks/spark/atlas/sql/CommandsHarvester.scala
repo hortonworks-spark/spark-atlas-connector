@@ -352,12 +352,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       var catalog = ""
       node.options.foreach {x => if (x._1.equals("catalog")) catalog = x._2}
       val outputEntities = if (catalog != "") {
+        val cluster = node.options.getOrElse(AtlasClientConf.CLUSTER_NAME.key, clusterName)
         val jObj = parse(catalog).asInstanceOf[JObject]
         val map = jObj.values
         val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
         val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
         val tName = tableMeta.get("name").get.asInstanceOf[String]
-        external.hbaseTableToEntity(conf.get(AtlasClientConf.CLUSTER_NAME), tName, nSpace)
+        external.hbaseTableToEntity(cluster, tName, nSpace)
       } else {
         Seq.empty
       }
@@ -389,14 +390,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   private def getHBaseEntity(r: BaseRelation): Seq[AtlasEntity] = {
     if (maybeClazz.isDefined) {
-      val parameters = r.getClass.getMethod("parameters").invoke(r)
-      val catalog = parameters.asInstanceOf[Map[String, String]].getOrElse("catalog", "")
+      val parameters =
+        r.getClass.getMethod("parameters").invoke(r).asInstanceOf[Map[String, String]]
+      val catalog = parameters.getOrElse("catalog", "")
+      val cluster = parameters.getOrElse(AtlasClientConf.CLUSTER_NAME.key, clusterName)
       val jObj = parse(catalog).asInstanceOf[JObject]
       val map = jObj.values
       val tableMeta = map.get("table").get.asInstanceOf[Map[String, _]]
       val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
       val tName = tableMeta.get("name").get.asInstanceOf[String]
-      external.hbaseTableToEntity(clusterName, tName, nSpace)
+      external.hbaseTableToEntity(cluster, tName, nSpace)
     } else {
       logWarn(s"Class $maybeClazz is not found")
       Seq.empty
