@@ -124,5 +124,24 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     pathEntities.head.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       tempFile.toURI.toString)
   }
+
+  test("convert s3 path to aws_s3 entities") {
+    val pathEntities = external.pathToEntities("s3://testbucket/testpseudodir/testfile")
+
+    pathEntities.head.getTypeName should be (external.S3_OBJECT_TYPE_STRING)
+    pathEntities.head.getAttribute("name") should be ("testfile")
+    pathEntities.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket/testpseudodir/testfile")
+
+    pathEntities.tail.head.getTypeName should be (external.S3_PSEUDO_DIR_TYPE_STRING)
+    pathEntities.tail.head.getAttribute("name") should be ("/testpseudodir/")
+    pathEntities.tail.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket/testpseudodir/")
+
+    pathEntities.tail.tail.head.getTypeName should be (external.S3_BUCKET_TYPE_STRING)
+    pathEntities.tail.tail.head.getAttribute("name") should be ("testbucket")
+    pathEntities.tail.tail.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket")
+  }
 }
 
