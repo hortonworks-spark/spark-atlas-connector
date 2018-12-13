@@ -24,7 +24,7 @@ import java.util.Date
 import scala.collection.JavaConverters._
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
-import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -40,25 +40,84 @@ object external {
   // ================ File system entities ======================
   val FS_PATH_TYPE_STRING = "fs_path"
   val HDFS_PATH_TYPE_STRING = "hdfs_path"
+  val S3_OBJECT_TYPE_STRING = "aws_s3_object"
+  val S3_PSEUDO_DIR_TYPE_STRING = "aws_s3_pseudo_dir"
+  val S3_BUCKET_TYPE_STRING = "aws_s3_bucket"
 
-  def pathToEntity(path: String): AtlasEntity = {
+  private def entityToObjectId(entity: AtlasEntity,
+                               attributeNames: Seq[String] = Seq("qualifiedName")) = {
+    import scala.collection.JavaConverters._
+
+    val objectId = new AtlasObjectId(entity.getGuid, entity.getTypeName)
+
+    val attributeValues = attributeNames.map(entity.getAttribute)
+    val uniqueAttributes = attributeNames zip attributeValues
+
+    objectId.setUniqueAttributes(uniqueAttributes.toMap.asJava)
+
+    objectId
+  }
+
+  private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
+
+  private def extractS3Entities(uri: URI, fsPath: Path): Seq[AtlasEntity] = {
+    val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
+
+    val bucketName = uri.getAuthority
+    val bucketQualifiedName = s"s3://${bucketName}"
+    val dirName = path.replaceFirst("[^/]*$", "")
+    val dirQualifiedName = bucketQualifiedName + dirName
+    val objectName = path.replaceFirst("^.*/", "")
+    val objectQualifiedName = dirQualifiedName + objectName
+
+    // bucket
+    val bucketEntity = new AtlasEntity(S3_BUCKET_TYPE_STRING)
+    bucketEntity.setAttribute("name", bucketName)
+    bucketEntity.setAttribute("qualifiedName", bucketQualifiedName)
+
+    // pseudo dir
+    val dirEntity = new AtlasEntity(S3_PSEUDO_DIR_TYPE_STRING)
+    dirEntity.setAttribute("name", dirName)
+    dirEntity.setAttribute("qualifiedName", dirQualifiedName)
+    dirEntity.setAttribute("objectPrefix", dirQualifiedName)
+    dirEntity.setAttribute("bucket", entityToObjectId(bucketEntity))
+
+    // object
+    val objectEntity = new AtlasEntity(S3_OBJECT_TYPE_STRING)
+    objectEntity.setAttribute("name", objectName)
+    objectEntity.setAttribute("path", path)
+    objectEntity.setAttribute("qualifiedName", objectQualifiedName)
+    objectEntity.setAttribute("pseudoDirectory", entityToObjectId(dirEntity))
+
+    Seq(objectEntity, dirEntity, bucketEntity)
+  }
+
+  def pathToEntities(path: String): Seq[AtlasEntity] = {
     val uri = resolveURI(path)
-    val entity = if (uri.getScheme == "hdfs") {
-      new AtlasEntity(HDFS_PATH_TYPE_STRING)
-    } else {
-      new AtlasEntity(FS_PATH_TYPE_STRING)
-    }
-
     val fsPath = new Path(uri)
-    entity.setAttribute("name",
-      Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute("qualifiedName", uri.toString)
     if (uri.getScheme == "hdfs") {
+      val entity = new AtlasEntity(HDFS_PATH_TYPE_STRING)
+      entity.setAttribute("name",
+        Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+      entity.setAttribute("path",
+        Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+      entity.setAttribute("qualifiedName", uri.toString)
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
+
+      Seq(entity)
+    } else if (isS3Schema(uri.getScheme)) {
+      extractS3Entities(uri, fsPath)
+    } else {
+      val entity = new AtlasEntity(FS_PATH_TYPE_STRING)
+      entity.setAttribute("name",
+        Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+      entity.setAttribute("path",
+        Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
+      entity.setAttribute("qualifiedName", uri.toString)
+
+      Seq(entity)
     }
 
-    entity
   }
 
   def resolveURI(path: String): URI = {
