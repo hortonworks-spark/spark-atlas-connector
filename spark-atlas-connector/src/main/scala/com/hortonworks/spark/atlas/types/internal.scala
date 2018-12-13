@@ -38,18 +38,18 @@ object internal extends Logging {
   def sparkDbToEntities(dbDefinition: CatalogDatabase, cluster: String, owner: String)
     : Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
-    val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
+    val pathEntities = external.pathToEntities(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute(
       "qualifiedName", sparkDbUniqueAttribute(dbDefinition.name))
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("name", dbDefinition.name)
     dbEntity.setAttribute("description", dbDefinition.description)
-    dbEntity.setAttribute("locationUri", pathEntity)
+    dbEntity.setAttribute("locationUri", pathEntities.head)
     dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
     dbEntity.setAttribute("ownerType", "USER")
-    Seq(dbEntity, pathEntity)
+    dbEntity +: pathEntities
   }
 
   def sparkStorageFormatUniqueAttribute(db: String, table: String): String = {
@@ -61,20 +61,18 @@ object internal extends Logging {
       db: String,
       table: String): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
-    val pathEntity = storageFormat.locationUri.map { u => external.pathToEntity(u.toString) }
+    val pathEntities = storageFormat.locationUri.map { u => external.pathToEntities(u.toString) }
 
     sdEntity.setAttribute("qualifiedName",
       sparkStorageFormatUniqueAttribute(db, table))
-    pathEntity.foreach { e => sdEntity.setAttribute("locationUri", e) }
+    pathEntities.map(_.head).foreach { e => sdEntity.setAttribute("locationUri", e) }
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("properties", storageFormat.properties.asJava)
 
-    Seq(Some(sdEntity), pathEntity)
-      .filter(_.isDefined)
-      .flatten
+    sdEntity +: pathEntities.getOrElse(Seq())
   }
 
   def sparkColumnUniqueAttribute(db: String, table: String, col: String): String = {

@@ -65,13 +65,13 @@ class MLPipelineEventProcessor(
         pathF.setAccessible(true)
         val path = pathF.get(e).asInstanceOf[String]
 
-        val pipelineDirEntity = external.pathToEntity(path)
+        val pipelineDirEntities = external.pathToEntities(path)
         val pipeline_uid = internal.cachedObjects(uid).toString
 
-        val pipelineEntity = internal.mlPipelineToEntity(pipeline_uid, pipelineDirEntity)
-        atlasClient.createEntities(Seq(pipelineEntity, pipelineDirEntity))
+        val pipelineEntity = internal.mlPipelineToEntity(pipeline_uid, pipelineDirEntities.head)
+        atlasClient.createEntities(pipelineEntity +: pipelineDirEntities)
 
-        internal.cachedObjects.put(s"${uid}_pipelineDirEntity", pipelineDirEntity)
+        internal.cachedObjects.put(s"${uid}_pipelineDirEntities", pipelineDirEntities)
         internal.cachedObjects.put(s"${uid}_pipelineEntity", pipelineEntity)
 
         logInfo(s"Created pipeline Entity ${pipelineEntity.getGuid}")
@@ -89,20 +89,20 @@ class MLPipelineEventProcessor(
         if (! internal.cachedObjects.contains(s"${uid}_pipelineDirEntity")) {
           logInfo(s"Model Entity is already created")
         } else {
-          val modelDirEntity = external.pathToEntity(path)
+          val modelDirEntities = external.pathToEntities(path)
 
-          val pipelineDirEntity = internal.cachedObjects(s"${uid}_pipelineDirEntity")
-            .asInstanceOf[AtlasEntity]
+          val pipelineDirEntities = internal.cachedObjects(s"${uid}_pipelineDirEntities")
+            .asInstanceOf[Seq[AtlasEntity]]
           val pipelineEntity = internal.cachedObjects(s"${uid}_pipelineEntity")
             .asInstanceOf[AtlasEntity]
           val pipeline_uid = internal.cachedObjects.get(uid).get.toString
 
-          atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+          atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities)
 
           val model_uid = internal.cachedObjects(s"${uid}_model").toString
 
-          val modelEntity = internal.mlModelToEntity(model_uid, modelDirEntity)
-          atlasClient.createEntities(Seq(modelEntity, modelDirEntity))
+          val modelEntity = internal.mlModelToEntity(model_uid, modelDirEntities.head)
+          atlasClient.createEntities(modelEntity +: modelDirEntities)
 
           val trainData = internal.cachedObjects(s"${pipeline_uid}_traindata")
             .asInstanceOf[Dataset[_]]
@@ -117,7 +117,7 @@ class MLPipelineEventProcessor(
             case l: LogicalRelation =>
               isFiles = true
               l.relation match {
-                case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
+                case r: FileRelation => r.inputFiles.flatMap(external.pathToEntities).toSeq
                 case _ => Seq.empty
               }
             case e =>
@@ -130,10 +130,10 @@ class MLPipelineEventProcessor(
 
           val processEntity = internal.etlProcessToEntity(
             List(pipelineEntity, tableEntities.head.head),
-            List(modelEntity, modelDirEntity, pipelineDirEntity), logMap)
+            modelEntity :: modelDirEntities.toList ::: pipelineDirEntities.toList, logMap)
 
-          atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity, processEntity)
-            ++ Seq(modelDirEntity, modelEntity) ++ tableEntities.head)
+          atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities ++
+            Seq(pipelineEntity, processEntity, modelEntity) ++ tableEntities.head)
 
           internal.cachedObjects.put("fit_process", processEntity.getGuid)
           logInfo(s"Created pipeline fitEntity: ${processEntity.getGuid}")
@@ -148,10 +148,10 @@ class MLPipelineEventProcessor(
         directoryF.setAccessible(true)
         val directory = directoryF.get(e).asInstanceOf[String]
 
-        val modelDirEntity = external.pathToEntity(directory)
-        val modelEntity = internal.mlModelToEntity(uid, modelDirEntity)
+        val modelDirEntities = external.pathToEntities(directory)
+        val modelEntity = internal.mlModelToEntity(uid, modelDirEntities.head)
 
-        internal.cachedObjects.put(s"${uid}_modelDirEntity", modelDirEntity)
+        internal.cachedObjects.put(s"${uid}_modelDirEntities", modelDirEntities)
         internal.cachedObjects.put(s"${uid}_modelEntity", modelEntity)
 
       case name if name.contains("TransformEvent") =>
