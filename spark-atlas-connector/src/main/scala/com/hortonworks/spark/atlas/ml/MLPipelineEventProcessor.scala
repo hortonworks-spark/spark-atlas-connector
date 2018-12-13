@@ -89,54 +89,7 @@ class MLPipelineEventProcessor(
         if (! internal.cachedObjects.contains(s"${uid}_pipelineDirEntity")) {
           logInfo(s"Model Entity is already created")
         } else {
-          val modelDirEntities = external.pathToEntities(path)
-
-          val pipelineDirEntities = internal.cachedObjects(s"${uid}_pipelineDirEntities")
-            .asInstanceOf[Seq[AtlasEntity]]
-          val pipelineEntity = internal.cachedObjects(s"${uid}_pipelineEntity")
-            .asInstanceOf[AtlasEntity]
-          val pipeline_uid = internal.cachedObjects.get(uid).get.toString
-
-          atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities)
-
-          val model_uid = internal.cachedObjects(s"${uid}_model").toString
-
-          val modelEntity = internal.mlModelToEntity(model_uid, modelDirEntities.head)
-          atlasClient.createEntities(modelEntity +: modelDirEntities)
-
-          val trainData = internal.cachedObjects(s"${pipeline_uid}_traindata")
-            .asInstanceOf[Dataset[_]]
-
-          val logicalPlan = trainData.queryExecution.analyzed
-          var isFiles = false
-          val tableEntities = logicalPlan.collectLeaves().map {
-            case r: HiveTableRelation => tableToEntities(r.tableMeta)
-            case v: View => tableToEntities(v.desc)
-            case l: LogicalRelation if l.catalogTable.isDefined =>
-              l.catalogTable.map(tableToEntities(_)).get
-            case l: LogicalRelation =>
-              isFiles = true
-              l.relation match {
-                case r: FileRelation => r.inputFiles.flatMap(external.pathToEntities).toSeq
-                case _ => Seq.empty
-              }
-            case e =>
-              logWarn(s"Missing unknown leaf node for Sparm ML model training input: $e")
-              Seq.empty
-          }
-
-          val logMap = Map("sparkPlanDescription" ->
-            (s"Spark ML training model with pipeline uid: ${pipeline_uid}"))
-
-          val processEntity = internal.etlProcessToEntity(
-            List(pipelineEntity, tableEntities.head.head),
-            modelEntity :: modelDirEntities.toList ::: pipelineDirEntities.toList, logMap)
-
-          atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities ++
-            Seq(pipelineEntity, processEntity, modelEntity) ++ tableEntities.head)
-
-          internal.cachedObjects.put("fit_process", processEntity.getGuid)
-          logInfo(s"Created pipeline fitEntity: ${processEntity.getGuid}")
+          createModelEntities(uid, path)
         }
 
       case name if name.contains("LoadModelEvent") =>
@@ -164,6 +117,57 @@ class MLPipelineEventProcessor(
       case _ =>
         logInfo(s"ML tracker does not support for other events")
     }
+  }
+
+  private def createModelEntities(uid: String, path: String) = {
+    val modelDirEntities = external.pathToEntities(path)
+
+    val pipelineDirEntities = internal.cachedObjects(s"${uid}_pipelineDirEntities")
+      .asInstanceOf[Seq[AtlasEntity]]
+    val pipelineEntity = internal.cachedObjects(s"${uid}_pipelineEntity")
+      .asInstanceOf[AtlasEntity]
+    val pipeline_uid = internal.cachedObjects.get(uid).get.toString
+
+    atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities)
+
+    val model_uid = internal.cachedObjects(s"${uid}_model").toString
+
+    val modelEntity = internal.mlModelToEntity(model_uid, modelDirEntities.head)
+    atlasClient.createEntities(modelEntity +: modelDirEntities)
+
+    val trainData = internal.cachedObjects(s"${pipeline_uid}_traindata")
+      .asInstanceOf[Dataset[_]]
+
+    val logicalPlan = trainData.queryExecution.analyzed
+    var isFiles = false
+    val tableEntities = logicalPlan.collectLeaves().map {
+      case r: HiveTableRelation => tableToEntities(r.tableMeta)
+      case v: View => tableToEntities(v.desc)
+      case l: LogicalRelation if l.catalogTable.isDefined =>
+        l.catalogTable.map(tableToEntities(_)).get
+      case l: LogicalRelation =>
+        isFiles = true
+        l.relation match {
+          case r: FileRelation => r.inputFiles.flatMap(external.pathToEntities).toSeq
+          case _ => Seq.empty
+        }
+      case e =>
+        logWarn(s"Missing unknown leaf node for Sparm ML model training input: $e")
+        Seq.empty
+    }
+
+    val logMap = Map("sparkPlanDescription" ->
+      (s"Spark ML training model with pipeline uid: ${pipeline_uid}"))
+
+    val processEntity = internal.etlProcessToEntity(
+      List(pipelineEntity, tableEntities.head.head),
+      modelEntity :: modelDirEntities.toList ::: pipelineDirEntities.toList, logMap)
+
+    atlasClient.createEntities(pipelineDirEntities ++ modelDirEntities ++
+      Seq(pipelineEntity, processEntity, modelEntity) ++ tableEntities.head)
+
+    internal.cachedObjects.put("fit_process", processEntity.getGuid)
+    logInfo(s"Created pipeline fitEntity: ${processEntity.getGuid}")
   }
 
 }

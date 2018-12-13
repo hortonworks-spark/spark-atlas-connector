@@ -58,6 +58,40 @@ object external {
     objectId
   }
 
+  private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
+
+  private def extractS3Entities(uri: URI, fsPath: Path): Seq[AtlasEntity] = {
+    val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
+
+    val bucketName = uri.getAuthority
+    val bucketQualifiedName = s"s3://${bucketName}"
+    val dirName = path.replaceFirst("[^/]*$", "")
+    val dirQualifiedName = bucketQualifiedName + dirName
+    val objectName = path.replaceFirst("^.*/", "")
+    val objectQualifiedName = dirQualifiedName + objectName
+
+    // bucket
+    val bucketEntity = new AtlasEntity(S3_BUCKET_TYPE_STRING)
+    bucketEntity.setAttribute("name", bucketName)
+    bucketEntity.setAttribute("qualifiedName", bucketQualifiedName)
+
+    // pseudo dir
+    val dirEntity = new AtlasEntity(S3_PSEUDO_DIR_TYPE_STRING)
+    dirEntity.setAttribute("name", dirName)
+    dirEntity.setAttribute("qualifiedName", dirQualifiedName)
+    dirEntity.setAttribute("objectPrefix", dirQualifiedName)
+    dirEntity.setAttribute("bucket", entityToObjectId(bucketEntity))
+
+    // object
+    val objectEntity = new AtlasEntity(S3_OBJECT_TYPE_STRING)
+    objectEntity.setAttribute("name", objectName)
+    objectEntity.setAttribute("path", path)
+    objectEntity.setAttribute("qualifiedName", objectQualifiedName)
+    objectEntity.setAttribute("pseudoDirectory", entityToObjectId(dirEntity))
+
+    Seq(objectEntity, dirEntity, bucketEntity)
+  }
+
   def pathToEntities(path: String): Seq[AtlasEntity] = {
     val uri = resolveURI(path)
     val fsPath = new Path(uri)
@@ -71,36 +105,8 @@ object external {
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
 
       Seq(entity)
-    } else if (uri.getScheme == "s3" || uri.getScheme == "s3a" || uri.getScheme == "s3n") {
-      val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
-
-      val bucketName = uri.getAuthority
-      val bucketQualifiedName = s"s3://${bucketName}"
-      val dirName = path.replaceFirst("[^/]*$", "")
-      val dirQualifiedName = bucketQualifiedName + dirName
-      val objectName = path.replaceFirst("^.*/", "")
-      val objectQualifiedName = dirQualifiedName + objectName
-
-      // bucket
-      val bucketEntity = new AtlasEntity(S3_BUCKET_TYPE_STRING)
-      bucketEntity.setAttribute("name", bucketName)
-      bucketEntity.setAttribute("qualifiedName", bucketQualifiedName)
-
-      // pseudo dir
-      val dirEntity = new AtlasEntity(S3_PSEUDO_DIR_TYPE_STRING)
-      dirEntity.setAttribute("name", dirName)
-      dirEntity.setAttribute("qualifiedName", dirQualifiedName)
-      dirEntity.setAttribute("objectPrefix", dirQualifiedName)
-      dirEntity.setAttribute("bucket", entityToObjectId(bucketEntity))
-
-      // object
-      val objectEntity = new AtlasEntity(S3_OBJECT_TYPE_STRING)
-      objectEntity.setAttribute("name", objectName)
-      objectEntity.setAttribute("path", path)
-      objectEntity.setAttribute("qualifiedName", objectQualifiedName)
-      objectEntity.setAttribute("pseudoDirectory", entityToObjectId(dirEntity))
-
-      Seq(objectEntity, dirEntity, bucketEntity)
+    } else if (isS3Schema(uri.getScheme)) {
+      extractS3Entities(uri, fsPath)
     } else {
       val entity = new AtlasEntity(FS_PATH_TYPE_STRING)
       entity.setAttribute("name",
