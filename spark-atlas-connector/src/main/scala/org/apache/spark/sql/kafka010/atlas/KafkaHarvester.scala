@@ -18,13 +18,12 @@
 package org.apache.spark.sql.kafka010.atlas
 
 import scala.collection.mutable
-
+import scala.util.control.NonFatal
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.kafka010.{KafkaContinuousInputPartition, KafkaMicroBatchInputPartition, KafkaSourceRDDPartition, KafkaStreamWriterFactory}
+import org.apache.spark.sql.kafka010._
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
@@ -33,6 +32,10 @@ import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
+
+  // reflection
+  import scala.reflect.runtime.universe.{runtimeMirror, typeOf, TermName}
+  private val currentMirror = runtimeMirror(getClass.getClassLoader)
 
   def extractTopic(writer: MicroBatchWriter): Option[KafkaTopicInformation] = {
     // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
@@ -127,11 +130,41 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
   }
 
   private def extractSourceTopicsFromDataSourceV1(r: RDDScanExec): Seq[KafkaTopicInformation] = {
+    def extractKafkaParams(rdd: KafkaSourceRDD): Option[java.util.Map[String, Object]] = {
+      val rddMirror = currentMirror.reflect(rdd)
+
+      try {
+        val kafkaParamsMethod = typeOf[KafkaSourceRDD].decl(TermName("executorKafkaParams"))
+          .asTerm.accessed.asTerm
+
+        Some(rddMirror.reflectField(kafkaParamsMethod).get
+          .asInstanceOf[java.util.Map[String, Object]])
+      } catch {
+        case NonFatal(_) =>
+          logWarn("WARN: Necessary patch for spark-sql-kafka doesn't look like applied to Spark. " +
+            "Giving up extracting kafka parameter.")
+          None
+      }
+    }
+
     val topics = new mutable.HashSet[KafkaTopicInformation]()
     r.rdd.partitions.foreach {
       case e: KafkaSourceRDDPartition =>
-        val topic = e.offsetRange.topic
-        topics += KafkaTopicInformation(topic, None)
+        r.rdd.dependencies.find(p => p.rdd.isInstanceOf[KafkaSourceRDD]).map(_.rdd) match {
+          case Some(kafkaRDD: KafkaSourceRDD) =>
+            val topic = e.offsetRange.topic
+            val customClusterName = extractKafkaParams(kafkaRDD) match {
+              case Some(params) => Option(params.get(AtlasClientConf.CLUSTER_NAME.key))
+                .map(_.toString)
+              case None => None
+            }
+            topics += KafkaTopicInformation(topic, customClusterName)
+
+          case _ =>
+            topics += KafkaTopicInformation(e.offsetRange.topic, None)
+        }
+
+      case _ =>
     }
     topics.toSeq
   }
