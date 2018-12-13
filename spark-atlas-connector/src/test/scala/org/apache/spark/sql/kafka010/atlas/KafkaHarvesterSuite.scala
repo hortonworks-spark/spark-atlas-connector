@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010.atlas
 
+import com.hortonworks.spark.atlas.AtlasClientConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.{InternalRowDataWriterFactory, WriteToDataSourceV2Exec}
@@ -55,7 +56,29 @@ class KafkaHarvesterSuite extends StreamTest {
     val writer = new KafkaStreamWriter(topic, producerParams, kafkaWriteSchema)
     val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
 
-    assert(KafkaHarvester.extractTopic(microBatchWriter) === (true, topic))
+    assert(KafkaHarvester.extractTopic(microBatchWriter) ===
+      (true, Some(KafkaTopicInformation(topic.get, None))))
+  }
+
+  test("Extract Kafka topic from InternalRowMicroBatchWriter - custom atlas cluster name") {
+    val topic = Some("hello")
+
+    val customAtlasClusterName = "newCluster"
+    val newProducerParams = producerParams +
+      (AtlasClientConf.CLUSTER_NAME.key -> customAtlasClusterName)
+
+    val writer = new KafkaStreamWriter(topic, newProducerParams, kafkaWriteSchema)
+    val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
+
+    assert(KafkaHarvester.extractTopic(microBatchWriter) ===
+      (true, Some(KafkaTopicInformation(topic.get, Some(customAtlasClusterName)))))
+  }
+
+  test("No Kafka topic information in WriterFactory") {
+    val writer = new FakeStreamWriter()
+    val microBatchWriter = new InternalRowMicroBatchWriter(0L, writer)
+
+    assert(KafkaHarvester.extractTopic(microBatchWriter) === (false, None))
   }
 
   private class FakeStreamWriter extends StreamWriter with SupportsWriteInternalRow {
