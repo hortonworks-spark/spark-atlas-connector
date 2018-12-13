@@ -136,6 +136,16 @@ trait AtlasEntityUtils {
     }
   }
 
+  def tableToEntitiesForAlterTable(
+      tableDefinition: CatalogTable,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    if (isHiveTable(tableDefinition)) {
+      external.hiveTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
+    } else {
+      internal.sparkTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
+    }
+  }
+
   def tableUniqueAttribute(db: String, table: String, isHiveTable: Boolean): String = {
     if (isHiveTable) {
       external.hiveTableUniqueAttribute(clusterName, db, table)

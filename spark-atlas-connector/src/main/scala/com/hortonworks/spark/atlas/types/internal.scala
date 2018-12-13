@@ -17,16 +17,16 @@
 
 package com.hortonworks.spark.atlas.types
 
+import com.hortonworks.spark.atlas.AtlasUtils
+import com.hortonworks.spark.atlas.types.external.{HIVE_DB_TYPE_STRING, HIVE_STORAGEDESC_TYPE_STRING, HIVE_TABLE_TYPE_STRING}
+
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.model.instance.AtlasEntity
-
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
 object internal extends Logging {
@@ -133,6 +133,24 @@ object internal extends Logging {
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+  }
+
+  def sparkTableToEntitiesForAlterTable(
+      tblDefination: CatalogTable,
+      clusterName: String,
+      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+    val typesToPick = Seq(metadata.TABLE_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
+    val entities = sparkTableToEntities(tblDefination, clusterName, mockDbDefinition)
+
+    val dbEntity = entities.filter(e => e.getTypeName.equals(metadata.DB_TYPE_STRING)).head
+    val sdEntity = entities.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head
+    val tableEntity = entities.filter(e => e.getTypeName.equals(metadata.TABLE_TYPE_STRING)).head
+
+    // override attribute with reference - Atlas should already have these entities
+    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    entities.filter(e => typesToPick.contains(e.getTypeName))
   }
 
   def sparkProcessUniqueAttribute(executionId: Long): String = {

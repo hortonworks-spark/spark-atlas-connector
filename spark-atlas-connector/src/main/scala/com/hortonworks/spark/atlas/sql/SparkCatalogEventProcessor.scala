@@ -171,7 +171,7 @@ class SparkCatalogEventProcessor(
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
         kind match {
           case "table" =>
-            val tableEntities = tableToEntities(tableDefinition)
+            val tableEntities = tableToEntitiesForAlterTable(tableDefinition)
             if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
               atlasClient.createEntities(tableEntities)
               logDebug(s"Updated table entity $table with columns")
