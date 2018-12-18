@@ -456,21 +456,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object HWCEntities extends Logging {
-    private def maybeClass(name: String): Option[Class[_]] = try {
-      Some(Class.forName(name))
-    } catch {
-      case _: ClassNotFoundException => None
-    }
-
-    private val batchReadClass: Option[Class[_]] =
-      maybeClass(HWCSupport.BATCH_READ)
-
-    private val batchWriteClass: Option[Class[_]] = maybeClass(HWCSupport.BATCH_WRITE)
-    private val batchStreamWriteClass: Option[Class[_]] =
-      maybeClass(HWCSupport.BATCH_STREAM_WRITE)
-
-    private val streamWriteClass: Option[Class[_]] = maybeClass(HWCSupport.STREAM_WRITE)
-
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
       case ds: DataSourceV2Relation
           if ds.reader.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ) =>
@@ -493,82 +478,62 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case _ => None
     }
 
-    def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
-      if (batchReadClass.isDefined) {
-        if (options.contains("query")) {
-          val sql = options("query")
-          // HACK ALERT! Currently SAC and HWC only know the query that has to be pushed down
-          // to Hive side so here we don't know which tables are to be proceeded. To work around,
-          // we use Spark's parser driver to identify tables. Once we know the table
-          // identifiers by this, it looks up Hive entities to find Hive tables out.
-          val parsedPlan = org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
-          parsedPlan.collectLeaves().flatMap {
-            case r: UnresolvedRelation =>
-              val db = r.tableIdentifier.database.getOrElse(
-                options.getOrElse("default.db", "default"))
-              val tableName = r.tableIdentifier.table
-              external.hwcTableToEntities(db, tableName, clusterName)
-            case _: OneRowRelation => Seq.empty
-            case n =>
-              logWarn(s"Unknown leaf node: $n")
-              Seq.empty
-          }
-        } else {
-          val (db, tableName) = getDbTableNames(
-            options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
-          external.hwcTableToEntities(db, tableName, clusterName)
+    private def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+      if (options.contains("query")) {
+        val sql = options("query")
+        // HACK ALERT! Currently SAC and HWC only know the query that has to be pushed down
+        // to Hive side so here we don't know which tables are to be proceeded. To work around,
+        // we use Spark's parser driver to identify tables. Once we know the table
+        // identifiers by this, it looks up Hive entities to find Hive tables out.
+        val parsedPlan = org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(sql)
+        parsedPlan.collectLeaves().flatMap {
+          case r: UnresolvedRelation =>
+            val db = r.tableIdentifier.database.getOrElse(
+              options.getOrElse("default.db", "default"))
+            val tableName = r.tableIdentifier.table
+            external.hwcTableToEntities(db, tableName, clusterName)
+          case _: OneRowRelation => Seq.empty
+          case n =>
+            logWarn(s"Unknown leaf node: $n")
+            Seq.empty
         }
       } else {
-        logWarn(s"Class ${HWCSupport.BATCH_READ} is not found")
-        Seq.empty
+        val (db, tableName) = getDbTableNames(
+          options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
+        external.hwcTableToEntities(db, tableName, clusterName)
       }
     }
 
     def getHWCEntity(r: DataSourceWriter): Seq[AtlasEntity] = r match {
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_WRITE) =>
-        if (batchWriteClass.isDefined) {
-          val f = r.getClass.getDeclaredField("options")
-          f.setAccessible(true)
-          val options = f.get(r).asInstanceOf[java.util.Map[String, String]]
-          val (db, tableName) = getDbTableNames(
-            options.getOrDefault("default.db", "default"), options.getOrDefault("table", ""))
-          external.hwcTableToEntities(db, tableName, clusterName)
-        } else {
-          logWarn(s"Class ${HWCSupport.BATCH_WRITE} is not found")
-          Seq.empty
-        }
+        val f = r.getClass.getDeclaredField("options")
+        f.setAccessible(true)
+        val options = f.get(r).asInstanceOf[java.util.Map[String, String]]
+        val (db, tableName) = getDbTableNames(
+          options.getOrDefault("default.db", "default"), options.getOrDefault("table", ""))
+        external.hwcTableToEntities(db, tableName, clusterName)
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_STREAM_WRITE) =>
-        if (batchStreamWriteClass.isDefined) {
-          val dbField = r.getClass.getDeclaredField("db")
-          dbField.setAccessible(true)
-          val db = dbField.get(r).asInstanceOf[String]
+        val dbField = r.getClass.getDeclaredField("db")
+        dbField.setAccessible(true)
+        val db = dbField.get(r).asInstanceOf[String]
 
-          val tableField = r.getClass.getDeclaredField("table")
-          tableField.setAccessible(true)
-          val table = tableField.get(r).asInstanceOf[String]
+        val tableField = r.getClass.getDeclaredField("table")
+        tableField.setAccessible(true)
+        val table = tableField.get(r).asInstanceOf[String]
 
-          external.hwcTableToEntities(db, table, clusterName)
-        } else {
-          logWarn(s"Class ${HWCSupport.BATCH_WRITE} is not found")
-          Seq.empty
-        }
+        external.hwcTableToEntities(db, table, clusterName)
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.STREAM_WRITE) =>
-        if (streamWriteClass.isDefined) {
-          val dbField = r.getClass.getDeclaredField("db")
-          dbField.setAccessible(true)
-          val db = dbField.get(r).asInstanceOf[String]
+        val dbField = r.getClass.getDeclaredField("db")
+        dbField.setAccessible(true)
+        val db = dbField.get(r).asInstanceOf[String]
 
-          val tableField = r.getClass.getDeclaredField("table")
-          tableField.setAccessible(true)
-          val table = tableField.get(r).asInstanceOf[String]
+        val tableField = r.getClass.getDeclaredField("table")
+        tableField.setAccessible(true)
+        val table = tableField.get(r).asInstanceOf[String]
 
-          external.hwcTableToEntities(db, table, clusterName)
-        } else {
-          logWarn(s"Class ${HWCSupport.STREAM_WRITE} is not found")
-          Seq.empty
-        }
+        external.hwcTableToEntities(db, table, clusterName)
 
       case _ => Seq.empty
     }
