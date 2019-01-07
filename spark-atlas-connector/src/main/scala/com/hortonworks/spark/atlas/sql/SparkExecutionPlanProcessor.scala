@@ -67,6 +67,10 @@ class SparkExecutionPlanProcessor(
             logDebug(s"DATA FRAME SAVE INTO DATA SOURCE: ${qd.qe}")
             CommandsHarvester.SaveIntoDataSourceHarvester.harvest(c, qd)
 
+          case c: CreateDataSourceTableCommand =>
+            logDebug(s"CREATE TABLE USING external source")
+            CommandsHarvester.CreateDataSourceTableHarvester.harvest(c, qd)
+
           case _ =>
             Seq.empty
         }
