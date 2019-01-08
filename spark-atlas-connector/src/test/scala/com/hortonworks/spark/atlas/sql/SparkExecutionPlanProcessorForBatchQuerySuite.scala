@@ -71,33 +71,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
     val entities = atlasClient.createdEntities
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
-
-    // only assert qualifiedName and skip assertion on database, and attributes on database
-    // they should be covered in other UT
-    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
-    assert(tableQualifiedName.endsWith(outputTableName))
-
-    if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-      val columnEntities = listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING)
-      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "spark_schema")
-      assert(Set(columnEntities) === Set(columnEntitiesInTableAttribute))
-    } else {
-      assert(!tableEntity.getAttributes.containsKey("spark_schema"))
-      assert(listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING).isEmpty)
-    }
-
-    // remove table name + '.' prior to table name
-    val databaseQualifiedName = tableQualifiedName.substring(0,
-      tableQualifiedName.indexOf(outputTableName) - 1)
-
-    val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
-    assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
-
-    // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
-    assert(databaseEntity === databaseEntityInTable)
-
-    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
+    assertTableEntity(tableEntity, outputTableName)
+    assertSchemaEntities(tableEntity, entities)
 
     // we're expecting three file system entities:
     // one for input file, one for database warehouse, and one for output table (under
@@ -105,30 +80,29 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
     val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
     assert(fsEntities.size === 3)
 
-    // database warehouse
-    assert(fsEntities.contains(databaseLocationFsEntity))
+    val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
+    assertDatabaseEntity(databaseEntity, tableEntity, fsEntities, outputTableName)
+
+    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
 
     val inputFsEntities = fsEntities.filterNot(_ == databaseLocationFsEntity)
     assert(inputFsEntities.size === 2)
 
     // input file
-    val inputFsEntity = inputFsEntities.head
-
-    assertPathsEquals(getStringAttribute(inputFsEntity, "name"), tempFile.toAbsolutePath.toString)
-    assertPathsEquals(getStringAttribute(inputFsEntity, "path"), tempFile.toAbsolutePath.toString)
-    assertPathsEquals(getStringAttribute(inputFsEntity, "qualifiedName"),
-      "file://" + tempFile.toAbsolutePath.toString)
+    // this code asserts on runtime that one of fs entity matches against source path
+    val sourcePath = tempFile.toAbsolutePath.toString
+    val inputFsEntity = inputFsEntities.find { p =>
+      getStringAttribute(p, "name").toLowerCase(Locale.ROOT) == sourcePath.toLowerCase(Locale.ROOT)
+    }.get
+    assertInputFsEntity(inputFsEntity, sourcePath)
 
     // storage description
     val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
-    val storageQualifiedName = tableQualifiedName + ".storageFormat"
-    assert(getStringAttribute(storageEntity, "qualifiedName") === storageQualifiedName)
+    assertStorageDefinitionEntity(storageEntity, tableEntity)
+
     val locationEntity = getAtlasEntityAttribute(storageEntity, "locationUri")
     assert(getStringAttribute(locationEntity, "path").startsWith(
       getStringAttribute(databaseLocationFsEntity, "path")))
-
-    val storageEntityInTableAttribute = getAtlasEntityAttribute(tableEntity, "sd")
-    assert(storageEntity === storageEntityInTableAttribute)
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
@@ -171,64 +145,37 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
     val entities = atlasClient.createdEntities
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
-
-    // only assert qualifiedName and skip assertion on database, and attributes on database
-    // they should be covered in other UT
-    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
-    assert(tableQualifiedName.endsWith(outputTableName))
-
-    // column
-    if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-      val columnEntities = listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING)
-      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "spark_schema")
-      assert(Set(columnEntities) === Set(columnEntitiesInTableAttribute))
-    } else {
-      assert(!tableEntity.getAttributes.containsKey("spark_schema"))
-      assert(listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING).isEmpty)
-    }
-
-    // database
-    // remove table name + '.' prior to table name
-    val databaseQualifiedName = tableQualifiedName.substring(0,
-      tableQualifiedName.indexOf(outputTableName) - 1)
-
-    val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
-    assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
-
-    // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
-    assert(databaseEntity === databaseEntityInTable)
-
-    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
+    assertTableEntity(tableEntity, outputTableName)
+    assertSchemaEntities(tableEntity, entities)
 
     // we're expecting two file system entities:
     // one for input file, one for database warehouse.
     val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
     assert(fsEntities.size === 2)
 
-    // database warehouse
-    assert(fsEntities.contains(databaseLocationFsEntity))
+    // database
+    val databaseEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
+    assertDatabaseEntity(databaseEntity, tableEntity, fsEntities, outputTableName)
+
+    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
 
     // fs
     val inputFsEntities = fsEntities.filterNot(_ == databaseLocationFsEntity)
     assert(inputFsEntities.size === 1)
 
     // input file
-    val inputFsEntity = inputFsEntities.head
+    val inputFsEntity = inputFsEntities.find { p =>
+      getStringAttribute(p, "name").toLowerCase(Locale.ROOT) ==
+        tempDirPathStr.toLowerCase(Locale.ROOT)
+    }.get
 
-    assertPathsEquals(getStringAttribute(inputFsEntity, "name"), tempDirPathStr)
-    assertPathsEquals(getStringAttribute(inputFsEntity, "path"), tempDirPathStr)
-    assertPathsEquals(getStringAttribute(inputFsEntity, "qualifiedName"),
-      "file://" + tempDirPathStr)
+    assertInputFsEntity(inputFsEntity, tempDirPathStr)
 
     // storage description
     val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
-    val storageQualifiedName = tableQualifiedName + ".storageFormat"
-    assert(getStringAttribute(storageEntity, "qualifiedName") === storageQualifiedName)
-    assert(getAtlasEntityAttribute(storageEntity, "locationUri") === inputFsEntity)
+    assertStorageDefinitionEntity(storageEntity, tableEntity)
 
-    val storageEntityInTableAttribute = getAtlasEntityAttribute(tableEntity, "sd")
-    assert(storageEntity === storageEntityInTableAttribute)
+    assert(getAtlasEntityAttribute(storageEntity, "locationUri") === inputFsEntity)
   }
 
   private def writeCSVtextToTempFile(csvContent: String) = {
@@ -263,6 +210,63 @@ class SparkExecutionPlanProcessorForBatchQuerySuite extends StreamTest {
     spark.range(10).write.json(tempDirPath)
 
     tempDir.toPath
+  }
+
+  private def assertTableEntity(tableEntity: AtlasEntity, tableName: String): Unit = {
+    // only assert qualifiedName and skip assertion on database, and attributes on database
+    // they should be covered in other UT
+    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
+    assert(tableQualifiedName.endsWith(tableName))
+  }
+
+  private def assertSchemaEntities(tableEntity: AtlasEntity, entities: Seq[AtlasEntity]): Unit = {
+    if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
+      val columnEntities = listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING)
+      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "spark_schema")
+      assert(Set(columnEntities) === Set(columnEntitiesInTableAttribute))
+    } else {
+      assert(!tableEntity.getAttributes.containsKey("spark_schema"))
+      assert(listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING).isEmpty)
+    }
+  }
+
+  private def assertDatabaseEntity(
+      databaseEntity: AtlasEntity,
+      tableEntity: AtlasEntity,
+      fsEntities: Seq[AtlasEntity],
+      tableName: String)
+    : Unit = {
+    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
+    // remove table name + '.' prior to table name
+    val databaseQualifiedName = tableQualifiedName.substring(0,
+      tableQualifiedName.indexOf(tableName) - 1)
+
+    assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
+
+    // database entity in table entity should be same as outer database entity
+    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
+    assert(databaseEntity === databaseEntityInTable)
+
+    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
+
+    // database warehouse
+    assert(fsEntities.contains(databaseLocationFsEntity))
+  }
+
+  private def assertInputFsEntity(fsEntity: AtlasEntity, sourcePath: String): Unit = {
+    assertPathsEquals(getStringAttribute(fsEntity, "name"), sourcePath)
+    assertPathsEquals(getStringAttribute(fsEntity, "path"), sourcePath)
+    assertPathsEquals(getStringAttribute(fsEntity, "qualifiedName"),
+      "file://" + sourcePath)
+  }
+
+  private def assertStorageDefinitionEntity(sdEntity: AtlasEntity, tableEntity: AtlasEntity): Unit = {
+    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
+    val storageQualifiedName = tableQualifiedName + ".storageFormat"
+    assert(getStringAttribute(sdEntity, "qualifiedName") === storageQualifiedName)
+
+    val storageEntityInTableAttribute = getAtlasEntityAttribute(tableEntity, "sd")
+    assert(sdEntity === storageEntityInTableAttribute)
   }
 
   private def assertPathsEquals(path1: String, path2: String): Unit = {
