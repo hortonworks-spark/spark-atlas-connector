@@ -35,7 +35,7 @@ trait AtlasClient extends Logging {
 
   def findEntity(typeNang: String, qualifiedName: String): AtlasEntity
 
-  final def createEntities(entities: Seq[AtlasEntity]): Unit = {
+  final def createEntities(entities: Seq[AtlasEntity]): Unit = this.synchronized {
     if (entities.isEmpty) {
       return
     }
