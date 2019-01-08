@@ -86,13 +86,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case v: View => tableToEntities(v.desc)
         case l: LogicalRelation if l.catalogTable.isDefined =>
           l.catalogTable.map(tableToEntities(_)).get
+        case SHCEntities(shcEntities) => shcEntities
         case l: LogicalRelation =>
           isFiles = true
           l.relation match {
             case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
             case _ => Seq.empty
           }
-        case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
         case local: LocalRelation =>
           logInfo("Local Relation to store Spark ML pipelineModel")
