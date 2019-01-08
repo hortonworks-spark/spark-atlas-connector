@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import com.hortonworks.spark.atlas.sql.CommandsHarvester.HWCEntities
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
@@ -29,7 +28,8 @@ object HWCStreamingHarvester extends Harvester[WriteToDataSourceV2Exec] {
     val sourceTopics = KafkaHarvester.extractSourceTopics(node)
     val inputsEntities: Seq[AtlasEntity] = KafkaHarvester.extractInputEntities(sourceTopics)
 
-    val outputEntities = HWCEntities.getHWCEntity(node.writer)
+    val outputEntities = CommandsHarvester
+      .extractInputEntities.hwcEntities.getHWCEntity(node.writer)
     val logMap = KafkaHarvester.makeLogMap(sourceTopics, None, qd)
 
     val updatedLogMap = logMap ++ Map(
