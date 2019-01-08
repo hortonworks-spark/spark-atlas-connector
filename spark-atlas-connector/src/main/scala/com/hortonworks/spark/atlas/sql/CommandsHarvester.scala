@@ -21,20 +21,18 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateViewCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateDataSourceTableCommand, CreateViewCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
@@ -310,6 +308,14 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
     }
   }
+
+  object CreateDataSourceTableHarvester extends Harvester[CreateDataSourceTableCommand] {
+    override def harvest(node: CreateDataSourceTableCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      // only have table entities
+      tableToEntities(node.table)
+    }
+  }
+
 
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
     override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
