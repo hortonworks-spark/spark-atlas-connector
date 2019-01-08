@@ -117,6 +117,10 @@ object external {
   }
 
   // ================== Spark's Hive Catalog entities =====================
+  // Note: given that we use Spark model types for Hive catalog entities (except HWC),
+  // Hive catalog entities should follow Spark model definitions.
+  // In Atlas, the attributes which are not in definition are ignored with WARN messages.
+
   val HIVE_DB_TYPE_STRING = "spark_db"
   val HIVE_STORAGEDESC_TYPE_STRING = "spark_storagedesc"
   val HIVE_COLUMN_TYPE_STRING = "spark_column"
@@ -128,17 +132,23 @@ object external {
                        cluster: String,
                        owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
+    val pathEntity = external.pathToEntity(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute("qualifiedName",
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
     dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("description", dbDefinition.description)
-    dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
-    dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
+
+    // FYI: commenting out attributes which are tied to Hive DB model definition
+    // dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
+    // dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
+
+    dbEntity.setAttribute("locationUri", pathEntity)
+    dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
-    dbEntity.setAttribute("ownerType", "USER")
-    Seq(dbEntity)
+
+    Seq(dbEntity, pathEntity)
   }
 
   def hiveStorageDescUniqueAttribute(
@@ -156,15 +166,26 @@ object external {
       table: String,
       isTempTable: Boolean = false): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
+    val pathEntity = storageFormat.locationUri.map { u => external.pathToEntity(u.toString) }
+
     sdEntity.setAttribute("qualifiedName",
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
-    sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
-    storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
-    Seq(sdEntity)
+
+    // FYI: commenting out attributes which are tied to Hive storage model definition
+    // sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
+    // storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
+    // storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
+
+    sdEntity.setAttribute("properties", storageFormat.properties.asJava)
+    storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
+    pathEntity.foreach { e => sdEntity.setAttribute("locationUri", e) }
+
+    Seq(Some(sdEntity), pathEntity)
+      .filter(_.isDefined)
+      .flatten
   }
 
   def hiveColumnUniqueAttribute(
@@ -191,7 +212,10 @@ object external {
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
       entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
-      entity.setAttribute("comment", struct.getComment())
+
+      // FYI: commenting out attributes which are tied to Hive column model definition
+      // entity.setAttribute("comment", struct.getComment())
+
       entity
     }.toList
   }
@@ -240,10 +264,15 @@ object external {
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("sd", sdEntities.head)
-    tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
-    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("columns", schemaEntities.asJava)
+
+    // FYI: commenting out attributes which are tied to Hive table model definition
+    // tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
+    // tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
+    // tblEntity.setAttribute("columns", schemaEntities.asJava)
+
+    tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
+    tblEntity.setAttribute("spark_schema", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
   }

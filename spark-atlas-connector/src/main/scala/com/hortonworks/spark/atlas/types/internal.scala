@@ -18,7 +18,6 @@
 package com.hortonworks.spark.atlas.types
 
 import com.hortonworks.spark.atlas.AtlasUtils
-import com.hortonworks.spark.atlas.types.external.{HIVE_DB_TYPE_STRING, HIVE_STORAGEDESC_TYPE_STRING, HIVE_TABLE_TYPE_STRING}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -48,7 +47,6 @@ object internal extends Logging {
     dbEntity.setAttribute("locationUri", pathEntity)
     dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
-    dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity, pathEntity)
   }
 

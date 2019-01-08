@@ -36,6 +36,13 @@ object metadata {
 
   import external._
 
+  // "Referenceable" has one attribute:
+  // - "qualifiedName" (string)
+  // "DataSet" has inherited "Referenceable" and has three more attributes:
+  // - "name" (string)
+  // - "description" (string)
+  // - "owner" (string)
+
   // ========= DB type =========
   val DB_TYPE = AtlasTypeUtil.createClassTypeDef(
     DB_TYPE_STRING,
@@ -45,7 +52,6 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
     AtlasTypeUtil.createOptionalAttrDef(
       "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)))
@@ -109,7 +115,6 @@ object metadata {
       "partitionColumnNames", new AtlasArrayType(new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef(
       "bucketSpec", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
-    AtlasTypeUtil.createOptionalAttrDef("owner", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("ownerType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("createTime", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef(
@@ -153,7 +158,6 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 
   // ========== ML model type ==========
@@ -165,7 +169,6 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("directory", ML_DIRECTORY_TYPE_STRING),
-    AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("extra", new AtlasStringType))
 
 }

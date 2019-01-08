@@ -20,12 +20,11 @@ package com.hortonworks.spark.atlas.types
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasClient
 import org.apache.spark.sql.types._
 import org.scalatest.{FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils, WithHiveSupport}
+import org.apache.atlas.model.instance.AtlasEntity
 
 class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
   import TestUtils._
@@ -51,7 +50,10 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     val dbEntity = dbEntities.head
     dbEntity.getTypeName should be (external.HIVE_DB_TYPE_STRING)
     dbEntity.getAttribute("name") should be ("db1")
-    dbEntity.getAttribute("location") should be (dbDefinition.locationUri.toString)
+    val locationUriEntity = dbEntity.getAttribute("locationUri").asInstanceOf[AtlasEntity]
+    locationUriEntity.getTypeName should be (external.HDFS_PATH_TYPE_STRING)
+    locationUriEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+      dbDefinition.locationUri.toString)
     dbEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be ("db1@primary")
   }
 
@@ -62,7 +64,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
 
     val sdEntity = sdEntities.head
     sdEntity.getTypeName should be (external.HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.getAttribute("location") should be (null)
+    sdEntity.getAttribute("locationUri") should be (null)
     sdEntity.getAttribute("inputFormat") should be (null)
     sdEntity.getAttribute("outputFormat") should be (null)
     sdEntity.getAttribute("name") should be (null)
@@ -109,7 +111,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     tableEntity.getAttribute("name") should be ("tbl1")
     tableEntity.getAttribute("db") should be (dbEntity)
     tableEntity.getAttribute("sd") should be (sdEntity)
-    tableEntity.getAttribute("columns") should be (schemaEntities.asJava)
+    tableEntity.getAttribute("spark_schema") should be (schemaEntities.asJava)
     tableEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1@primary")
   }
