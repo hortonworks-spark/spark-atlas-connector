@@ -121,7 +121,7 @@ object internal extends Logging {
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("storage", sdEntities.head)
+    tblEntity.setAttribute("sd", sdEntities.head)
     tblEntity.setAttribute("spark_schema", schemaEntities.asJava)
     tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
