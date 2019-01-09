@@ -21,6 +21,7 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -33,7 +34,9 @@ import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
+
 import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -301,7 +304,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
     override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       // source table entity
@@ -319,8 +321,20 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           Seq.empty
       }
 
-      // support Spark HBase Connector (destination table entity)
-      val outputEntities = SHCEntities.getSHCEntity(node.options)
+      val outputEntities = node.dataSource match {
+        // support Spark HBase Connector (destination table entity)
+        case ds if ds.getClass.getCanonicalName
+          .endsWith(SHCEntities.RELATION_PROVIDER_CLASS_NAME) =>
+          SHCEntities.getSHCEntity(node.options)
+
+        case ds if ds.getClass.getCanonicalName
+          .endsWith(KafkaEntities.RELATION_PROVIDER_CLASS_NAME) =>
+          KafkaEntities.getKafkaEntity(node.options)
+
+        case e =>
+          logWarn(s"Missing output entities: $e")
+          Seq.empty
+      }
 
       // create process entity
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
@@ -494,6 +508,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val SHC_RELATION_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.HBaseRelation"
 
+    val RELATION_PROVIDER_CLASS_NAME =
+      "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
+
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
       case l: LogicalRelation
         if l.relation.getClass.getCanonicalName.endsWith(SHC_RELATION_CLASS_NAME) =>
@@ -527,6 +544,21 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         external.hbaseTableToEntity(cluster, tName, nSpace)
       } else {
         Seq.empty[AtlasEntity]
+      }
+    }
+  }
+
+  object KafkaEntities {
+    val RELATION_PROVIDER_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
+
+    def getKafkaEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+      options.get("topic") match {
+        case Some(topic) =>
+          val cluster = options.get("kafka." + AtlasClientConf.CLUSTER_NAME.key)
+          external.kafkaToEntity(clusterName, KafkaTopicInformation(topic, cluster))
+
+        // not a valid option for Kafka writer, ignored here
+        case _ => Seq.empty[AtlasEntity]
       }
     }
   }
