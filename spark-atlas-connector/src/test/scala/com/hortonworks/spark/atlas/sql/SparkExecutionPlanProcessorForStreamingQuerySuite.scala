@@ -20,15 +20,20 @@ package com.hortonworks.spark.atlas.sql
 import java.nio.file.Files
 
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
+import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor, KafkaTopicEntityValidator}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
 
-class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
+class SparkExecutionPlanProcessorForStreamingQuerySuite
+  extends StreamTest
+  with KafkaTopicEntityValidator {
   import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
 
   val brokerProps: Map[String, Object] = Map[String, Object]()
@@ -134,16 +139,6 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
       query.processAllAvailable()
       assert(listener.queryDetails.nonEmpty)
     }
-  }
-
-  private def assertEntitiesKafkaTopicType(topics: Seq[String], entities: Set[AtlasEntity])
-    : Unit = {
-    val kafkaTopicEntities = listAtlasEntitiesAsType(entities.toSeq, KAFKA_TOPIC_STRING)
-    assert(kafkaTopicEntities.size === topics.size)
-
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "name")).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "topic")).toSet === topics.toSet)
-    assert(kafkaTopicEntities.map(getStringAttribute(_, "uri")).toSet === topics.toSet)
   }
 
   private def assertEntitySparkProcessType(
