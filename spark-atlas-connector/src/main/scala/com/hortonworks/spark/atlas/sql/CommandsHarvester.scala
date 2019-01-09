@@ -385,6 +385,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case f: FileSourceScanExec =>
           f.tableIdentifier.map(prepareEntities).getOrElse(
             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+        case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
