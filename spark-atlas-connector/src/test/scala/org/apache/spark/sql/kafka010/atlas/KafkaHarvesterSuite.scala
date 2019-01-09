@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010.atlas
 
 import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.sql.streaming.{KafkaHarvester, KafkaTopicInformation}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.{InternalRowDataWriterFactory, WriteToDataSourceV2Exec}
