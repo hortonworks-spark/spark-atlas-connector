@@ -25,6 +25,8 @@ import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.sql.streaming.{KafkaHarvester, KafkaTopicInformation}
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.QueryExecution

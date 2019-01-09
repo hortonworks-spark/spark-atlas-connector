@@ -19,15 +19,17 @@ package com.hortonworks.spark.atlas.sql
 
 import java.nio.file.Files
 
+import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.spark.sql.kafka010.KafkaTestUtils
+import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
+
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.metadata
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import com.hortonworks.spark.atlas.AtlasClientConf
-import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.kafka010.KafkaTestUtils
-import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
-import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+
 
 class SparkExecutionPlanProcessorForStreamingQuerySuite extends StreamTest {
   import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
