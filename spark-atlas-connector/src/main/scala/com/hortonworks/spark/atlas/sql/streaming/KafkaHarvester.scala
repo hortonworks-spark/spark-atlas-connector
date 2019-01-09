@@ -15,28 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010.atlas
+package com.hortonworks.spark.atlas.sql.streaming
 
 import scala.collection.mutable
+
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.RDDScanExec
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
-import org.apache.spark.sql.kafka010.{KafkaContinuousDataReaderFactory, KafkaSourceRDD, KafkaSourceRDDPartition, KafkaStreamWriterFactory}
+import org.apache.spark.sql.kafka010.atlas.ExtractFromDataSource
+import org.apache.spark.sql.kafka010.{KafkaContinuousDataReaderFactory, KafkaStreamWriterFactory}
+
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
-import scala.util.control.NonFatal
 
+case class KafkaTopicInformation(topicName: String, clusterName: Option[String] = None)
+
+object KafkaTopicInformation {
+  def getQualifiedName(ti: KafkaTopicInformation, defaultClusterName: String): String = {
+    val cName = ti.clusterName.getOrElse(defaultClusterName)
+    s"${ti.topicName}@$cName"
+  }
+}
 
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
-
-  // reflection
-  import scala.reflect.runtime.universe.{runtimeMirror, typeOf, TermName}
-  private val currentMirror = runtimeMirror(getClass.getClassLoader)
 
   def extractTopic(writer: InternalRowMicroBatchWriter)
     : (Boolean, Option[KafkaTopicInformation]) = {
@@ -72,8 +78,8 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
 
   def extractSourceTopics(node: WriteToDataSourceV2Exec): Set[KafkaTopicInformation] = {
     node.query.flatMap {
-      case r: RDDScanExec => extractSourceTopicsFromDataSourceV1(r)
-      case r: DataSourceV2ScanExec => extractSourceTopicsFromDataSourceV2(r)
+      case r: RDDScanExec => ExtractFromDataSource.extractSourceTopicsFromDataSourceV1(r)
+      case r: DataSourceV2ScanExec => ExtractFromDataSource.extractSourceTopicsFromDataSourceV2(r)
       case _ => Nil
     }.toSet
   }
@@ -129,66 +135,5 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
 
       Seq(pEntity) ++ inputsEntities ++ outputEntities
     }
-  }
-
-  private def extractSourceTopicsFromDataSourceV1(r: RDDScanExec): Seq[KafkaTopicInformation] = {
-    def extractKafkaParams(rdd: KafkaSourceRDD): Option[java.util.Map[String, Object]] = {
-      val rddMirror = currentMirror.reflect(rdd)
-
-      try {
-        val kafkaParamsMethod = typeOf[KafkaSourceRDD].decl(TermName("executorKafkaParams"))
-          .asTerm.accessed.asTerm
-
-        Some(rddMirror.reflectField(kafkaParamsMethod).get
-          .asInstanceOf[java.util.Map[String, Object]])
-      } catch {
-        case NonFatal(_) =>
-          logWarn("WARN: Necessary patch for spark-sql-kafka doesn't look like applied to Spark. " +
-            "Giving up extracting kafka parameter.")
-          None
-      }
-    }
-
-    val topics = new mutable.HashSet[KafkaTopicInformation]()
-    r.rdd.partitions.foreach {
-      case e: KafkaSourceRDDPartition =>
-        r.rdd.dependencies.find(p => p.rdd.isInstanceOf[KafkaSourceRDD]).map(_.rdd) match {
-          case Some(kafkaRDD: KafkaSourceRDD) =>
-            val topic = e.offsetRange.topic
-            val customClusterName = extractKafkaParams(kafkaRDD) match {
-              case Some(params) => Option(params.get(AtlasClientConf.CLUSTER_NAME.key))
-                .map(_.toString)
-              case None => None
-            }
-            topics += KafkaTopicInformation(topic, customClusterName)
-
-          case _ =>
-            topics += KafkaTopicInformation(e.offsetRange.topic, None)
-        }
-
-      case _ =>
-    }
-    topics.toSeq
-  }
-
-  private def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec)
-    : Seq[KafkaTopicInformation] = {
-    val topics = new mutable.HashSet[KafkaTopicInformation]()
-    r.inputRDDs().foreach(rdd => rdd.partitions.foreach {
-      case e: DataSourceRDDPartition[_] =>
-        e.readerFactory match {
-          case e1: KafkaContinuousDataReaderFactory =>
-            val topic = e1.topicPartition.topic()
-            val customClusterName = e1.kafkaParams.get(AtlasClientConf.CLUSTER_NAME.key)
-              .asInstanceOf[String]
-            topics += KafkaTopicInformation(topic, Option(customClusterName))
-
-          case _ =>
-        }
-
-      case _ =>
-    })
-
-    topics.toSeq
   }
 }

@@ -33,7 +33,8 @@ import org.apache.spark.sql.types.StructType
 
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+
 
 object external {
   // External metadata types used to link with external entities
