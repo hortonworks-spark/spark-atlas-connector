@@ -44,10 +44,6 @@ object KafkaTopicInformation {
 object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
 
-  // reflection
-  import scala.reflect.runtime.universe.{TermName, runtimeMirror, typeOf}
-  private val currentMirror = runtimeMirror(getClass.getClassLoader)
-
   def extractTopic(writer: InternalRowMicroBatchWriter)
     : (Boolean, Option[KafkaTopicInformation]) = {
     // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
