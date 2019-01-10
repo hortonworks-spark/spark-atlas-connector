@@ -53,6 +53,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case l: LogicalRelation => tableToEntities(l.catalogTable.get)
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -90,6 +91,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case l: LogicalRelation if l.catalogTable.isDefined =>
           l.catalogTable.map(tableToEntities(_)).get
         case SHCEntities(shcEntities) => shcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case l: LogicalRelation =>
           isFiles = true
           l.relation match {
@@ -140,6 +142,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case _: OneRowRelation => Seq.empty
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -180,6 +183,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -242,6 +246,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -331,21 +336,15 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         }
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
       }
 
-      val outputEntities = node.dataSource match {
-        // support Spark HBase Connector (destination table entity)
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(SHCEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          SHCEntities.getSHCEntity(node.options)
-
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(KafkaEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          KafkaEntities.getKafkaEntity(node.options)
-
+      val outputEntities = node match {
+        case SHCEntities(shcEntities) => shcEntities
+        case KafkaEntities(kafkaEntities) => kafkaEntities
         case e =>
           logWarn(s"Missing output entities: $e")
           Seq.empty
@@ -401,6 +400,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
         case SHCEntities(shcEntities) => shcEntities
         case HWCEntities(hwcEntities) => hwcEntities
+        case KafkaEntities(shcEntities) => shcEntities
         case e =>
           logWarn(s"Missing unknown leaf node: $e")
           Seq.empty
@@ -530,7 +530,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val SHC_RELATION_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.HBaseRelation"
 
-    val RELATION_PROVIDER_CLASS_NAME =
+    private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
@@ -540,6 +540,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val options = baseRelation.getClass.getMethod("parameters")
           .invoke(baseRelation).asInstanceOf[Map[String, String]]
         Some(getSHCEntity(options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
+        Some(getSHCEntity(sids.options))
       case _ => None
     }
 
@@ -571,7 +574,32 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object KafkaEntities {
-    val RELATION_PROVIDER_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
+    private val RELATION_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaRelation"
+
+    private val RELATION_PROVIDER_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
+
+    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+      case l: LogicalRelation
+        if l.relation.getClass.getCanonicalName.endsWith(RELATION_CLASS_NAME) =>
+        val baseRelation = l.relation.asInstanceOf[BaseRelation]
+        val options = baseRelation.getClass.getMethod("sourceOptions")
+          .invoke(baseRelation).asInstanceOf[Map[String, String]]
+        Some(getKafkaEntity(options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
+        Some(getKafkaEntity(sids.options))
+      case _ => None
+    }
+
+    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+      case r: RowDataSourceScanExec
+        if r.relation.getClass.getCanonicalName.endsWith(RELATION_CLASS_NAME) =>
+        val baseRelation = r.relation.asInstanceOf[BaseRelation]
+        val options = baseRelation.getClass.getMethod("sourceOptions")
+          .invoke(baseRelation).asInstanceOf[Map[String, String]]
+        Some(getKafkaEntity(options))
+      case _ => None
+    }
 
     def getKafkaEntity(options: Map[String, String]): Seq[AtlasEntity] = {
       options.get("topic") match {
