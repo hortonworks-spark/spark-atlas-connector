@@ -26,11 +26,12 @@ import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.StreamTest
+import org.json4s.JsonAST.{JArray, JInt, JObject}
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 class SparkExecutionPlanProcessorForBatchQuerySuite
   extends StreamTest
@@ -260,6 +261,98 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     }
   }
 
+  test("Read Kafka topics with various options of subscription " +
+    "and save to Spark table via df.saveAsTable()") {
+    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+
+    val rand = new scala.util.Random()
+    val topicsToRead1 = Seq("sparkread1", "sparkread2", "sparkread3")
+    val topicsToRead2 = Seq("sparkread4", "sparkread5")
+    val topicsToRead3 = Seq("sparkread6", "sparkread7")
+    val topics = topicsToRead1 ++ topicsToRead2 ++ topicsToRead3
+
+    val outputTableName = "test_spark_table_" + rand.nextInt(1000000000)
+
+    topics.toSet[String].foreach { ti =>
+      kafkaTestUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    sendMessages(topics)
+
+    // NOTE: custom atlas cluster name can't be tested here since it requires custom patch on Spark
+
+    // test for 'subscribePattern'
+    val df1 = spark.read.format("kafka")
+      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+      .option("subscribePattern", "sparkread[1-3]")
+      .option("startingOffsets", "earliest")
+      .load()
+
+    // test for 'subscribe'
+    val df2 = spark.read.format("kafka")
+      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+      .option("subscribe", topicsToRead2.mkString(","))
+      .option("startingOffsets", "earliest")
+      .load()
+
+    // test for 'assign'
+    val jsonToAssignTopicToRead3 = {
+      val r = JObject.apply {
+        topicsToRead3.map {
+          (_, JArray(List(JInt(0), JInt(1))))
+        }.toList
+      }
+      compact(render(r))
+    }
+
+    val df3 = spark.read.format("kafka")
+      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+      .option("assign", jsonToAssignTopicToRead3)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    df1.union(df2).union(df3).write.mode("append").saveAsTable(outputTableName)
+
+    val queryDetail = testHelperQueryListener.queryDetails.last
+    planProcessor.process(queryDetail)
+
+    val entities = atlasClient.createdEntities
+
+    // kafka topic
+    val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    assertEntitiesKafkaTopicType(topics, entities.toSet)
+
+    // We already have validations for table-relevant entities in other UTs,
+    // so minimize validation here.
+
+    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
+    assertTableEntity(tableEntity, outputTableName)
+    assertSchemaEntities(tableEntity, entities)
+
+    // check for 'spark_process'
+    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
+
+    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
+    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
+
+    val output = getOnlyOneEntity(outputs, metadata.TABLE_TYPE_STRING)
+
+    // input/output in 'spark_process' should be same as outer entities
+    assert(inputs.toSet === inputKafkaEntities.toSet)
+    assert(output === tableEntity)
+
+    val expectedMap = Map(
+      "executionId" -> queryDetail.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
+      "executionTime" -> queryDetail.executionTime.toString,
+      "details" -> queryDetail.qe.toString()
+    )
+
+    expectedMap.foreach { case (key, value) =>
+      assert(processEntity.getAttribute(key) === value)
+    }
+  }
+
   private def writeCSVtextToTempFile(csvContent: String) = {
     val tempFile = Files.createTempFile("spark-atlas-connector-csv-temp", ".csv")
 
@@ -292,6 +385,12 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     spark.range(10).write.json(tempDirPath)
 
     tempDir.toPath
+  }
+
+  private def sendMessages(topicsToRead: Seq[String]): Unit = {
+    topicsToRead.foreach { topic =>
+      kafkaTestUtils.sendMessages(topic, Array("1", "2", "3", "4", "5"))
+    }
   }
 
   private def assertTableEntity(tableEntity: AtlasEntity, tableName: String): Unit = {
