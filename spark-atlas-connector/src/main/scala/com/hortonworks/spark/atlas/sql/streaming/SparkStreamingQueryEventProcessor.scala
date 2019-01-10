@@ -24,32 +24,32 @@ import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.atlas.model.instance.AtlasEntity
 
 
-class SparkStreamingQueryEventProcessor (
-      private[atlas] val atlasClient: AtlasClient,
-      val conf: AtlasClientConf)
-extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Logging {
+class SparkStreamingQueryEventProcessor(
+    private[atlas] val atlasClient: AtlasClient,
+    val conf: AtlasClientConf)
+  extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Logging {
 
   override def process(e: QueryProgressEvent): Unit = {
 
-    val inputEntities = e.progress.sources.map{
-      case s if (s.description.contains("FileStreamSource")) =>
+    val inputEntities = e.progress.sources.flatMap {
+      case s if s.description.contains("FileStreamSource") =>
         val begin = s.description.indexOf('[')
         val end = s.description.indexOf(']')
         val path = s.description.substring(begin + 1, end)
         logDebug(s"record the streaming query sink input path information $path")
-        external.pathToEntity(path)
+        Some(external.pathToEntity(path))
+      case _ => None
     }
 
-    var outputEntity: AtlasEntity = null
-    if (e.progress.sink.description.contains("FileSink")) {
+    val outputEntity = if (e.progress.sink.description.contains("FileSink")) {
       val begin = e.progress.sink.description.indexOf('[')
       val end = e.progress.sink.description.indexOf(']')
       val path = e.progress.sink.description.substring(begin + 1, end)
       logDebug(s"record the streaming query sink output path information $path")
-      outputEntity = external.pathToEntity(path)
-    } else if (e.progress.sink.description.contains("ConsoleSinkProvider")) {
-      logInfo(s"do not track the console output as Atlas entity ${e.progress.sink.description}")
-      return
+      Seq(external.pathToEntity(path))
+    } else {
+      logDebug(s"Atlas output entity was not able to made for ${e.progress.sink.description}")
+      Seq.empty[AtlasEntity]
     }
 
     val pName = e.progress.name match {
@@ -64,12 +64,12 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
     val entities = {
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputEntities, Seq(outputEntity), logMap)
+        internal.updateMLProcessToEntity(inputEntities, outputEntity, logMap)
       } else {
         val pEntity = internal.etlProcessToEntity(
-          inputEntities.toList, List(outputEntity), logMap)
+          inputEntities.toList, outputEntity.toList, logMap)
 
-        Seq(pEntity) ++ inputEntities ++ Seq(outputEntity)
+        Seq(pEntity) ++ inputEntities ++ outputEntity
       }
     }
     atlasClient.createEntities(entities)
