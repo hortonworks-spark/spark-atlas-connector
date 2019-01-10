@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -369,7 +370,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
+  def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
     val tableName = tableIdentifier.table
     val dbName = tableIdentifier.database.getOrElse("default")
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
@@ -503,6 +504,20 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val tableField = r.getClass.getDeclaredField("table")
         tableField.setAccessible(true)
         val table = tableField.get(r).asInstanceOf[String]
+
+        external.hwcTableToEntities(db, table, clusterName)
+
+      case w: InternalRowMicroBatchWriter
+          if w.createInternalRowWriterFactory()
+            .getClass.toString.endsWith(HWCSupport.STREAM_WRITE_FACTORY) =>
+        val hwcWriterFactory = w.createInternalRowWriterFactory()
+        val dbField = hwcWriterFactory.getClass.getDeclaredField("db")
+        dbField.setAccessible(true)
+        val db = dbField.get(hwcWriterFactory).asInstanceOf[String]
+
+        val tableField = hwcWriterFactory.getClass.getDeclaredField("table")
+        tableField.setAccessible(true)
+        val table = tableField.get(hwcWriterFactory).asInstanceOf[String]
 
         external.hwcTableToEntities(db, table, clusterName)
 
