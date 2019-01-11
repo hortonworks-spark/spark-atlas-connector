@@ -279,7 +279,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     sendMessages(topics)
 
-    // NOTE: custom atlas cluster name can't be tested here since it requires custom patch on Spark
+    // NOTE: We can't verify Kafka input topics here as it requires custom patch.
+    // We can verify it when SAC relies on custom patched spark-sql-kafka module.
 
     // test for 'subscribePattern'
     val df1 = spark.read.format("kafka")
@@ -319,8 +320,12 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val entities = atlasClient.createdEntities
 
     // kafka topic
-    val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
-    assertEntitiesKafkaTopicType(topics, entities.toSet)
+
+    // NOTE: Given we can't extract Kafka input topics without custom patched Spark,
+    // we have to give up verifying Kafka input topic entities. Commenting out.
+    // val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    // assertEntitiesKafkaTopicType(topics, entities.toSet)
+    val inputKafkaEntities = Seq.empty[AtlasEntity]
 
     // We already have validations for table-relevant entities in other UTs,
     // so minimize validation here.
@@ -340,6 +345,78 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     // input/output in 'spark_process' should be same as outer entities
     assert(inputs.toSet === inputKafkaEntities.toSet)
     assert(output === tableEntity)
+
+    val expectedMap = Map(
+      "executionId" -> queryDetail.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
+      "executionTime" -> queryDetail.executionTime.toString,
+      "details" -> queryDetail.qe.toString()
+    )
+
+    expectedMap.foreach { case (key, value) =>
+      assert(processEntity.getAttribute(key) === value)
+    }
+  }
+
+  test("Read Kafka topics and save to Kafka via df.save()") {
+    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+
+    val topicsToRead = Seq("sparkread1", "sparkread2", "sparkread3")
+    val topicToWrite = "sparkwrite"
+    val topics = topicsToRead ++ Seq(topicToWrite)
+
+    topics.toSet[String].foreach { ti =>
+      kafkaTestUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    sendMessages(topicsToRead)
+
+    // NOTE: We can't verify Kafka input topics here as it requires custom patch.
+    // We can verify it when SAC relies on custom patched spark-sql-kafka module.
+
+    val df = spark.read.format("kafka")
+      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+      .option("subscribe", topicsToRead.mkString(","))
+      .option("startingOffsets", "earliest")
+      .load()
+
+    // We still verify Kafka output topic with custom patch...
+
+    val customClusterName = "customCluster"
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
+      .option("topic", topicToWrite)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
+      .save()
+
+    val queryDetail = testHelperQueryListener.queryDetails.last
+    planProcessor.process(queryDetail)
+
+    val entities = atlasClient.createdEntities
+
+    // kafka topic
+
+    // NOTE: Given we can't extract Kafka topics without custom patched Spark,
+    // we have to give up verifying Kafka topic entities. Commenting out.
+    // val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    // val expectedTopics = topics.map(KafkaTopicInformation(_, None))
+    // assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
+    val inputKafkaEntities = Seq.empty[AtlasEntity]
+
+    val kafkaEntity = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    assert(kafkaEntity.size === 1)
+    val outputEntities = kafkaEntity
+
+    // check for 'spark_process'
+    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
+
+    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
+    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
+
+    // input/output in 'spark_process' should be same as outer entities
+    assert(inputs.toSet === inputKafkaEntities.toSet)
+    assert(outputs === outputEntities)
 
     val expectedMap = Map(
       "executionId" -> queryDetail.executionId.toString,
