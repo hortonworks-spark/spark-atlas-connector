@@ -17,17 +17,18 @@
 
 package com.hortonworks.spark.atlas.sql.streaming
 
-import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.execution.RDDScanExec
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
+import org.apache.spark.sql.execution.{FileSourceScanExec, RDDScanExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.InternalRowMicroBatchWriter
 import org.apache.spark.sql.kafka010.atlas.ExtractFromDataSource
-import org.apache.spark.sql.kafka010.{KafkaContinuousDataReaderFactory, KafkaStreamWriterFactory}
+import org.apache.spark.sql.kafka010.KafkaStreamWriterFactory
 
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.sql.QueryDetail
+import com.hortonworks.spark.atlas.sql.{CommandsHarvester, QueryDetail}
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 
@@ -63,20 +64,20 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
       writer: WriteToDataSourceV2Exec,
       qd: QueryDetail) : Seq[AtlasEntity] = {
     // source topics - can be multiple topics
-    val sourceTopics = extractSourceTopics(writer)
-    val inputsEntities: Seq[AtlasEntity] = extractInputEntities(sourceTopics)
+    val inputsEntities: Seq[AtlasEntity] = extractInputEntities(writer)
 
     val outputEntities = if (targetTopic.isDefined) {
       external.kafkaToEntity(clusterName, targetTopic.get)
     } else {
+      logInfo(s"Could not get destination topic.")
       Seq.empty
     }
 
-    val logMap = makeLogMap(sourceTopics, targetTopic, qd)
+    val logMap = makeLogMap(writer, targetTopic, qd)
     makeProcessEntities(inputsEntities, outputEntities, logMap)
   }
 
-  def extractSourceTopics(node: WriteToDataSourceV2Exec): Set[KafkaTopicInformation] = {
+  private def extractSourceTopics(node: WriteToDataSourceV2Exec): Set[KafkaTopicInformation] = {
     node.query.flatMap {
       case r: RDDScanExec => ExtractFromDataSource.extractSourceTopicsFromDataSourceV1(r)
       case r: DataSourceV2ScanExec => ExtractFromDataSource.extractSourceTopicsFromDataSourceV2(r)
@@ -84,28 +85,40 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     }.toSet
   }
 
-  def extractInputEntities(
-       sourceTopics: Set[KafkaTopicInformation]): Seq[AtlasEntity] = {
-    sourceTopics
-      .toList.flatMap { topic => external.kafkaToEntity(clusterName, topic) }
+  def extractInputEntities(node: WriteToDataSourceV2Exec): Seq[AtlasEntity] = {
+    val kafkaInputEntities = extractSourceTopics(node).toList
+      .flatMap { topic => external.kafkaToEntity(clusterName, topic) }
+
+    val otherInputEntities = node.query.collectLeaves().flatMap {
+      case f: FileSourceScanExec =>
+        f.tableIdentifier.map(CommandsHarvester.prepareEntities).getOrElse(
+          f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+      case e =>
+        logWarn(s"Missing unknown leaf node: $e")
+        Seq.empty
+    }
+
+    kafkaInputEntities ++ otherInputEntities
   }
 
   def makeLogMap(
-      sourceTopics: Set[KafkaTopicInformation],
+      node: WriteToDataSourceV2Exec,
       targetTopic: Option[KafkaTopicInformation],
       qd: QueryDetail): Map[String, String] = {
     // create process entity
-    val strSourceTopics = sourceTopics.toList
-      .map(KafkaTopicInformation.getQualifiedName(_, clusterName)).sorted.mkString(", ")
-
-    val pDescription = StringBuilder.newBuilder.append(s"Topics subscribed( $strSourceTopics )")
-
+    val sourceTopics = extractSourceTopics(node).toList
+    val pDescription = StringBuilder.newBuilder
+    if (sourceTopics.nonEmpty) {
+      val strSourceTopics = sourceTopics.map(
+        KafkaTopicInformation.getQualifiedName(_, clusterName)).sorted.mkString(", ")
+      pDescription.append(s"Topics subscribed( $strSourceTopics )")
+    }
     if (targetTopic.isDefined) {
       val strTargetTopic = KafkaTopicInformation.getQualifiedName(targetTopic.get, clusterName)
       pDescription.append(s" Topics written into( $strTargetTopic )")
-    } else {
-      logInfo(s"Can not get dest topic")
     }
+
+    pDescription.append(s"\n${qd.qe.sparkPlan.toString()}")
 
     Map(
       "executionId" -> qd.executionId.toString,

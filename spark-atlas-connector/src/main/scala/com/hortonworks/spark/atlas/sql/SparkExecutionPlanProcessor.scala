@@ -100,9 +100,9 @@ class SparkExecutionPlanProcessor(
 
       case r: WriteToDataSourceV2Exec =>
         r.writer match {
-          case w: InternalRowMicroBatchWriter =>
-            // Unfortunately, we cannot determine whether writer is kafka or not, before calling
-            // `createInternalRowWriterFactory()`. We have no option, have to take the risk.
+          case w: InternalRowMicroBatchWriter
+              if w.createInternalRowWriterFactory()
+                .getClass.toString.endsWith("KafkaStreamWriterFactory") =>
             val (isKafkaWriter, topic) = KafkaHarvester.extractTopic(w)
             if (isKafkaWriter) {
               KafkaHarvester.harvest(topic, r, qd)
@@ -198,9 +198,11 @@ object HWCSupport {
     "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataSourceWriter"
   val STREAM_WRITE =
     "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
+  val STREAM_WRITE_FACTORY =
+    "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataWriterFactory"
 
   def extract(plan: WriteToDataSourceV2Exec, qd: QueryDetail): Option[Seq[AtlasEntity]] = {
-    plan.writer match {
+    def extractFromWriter(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = writer match {
       case w: DataSourceWriter
           if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
         Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
@@ -213,7 +215,14 @@ object HWCSupport {
           if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
         Some(HWCStreamingHarvester.harvest(plan, qd))
 
+      case w: InternalRowMicroBatchWriter
+          if w.createInternalRowWriterFactory()
+            .getClass.toString.endsWith(STREAM_WRITE_FACTORY) =>
+        Some(HWCStreamingHarvester.harvest(plan, qd))
+
       case _ => None
     }
+
+    extractFromWriter(plan.writer)
   }
 }

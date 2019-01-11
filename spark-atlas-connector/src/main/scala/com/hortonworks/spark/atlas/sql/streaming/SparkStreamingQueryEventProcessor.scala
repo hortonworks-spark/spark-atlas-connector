@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql
+package com.hortonworks.spark.atlas.sql.streaming
 
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import com.hortonworks.spark.atlas._
