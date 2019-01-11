@@ -34,7 +34,7 @@
     <maven.version>3.5.4</maven.version>
     <scala.version>2.11.12</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <kafka.version>2.0.0</kafka.version>
+    <kafka.version>2.0.1</kafka.version>
     <MaxPermGen>512m</MaxPermGen>
     <CodeCacheSize>512m</CodeCacheSize>
     <minJavaVersion>1.8</minJavaVersion>
