@@ -1,0 +1,29 @@
+diff --git a/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaRelation.scala b/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaRelation.scala
+index e6f9d1259e43e..3a3e294827898 100644
+--- a/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaRelation.scala
++++ b/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaRelation.scala
+@@ -33,9 +33,9 @@ import org.apache.spark.unsafe.types.UTF8String
+ 
+ private[kafka010] class KafkaRelation(
+     override val sqlContext: SQLContext,
+-    strategy: ConsumerStrategy,
++    val strategy: ConsumerStrategy,
+     sourceOptions: Map[String, String],
+-    specifiedKafkaParams: Map[String, String],
++    val specifiedKafkaParams: Map[String, String],
+     failOnDataLoss: Boolean,
+     startingOffsets: KafkaOffsetRangeLimit,
+     endingOffsets: KafkaOffsetRangeLimit)
+diff --git a/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaSourceRDD.scala b/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaSourceRDD.scala
+index f8b90056d2931..42138b01e19ce 100644
+--- a/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaSourceRDD.scala
++++ b/external/kafka-0-10-sql/src/main/scala/org/apache/spark/sql/kafka010/KafkaSourceRDD.scala
+@@ -60,7 +60,7 @@ private[kafka010] case class KafkaSourceRDDPartition(
+  */
+ private[kafka010] class KafkaSourceRDD(
+     sc: SparkContext,
+-    executorKafkaParams: ju.Map[String, Object],
++    val executorKafkaParams: ju.Map[String, Object],
+     offsetRanges: Seq[KafkaSourceRDDOffsetRange],
+     pollTimeoutMs: Long,
+     failOnDataLoss: Boolean,

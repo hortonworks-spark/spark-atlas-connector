@@ -31,11 +31,11 @@ import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec, RowData
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateDataSourceTableCommand, CreateViewCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.kafka010.atlas.ExtractFromDataSource
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
@@ -47,17 +47,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object InsertIntoHiveTableHarvester extends Harvester[InsertIntoHiveTable] {
     override def harvest(node: InsertIntoHiveTable, qd: QueryDetail): Seq[AtlasEntity] = {
       // source tables entities
-      val tChildren = node.query.collectLeaves()
-      val inputsEntities = tChildren.map {
-        case r: HiveTableRelation => tableToEntities(r.tableMeta)
-        case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation => tableToEntities(l.catalogTable.get)
-        case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
+      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
       val outputEntities = tableToEntities(node.table)
@@ -83,31 +73,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail)
         : Seq[AtlasEntity] = {
       // source tables/files entities
-      val tChildren = node.query.collectLeaves()
-      var isFiles = false
-      val inputsEntities = tChildren.map {
-        case r: HiveTableRelation => tableToEntities(r.tableMeta)
-        case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.catalogTable.isDefined =>
-          l.catalogTable.map(tableToEntities(_)).get
-        case SHCEntities(shcEntities) => shcEntities
-        case l: LogicalRelation =>
-          isFiles = true
-          l.relation match {
-            case r: FileRelation => r.inputFiles.map(external.pathToEntity).toSeq
-            case _ => Seq.empty
-          }
-        case HWCEntities(hwcEntities) => hwcEntities
-        case local: LocalRelation =>
-          logInfo("Local Relation to store Spark ML pipelineModel")
-          Seq.empty
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
-
-      val inputTablesEntities = if (isFiles) inputsEntities.flatten.toList
-      else inputsEntities.flatMap(_.headOption).toList
+      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
 
       // new table/file entity
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
@@ -121,8 +88,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val cleanedOutput = cleanOutput(inputTablesEntities, outputEntities)
         val processEntity = internal.etlProcessToEntity(
           inputTablesEntities, cleanedOutput.headOption.toList, logMap)
-          Seq(processEntity) ++ inputsEntities.flatten ++ cleanedOutput
-        }
+        Seq(processEntity) ++ inputsEntities.flatten ++ cleanedOutput
+      }
     }
   }
 
@@ -131,20 +98,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         node: CreateHiveTableAsSelectCommand,
         qd: QueryDetail): Seq[AtlasEntity] = {
       // source tables entities
-      val tChildren = node.query.collectLeaves()
-      val inputsEntities = tChildren.map {
-        case r: HiveTableRelation => tableToEntities(r.tableMeta)
-        case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
-          l.catalogTable.map(tableToEntities(_)).getOrElse(
-            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
-        case _: OneRowRelation => Seq.empty
-        case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
+      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
       val outputEntities = tableToEntities(node.tableDesc.copy(owner = SparkUtils.currUser()))
@@ -172,19 +126,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(
         node: CreateDataSourceTableAsSelectCommand,
         qd: QueryDetail): Seq[AtlasEntity] = {
-      val tChildren = node.query.collectLeaves()
-      val inputsEntities = tChildren.map {
-        case r: HiveTableRelation => tableToEntities(r.tableMeta)
-        case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
-          l.catalogTable.map(tableToEntities(_)).getOrElse(
-            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
-        case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
+      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = tableToEntities(node.table)
       val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
       val outputTableEntities = List(outputEntities.head)
@@ -229,24 +171,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
 
       val destEntity = external.pathToEntity(node.storage.locationUri.get.toString)
-      val inputsEntities = qd.qe.sparkPlan.collectLeaves().map {
-        case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
-          Try {
-            val method = h.getClass.getMethod("relation")
-            method.setAccessible(true)
-            val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
-            tableToEntities(relation.tableMeta)
-          }.getOrElse(Seq.empty)
-
-        case f: FileSourceScanExec =>
-          f.tableIdentifier.map(prepareEntities).getOrElse(
-            f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
-        case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
+      val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
       val logMap = getPlanInfo(qd)
@@ -308,30 +233,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
     override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       // source table entity
-      val tChildren = node.query.collectLeaves()
-      val inputsEntities = tChildren.map {
-        case r: HiveTableRelation => tableToEntities(r.tableMeta)
-        case v: View => tableToEntities(v.desc)
-        case l: LogicalRelation if l.relation.isInstanceOf[FileRelation] =>
-          l.catalogTable.map(tableToEntities(_)).getOrElse(
-            l.relation.asInstanceOf[FileRelation].inputFiles.map(external.pathToEntity).toSeq)
+      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val outputEntities = node match {
         case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
-
-      val outputEntities = node.dataSource match {
-        // support Spark HBase Connector (destination table entity)
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(SHCEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          SHCEntities.getSHCEntity(node.options)
-
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(KafkaEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          KafkaEntities.getKafkaEntity(node.options)
-
+        case KafkaEntities(kafkaEntities) => kafkaEntities.headOption.getOrElse(Seq.empty)
         case e =>
           logWarn(s"Missing output entities: $e")
           Seq.empty
@@ -370,27 +275,63 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
   }
 
+  private def discoverInputsEntities(
+      plan: LogicalPlan,
+      executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
+    val tChildren = plan.collectLeaves()
+    // NOTE: Each element in output should be Sequence which first element represents
+    // actual input entity (rest entities can be dependencies of input entity).
+    // If multiple inputs are extracted from one Relation, they should be provided like
+    // Seq(Seq(entities for first), Seq(entities for second), ...)
+
+    tChildren.flatMap {
+      case r: HiveTableRelation => Seq(tableToEntities(r.tableMeta))
+      case v: View => Seq(tableToEntities(v.desc))
+      case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
+        catalogTable.map(tbl => Seq(tableToEntities(tbl))).getOrElse(
+          fileRelation.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
+      case SHCEntities(shcEntities) => Seq(shcEntities)
+      case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case KafkaEntities(kafkaEntities) => kafkaEntities
+      case e =>
+        logWarn(s"Missing unknown leaf node: $e")
+        Seq.empty
+    }
+  }
+
+  private def discoverInputsEntities(
+      sparkPlan: SparkPlan,
+      executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
+    // NOTE: Each element in output should be Sequence which first element represents
+    // actual input entity (rest entities can be dependencies of input entity).
+    // If multiple inputs are extracted from one Relation, they should be provided like
+    // Seq(Seq(entities for first), Seq(entities for second), ...)
+
+    sparkPlan.collectLeaves().flatMap {
+      case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
+        Try {
+          val method = h.getClass.getMethod("relation")
+          method.setAccessible(true)
+          val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
+          Seq(tableToEntities(relation.tableMeta))
+        }.getOrElse(Seq.empty)
+
+      case f: FileSourceScanExec =>
+        f.tableIdentifier.map(tbl => Seq(prepareEntities(tbl))).getOrElse(
+          f.relation.location.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
+      case SHCEntities(shcEntities) => Seq(shcEntities)
+      case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case KafkaEntities(kafkaEntities) => kafkaEntities
+      case e =>
+        logWarn(s"Missing unknown leaf node: $e")
+        Seq.empty
+    }
+  }
+
   object HWCHarvester extends Harvester[WriteToDataSourceV2Exec] {
     override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
       // Source table entity
-      val inputsEntities = qd.qe.sparkPlan.collectLeaves().map {
-        case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
-          Try {
-            val method = h.getClass.getMethod("relation")
-            method.setAccessible(true)
-            val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
-            tableToEntities(relation.tableMeta)
-          }.getOrElse(Seq.empty)
-
-        case f: FileSourceScanExec =>
-          f.tableIdentifier.map(prepareEntities).getOrElse(
-            f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
-        case SHCEntities(shcEntities) => shcEntities
-        case HWCEntities(hwcEntities) => hwcEntities
-        case e =>
-          logWarn(s"Missing unknown leaf node: $e")
-          Seq.empty
-      }
+      val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
 
       // Supports Spark HWC (destination table entity)
       val outputEntities = HWCEntities.getHWCEntity(node.writer)
@@ -514,7 +455,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val SHC_RELATION_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.HBaseRelation"
 
-    val RELATION_PROVIDER_CLASS_NAME =
+    private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
@@ -524,6 +465,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val options = baseRelation.getClass.getMethod("parameters")
           .invoke(baseRelation).asInstanceOf[Map[String, String]]
         Some(getSHCEntity(options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
+        Some(getSHCEntity(sids.options))
       case _ => None
     }
 
@@ -555,7 +499,23 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object KafkaEntities {
-    val RELATION_PROVIDER_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
+    def unapply(plan: LogicalPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
+      case l: LogicalRelation if ExtractFromDataSource.isKafkaRelation(l.relation) =>
+        val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(l.relation)
+        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
+      case sids: SaveIntoDataSourceCommand
+        if ExtractFromDataSource.isKafkaRelationProvider(sids.dataSource) =>
+        Some(Seq(getKafkaEntity(sids.options)))
+      case _ => None
+    }
+
+    def unapply(plan: SparkPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
+      case r: RowDataSourceScanExec if ExtractFromDataSource.isKafkaRelation(r.relation) =>
+        val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(r.relation)
+        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
+
+      case _ => None
+    }
 
     def getKafkaEntity(options: Map[String, String]): Seq[AtlasEntity] = {
       options.get("topic") match {
@@ -563,8 +523,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           val cluster = options.get("kafka." + AtlasClientConf.CLUSTER_NAME.key)
           external.kafkaToEntity(clusterName, KafkaTopicInformation(topic, cluster))
 
-        // not a valid option for Kafka writer, ignored here
-        case _ => Seq.empty[AtlasEntity]
+        case _ =>
+          // output topic not specified: maybe each output row contains target topic name
+          // giving up
+          Seq.empty[AtlasEntity]
       }
     }
   }

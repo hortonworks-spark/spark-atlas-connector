@@ -18,16 +18,14 @@
 package org.apache.spark.sql.kafka010.atlas
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
-import com.hortonworks.spark.atlas.utils.Logging
-
-import org.apache.spark.sql.execution.RDDScanExec
+import com.hortonworks.spark.atlas.utils.{Logging, ReflectionHelper}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.{RDDScanExec, RowDataSourceScanExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, DataSourceV2ScanExec}
 import org.apache.spark.sql.kafka010._
-
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 
 /**
  * An object that defines an method that extracts `KafkaTopicInformation` from data source plans
@@ -35,47 +33,13 @@ import org.apache.spark.sql.kafka010._
  * to access to package level classes such as `KafkaSourceRDD` from Apache Spark.
  */
 object ExtractFromDataSource extends Logging {
-  import scala.reflect.runtime.universe.{TermName, runtimeMirror, typeOf}
-  private val currentMirror = runtimeMirror(getClass.getClassLoader)
-
   def extractSourceTopicsFromDataSourceV1(r: RDDScanExec): Seq[KafkaTopicInformation] = {
-    def extractKafkaParams(rdd: KafkaSourceRDD): Option[java.util.Map[String, Object]] = {
-      val rddMirror = currentMirror.reflect(rdd)
-
-      try {
-        val kafkaParamsMethod = typeOf[KafkaSourceRDD].decl(TermName("executorKafkaParams"))
-          .asTerm.accessed.asTerm
-
-        Some(rddMirror.reflectField(kafkaParamsMethod).get
-          .asInstanceOf[java.util.Map[String, Object]])
-      } catch {
-        case NonFatal(_) =>
-          logWarn("WARN: Necessary patch for spark-sql-kafka doesn't look like applied to Spark. " +
-            "Giving up extracting kafka parameter.")
-          None
-      }
-    }
-
-    val topics = new mutable.HashSet[KafkaTopicInformation]()
-    r.rdd.partitions.foreach {
+    r.rdd.partitions.flatMap {
       case e: KafkaSourceRDDPartition =>
-        r.rdd.dependencies.find(p => p.rdd.isInstanceOf[KafkaSourceRDD]).map(_.rdd) match {
-          case Some(kafkaRDD: KafkaSourceRDD) =>
-            val topic = e.offsetRange.topic
-            val customClusterName = extractKafkaParams(kafkaRDD) match {
-              case Some(params) => Option(params.get(AtlasClientConf.CLUSTER_NAME.key))
-                .map(_.toString)
-              case None => None
-            }
-            topics += KafkaTopicInformation(topic, customClusterName)
+        extractSourceTopicsFromKafkaSourceRDDPartition(e, r.rdd)
 
-          case _ =>
-            topics += KafkaTopicInformation(e.offsetRange.topic, None)
-        }
-
-      case _ =>
+      case _ => Nil
     }
-    topics.toSeq
   }
 
   def extractSourceTopicsFromDataSourceV2(r: DataSourceV2ScanExec): Seq[KafkaTopicInformation] = {
@@ -102,5 +66,94 @@ object ExtractFromDataSource extends Logging {
     })
 
     topics.toSeq
+  }
+
+  def extractSourceTopicsFromDataSourceV1(r: RowDataSourceScanExec): Seq[KafkaTopicInformation] = {
+    r.rdd.partitions.flatMap {
+      case e: KafkaSourceRDDPartition =>
+        extractSourceTopicsFromKafkaSourceRDDPartition(e, r.rdd)
+
+      case _ => Nil
+    }
+  }
+
+  def extractSourceTopicsFromKafkaSourceRDDPartition(
+      e: KafkaSourceRDDPartition,
+      rddContainingPartition: RDD[_]): Set[KafkaTopicInformation] = {
+    def extractKafkaParams(rdd: KafkaSourceRDD): Option[java.util.Map[String, Object]] = {
+      ReflectionHelper.reflectField[KafkaSourceRDD, java.util.Map[String, Object]](
+        rdd, "executorKafkaParams")
+    }
+
+    def collectLeaves(rdd: RDD[_]): Seq[RDD[_]] = {
+      // this method is being called with chains of MapPartitionRDDs
+      // so this recursion won't stack up too much
+      if (rdd.dependencies.isEmpty) {
+        Seq(rdd)
+      } else {
+        rdd.dependencies.map(_.rdd).flatMap(collectLeaves)
+      }
+    }
+
+    val topics = new mutable.HashSet[KafkaTopicInformation]()
+    val rdds = collectLeaves(rddContainingPartition)
+    rdds.find(_.isInstanceOf[KafkaSourceRDD]) match {
+      case Some(kafkaRDD: KafkaSourceRDD) =>
+        val topic = e.offsetRange.topic
+        val customClusterName = extractKafkaParams(kafkaRDD) match {
+          case Some(params) => Option(params.get(AtlasClientConf.CLUSTER_NAME.key))
+            .map(_.toString)
+          case None => None
+        }
+        topics += KafkaTopicInformation(topic, customClusterName)
+
+      case _ =>
+        topics += KafkaTopicInformation(e.offsetRange.topic, None)
+    }
+    topics.toSet
+  }
+
+  def isKafkaRelation(rel: BaseRelation): Boolean = {
+    rel.isInstanceOf[KafkaRelation]
+  }
+
+  def isKafkaRelationProvider(provider: CreatableRelationProvider): Boolean = {
+    provider.isInstanceOf[KafkaSourceProvider]
+  }
+
+  def extractSourceTopicsFromKafkaRelation(rel: BaseRelation): Set[KafkaTopicInformation] = {
+    def extractSourceTopics(rel: KafkaRelation): Option[Seq[String]] = {
+      ReflectionHelper.reflectField[KafkaRelation, ConsumerStrategy](
+        rel, "strategy") match {
+        case Some(AssignStrategy(partitions)) => Some(partitions.map(_.topic()).toSet.toSeq)
+        case Some(SubscribeStrategy(topics)) => Some(topics.toSet.toSeq)
+        case Some(SubscribePatternStrategy(_)) =>
+          logWarn("SAC cannot extract source topics when topic pattern is specified. Giving up.")
+          None
+        case None => None
+      }
+    }
+
+    def extractKafkaParams(rel: KafkaRelation): Option[Map[String, String]] = {
+      ReflectionHelper.reflectField[KafkaRelation, Map[String, String]](
+        rel, "specifiedKafkaParams")
+    }
+
+    rel match {
+      case r: KafkaRelation =>
+        extractSourceTopics(r) match {
+          case Some(topics) =>
+            val customClusterName = extractKafkaParams(r) match {
+              case Some(params) => params.get(AtlasClientConf.CLUSTER_NAME.key)
+                .map(_.toString)
+              case None => None
+            }
+            topics.map(KafkaTopicInformation(_, customClusterName)).toSet
+
+          case None => Nil.toSet
+        }
+
+      case _ => Nil.toSet
+    }
   }
 }
