@@ -37,8 +37,8 @@ abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll {
     super.beforeAll()
 
 
-    //set high timeouts so that tests do not fail due to read timeouts while you
-    //are stepping through the code in a debugger
+    // set high timeouts so that tests do not fail due to read timeouts while you
+    // are stepping through the code in a debugger
     atlasClientConf.set("atlas.client.readTimeoutMSecs", "100000000")
     atlasClientConf.set("atlas.client.connectTimeoutMSecs", "100000000")
     atlasUrls = Array(atlasClientConf.get(AtlasClientConf.ATLAS_REST_ENDPOINT))

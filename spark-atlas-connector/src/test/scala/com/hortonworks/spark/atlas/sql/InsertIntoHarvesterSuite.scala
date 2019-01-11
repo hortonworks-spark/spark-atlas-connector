@@ -346,7 +346,8 @@ class InsertIntoHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
   }
 
   test("INSERT INTO MULTIPLE TABLES FROM MULTIPLE TABLES") {
-    val qe = sparkSession.sql(s"WITH view1 AS (SELECT * FROM $inputTable1, $inputTable2, $inputTable3 " +
+    val qe = sparkSession.sql(s"WITH view1 AS " +
+      s"(SELECT * FROM $inputTable1, $inputTable2, $inputTable3 " +
       s"where $inputTable1.a = $inputTable2.b AND $inputTable1.a = $inputTable3.c) " +
       s"FROM view1 INSERT INTO TABLE $outputTable1 SELECT view1.a " +
       s"INSERT INTO TABLE $outputTable2 SELECT view1.b " +

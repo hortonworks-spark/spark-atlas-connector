@@ -15,13 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010.atlas
+package com.hortonworks.spark.atlas.utils
 
-case class KafkaTopicInformation(topicName: String, clusterName: Option[String] = None)
+import scala.util.control.NonFatal
 
-object KafkaTopicInformation {
-  def getQualifiedName(ti: KafkaTopicInformation, defaultClusterName: String): String = {
-    val cName = ti.clusterName.getOrElse(defaultClusterName)
-    s"${ti.topicName}@$cName"
+object ReflectionHelper extends Logging {
+  import scala.reflect.runtime.universe.{TermName, runtimeMirror, typeOf, TypeTag}
+  private val currentMirror = runtimeMirror(getClass.getClassLoader)
+
+  def reflectField[T, OUT](obj: Any, fieldName: String)(implicit ttag: TypeTag[T]): Option[OUT] = {
+    val relMirror = currentMirror.reflect(obj)
+
+    try {
+      val method = typeOf[T].decl(TermName(fieldName)).asTerm.accessed.asTerm
+
+      Some(relMirror.reflectField(method).get.asInstanceOf[OUT])
+    } catch {
+      case NonFatal(_) =>
+        logWarn(s"Failed to reflect field $fieldName from $obj. " +
+          s"Maybe missing to apply necessary patch?")
+        None
+    }
   }
 }

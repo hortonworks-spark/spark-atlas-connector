@@ -27,6 +27,10 @@ import scala.collection.mutable
 class CreateEntitiesTrackingAtlasClient extends AtlasClient {
   val createdEntities = new mutable.ListBuffer[AtlasEntity]()
 
+  def clearEntities(): Unit = {
+    createdEntities.clear()
+  }
+
   override def createAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit = {}
 
   override def getAtlasTypeDefs(searchParams: MultivaluedMapImpl): AtlasTypesDef = {
