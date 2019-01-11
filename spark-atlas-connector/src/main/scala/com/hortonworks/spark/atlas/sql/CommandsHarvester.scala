@@ -21,7 +21,6 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -458,6 +457,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
+    private val JDBC_PROVIDER_CLASS_NAME =
+      "org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider"
+
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
       case l: LogicalRelation
         if l.relation.getClass.getCanonicalName.endsWith(SHC_RELATION_CLASS_NAME) =>
@@ -468,6 +470,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case sids: SaveIntoDataSourceCommand
         if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
         Some(getSHCEntity(sids.options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(JDBC_PROVIDER_CLASS_NAME) =>
+        Some(getJdbcEnity(sids.options))
       case _ => None
     }
 
@@ -495,6 +500,12 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
         Seq.empty[AtlasEntity]
       }
+    }
+
+    private def getJdbcEnity(options: Map[String, String]) : Seq[AtlasEntity] = {
+      val url = options.getOrElse("url", "")
+      val tableName = options.getOrElse("dbtable", "")
+      external.rdbmsTableToEntity(url, tableName)
     }
   }
 

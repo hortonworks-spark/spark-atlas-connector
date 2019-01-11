@@ -39,6 +39,9 @@ import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 
 object external {
   // External metadata types used to link with external entities
+  val QUALIFIED_NAME_KEY = "qualifiedName"
+  val ATTRIBUTE_NAME_KEY = "name"
+  val ATTRIBUTE_URI_KEY = "uri"
 
   // ================ File system entities ======================
   val FS_PATH_TYPE_STRING = "fs_path"
@@ -53,10 +56,10 @@ object external {
     }
 
     val fsPath = new Path(uri)
-    entity.setAttribute("name",
+    entity.setAttribute(ATTRIBUTE_NAME_KEY,
       Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
     entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute("qualifiedName", uri.toString)
+    entity.setAttribute(QUALIFIED_NAME_KEY, uri.toString)
     if (uri.getScheme == "hdfs") {
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
     }
@@ -92,11 +95,11 @@ object external {
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
       : Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
-    hbaseEntity.setAttribute("qualifiedName",
+    hbaseEntity.setAttribute(QUALIFIED_NAME_KEY,
       getTableQualifiedName(cluster, nameSpace, tableName))
-    hbaseEntity.setAttribute("name", tableName.toLowerCase)
+    hbaseEntity.setAttribute(ATTRIBUTE_NAME_KEY, tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
+    hbaseEntity.setAttribute(ATTRIBUTE_URI_KEY, nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
   }
 
@@ -111,10 +114,10 @@ object external {
     }
 
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
-    kafkaEntity.setAttribute("qualifiedName", topicName + '@' + clusterName)
-    kafkaEntity.setAttribute("name", topicName)
+    kafkaEntity.setAttribute(QUALIFIED_NAME_KEY, topicName + '@' + clusterName)
+    kafkaEntity.setAttribute(ATTRIBUTE_NAME_KEY, topicName)
     kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, clusterName)
-    kafkaEntity.setAttribute("uri", topicName)
+    kafkaEntity.setAttribute(ATTRIBUTE_URI_KEY, topicName)
     kafkaEntity.setAttribute("topic", topicName)
     Seq(kafkaEntity)
   }
@@ -132,9 +135,9 @@ object external {
                        owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
 
-    dbEntity.setAttribute("qualifiedName",
+    dbEntity.setAttribute(QUALIFIED_NAME_KEY,
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
-    dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
+    dbEntity.setAttribute(ATTRIBUTE_NAME_KEY, dbDefinition.name.toLowerCase)
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
@@ -143,6 +146,44 @@ object external {
     dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity)
   }
+
+  // ================ RDBMS based entities ======================
+  val RDBMS_TABLE = "rdbms_table"
+
+  /**
+   * Converts JDBC RDBMS properties into Atlas entity
+   *
+   * @param url
+   * @param tableName
+   * @return
+   */
+  def rdbmsTableToEntity(url: String, tableName: String) : Seq[AtlasEntity] = {
+    val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
+
+    val databaseName = getRdbmsDatabaseName(url)
+    jdbcEntity.setAttribute(QUALIFIED_NAME_KEY, getRdbmsQualifiedName(databaseName, tableName))
+    jdbcEntity.setAttribute(ATTRIBUTE_NAME_KEY, tableName)
+    Seq(jdbcEntity)
+  }
+
+  /**
+   * Constructs the the full qualified name of the databse
+   *
+   * @param databaseName
+   * @param tableName
+   * @return
+   */
+  private def getRdbmsQualifiedName(databaseName: String, tableName: String): String =
+    s"${databaseName.toLowerCase}.${tableName.toLowerCase}"
+
+  /**
+   * Gets the database in use by the RDBMS JDBC
+   *
+   * @param url The URL used by a JDBC connector
+   * @return
+   */
+  private def getRdbmsDatabaseName(url: String): String =
+    url.substring(url.lastIndexOf("/") + 1)
 
   def hiveStorageDescUniqueAttribute(
       cluster: String,
@@ -159,13 +200,13 @@ object external {
       table: String,
       isTempTable: Boolean = false): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.setAttribute("qualifiedName",
+    sdEntity.setAttribute(QUALIFIED_NAME_KEY,
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
+    storageFormat.serde.foreach(sdEntity.setAttribute(ATTRIBUTE_NAME_KEY, _))
     storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
     Seq(sdEntity)
   }
@@ -190,9 +231,9 @@ object external {
     schema.map { struct =>
       val entity = new AtlasEntity(HIVE_COLUMN_TYPE_STRING)
 
-      entity.setAttribute("qualifiedName",
+      entity.setAttribute(QUALIFIED_NAME_KEY,
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute("name", struct.name.toLowerCase)
+      entity.setAttribute(ATTRIBUTE_NAME_KEY, struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("comment", struct.getComment())
       entity
@@ -234,9 +275,9 @@ object external {
       tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
-    tblEntity.setAttribute("qualifiedName",
+    tblEntity.setAttribute(QUALIFIED_NAME_KEY,
       hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
-    tblEntity.setAttribute("name", table)
+    tblEntity.setAttribute(ATTRIBUTE_NAME_KEY, table)
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
