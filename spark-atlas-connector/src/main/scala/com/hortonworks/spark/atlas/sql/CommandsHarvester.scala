@@ -233,16 +233,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
       // source table entity
       val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
-      val outputEntities = node.dataSource match {
-        // support Spark HBase Connector (destination table entity)
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(SHCEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          SHCEntities.getSHCEntity(node.options)
-
-        case ds if ds.getClass.getCanonicalName
-          .endsWith(KafkaEntities.RELATION_PROVIDER_CLASS_NAME) =>
-          KafkaEntities.getKafkaEntity(node.options)
-
+      val outputEntities = node match {
+        case SHCEntities(shcEntities) => shcEntities
+        case KafkaEntities(kafkaEntities) => kafkaEntities.headOption.getOrElse(Seq.empty)
         case e =>
           logWarn(s"Missing output entities: $e")
           Seq.empty
@@ -285,8 +278,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       plan: LogicalPlan,
       executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
     val tChildren = plan.collectLeaves()
-    var foundKafkaRelation = false
-
     // NOTE: Each element in output should be Sequence which first element represents
     // actual input entity (rest entities can be dependencies of input entity).
     // If multiple inputs are extracted from one Relation, they should be provided like
@@ -300,20 +291,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           fileRelation.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
-      case e if KafkaEntities.isKafkaRelationWrappedLogicalRelation(e) =>
-        // Kafka entities will be discovered from physical plan
-        foundKafkaRelation = true
-        Seq.empty
-
+      case KafkaEntities(kafkaEntities) => kafkaEntities
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
         Seq.empty
-    } ++ {
-      if (foundKafkaRelation) {
-        KafkaEntities.getKafkaSourceEntityInExecutedPlan(executedPlan)
-      } else {
-        Seq.empty
-      }
     }
   }
 
@@ -339,11 +320,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           f.relation.location.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case KafkaEntities(kafkaEntities) => kafkaEntities
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
         Seq.empty
-    } ++ {
-      KafkaEntities.getKafkaSourceEntityInExecutedPlan(executedPlan)
     }
   }
 
@@ -469,7 +449,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val SHC_RELATION_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.HBaseRelation"
 
-    val RELATION_PROVIDER_CLASS_NAME =
+    private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
@@ -479,6 +459,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val options = baseRelation.getClass.getMethod("parameters")
           .invoke(baseRelation).asInstanceOf[Map[String, String]]
         Some(getSHCEntity(options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
+        Some(getSHCEntity(sids.options))
       case _ => None
     }
 
@@ -510,24 +493,22 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object KafkaEntities {
-    val RELATION_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaRelation"
-    val RELATION_PROVIDER_CLASS_NAME = "org.apache.spark.sql.kafka010.KafkaSourceProvider"
-
-    def isKafkaRelationWrappedLogicalRelation(plan: LogicalPlan): Boolean = plan match {
-      case l: LogicalRelation
-        if l.relation.getClass.getCanonicalName.endsWith(RELATION_CLASS_NAME) => true
-      case _ => false
+    def unapply(plan: LogicalPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
+      case l: LogicalRelation if ExtractFromDataSource.isKafkaRelation(l.relation) =>
+        val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(l.relation)
+        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
+      case sids: SaveIntoDataSourceCommand
+        if ExtractFromDataSource.isKafkaRelationProvider(sids.dataSource) =>
+        Some(Seq(getKafkaEntity(sids.options)))
+      case _ => None
     }
 
-    def getKafkaSourceEntityInExecutedPlan(executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
-      val sourceTopics: Set[KafkaTopicInformation] = executedPlan.collectLeaves().flatMap {
-        case r: RowDataSourceScanExec =>
-          ExtractFromDataSource.extractSourceTopicsFromDataSourceV1(r)
+    def unapply(plan: SparkPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
+      case r: RowDataSourceScanExec if ExtractFromDataSource.isKafkaRelation(r.relation) =>
+        val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(r.relation)
+        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
 
-        case _ => Nil
-      }.toSet
-
-      sourceTopics.toList.map { topic => external.kafkaToEntity(clusterName, topic) }
+      case _ => None
     }
 
     def getKafkaEntity(options: Map[String, String]): Seq[AtlasEntity] = {
@@ -536,8 +517,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           val cluster = options.get("kafka." + AtlasClientConf.CLUSTER_NAME.key)
           external.kafkaToEntity(clusterName, KafkaTopicInformation(topic, cluster))
 
-        // not a valid option for Kafka writer, ignored here
-        case _ => Seq.empty[AtlasEntity]
+        case _ =>
+          // output topic not specified: maybe each output row contains target topic name
+          // giving up
+          Seq.empty[AtlasEntity]
       }
     }
   }
