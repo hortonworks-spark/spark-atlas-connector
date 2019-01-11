@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 
 import com.hortonworks.spark.atlas.AtlasClientConf
@@ -354,7 +355,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
+  def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
     val tableName = tableIdentifier.table
     val dbName = tableIdentifier.database.getOrElse("default")
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
@@ -483,6 +484,11 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         val table = tableField.get(r).asInstanceOf[String]
 
         external.hwcTableToEntities(db, table, clusterName)
+
+      case w: MicroBatchWriter
+          if w.getClass.getMethod("writer").invoke(w)
+            .getClass.toString.endsWith(HWCSupport.STREAM_WRITE) =>
+        getHWCEntity(w.getClass.getMethod("writer").invoke(w).asInstanceOf[DataSourceWriter])
 
       case _ => Seq.empty
     }

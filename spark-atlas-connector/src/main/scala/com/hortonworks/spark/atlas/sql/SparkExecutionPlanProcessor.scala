@@ -100,24 +100,11 @@ class SparkExecutionPlanProcessor(
 
       case r: WriteToDataSourceV2Exec =>
         r.writer match {
-          case w: MicroBatchWriter =>
-            try {
-              val streamWriter = w.getClass.getMethod("writer").invoke(w)
-              streamWriter match {
-                case _: KafkaStreamWriter =>
-                  // We don't know the overhead of createWriterFactory() for all data sources,
-                  // so pay the overhead of reflection instead of calling createWriterFactory,
-                  // and call `createWriterFactory()` only if the datasource is spark-sql-kafka.
-                  val topic = KafkaHarvester.extractTopic(w)
-                  KafkaHarvester.harvest(topic, r, qd)
-                case _ => Seq.empty
-              }
-            } catch {
-              case _: NoSuchMethodException =>
-                logDebug("Can not get KafkaStreamWriter, so can not create Kafka topic " +
-                  s"entities: ${qd.qe}")
-                Seq.empty
-            }
+          case w: MicroBatchWriter
+              if w.getClass.getMethod("writer").invoke(w)
+                .getClass.toString.endsWith("KafkaStreamWriter") =>
+            val topic = KafkaHarvester.extractTopic(w)
+            KafkaHarvester.harvest(topic, r, qd)
 
           case w: DataSourceWriter =>
             HWCSupport.extract(r, qd).getOrElse(Seq.empty)
@@ -209,7 +196,7 @@ object HWCSupport {
     "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
 
   def extract(plan: WriteToDataSourceV2Exec, qd: QueryDetail): Option[Seq[AtlasEntity]] = {
-    plan.writer match {
+    def extractFromWriter(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = writer match {
       case w: DataSourceWriter
           if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
         Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
@@ -222,7 +209,15 @@ object HWCSupport {
           if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
         Some(HWCStreamingHarvester.harvest(plan, qd))
 
+      case w: MicroBatchWriter
+          if w.getClass.getMethod("writer").invoke(w)
+            .getClass.toString.endsWith(STREAM_WRITE) =>
+        extractFromWriter(
+          w.getClass.getMethod("writer").invoke(w).asInstanceOf[DataSourceWriter])
+
       case _ => None
     }
+
+    extractFromWriter(plan.writer)
   }
 }

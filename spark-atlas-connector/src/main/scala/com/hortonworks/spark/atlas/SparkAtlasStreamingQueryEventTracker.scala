@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas
 import scala.collection.mutable
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-import com.hortonworks.spark.atlas.sql.SparkStreamingQueryEventProcessor
+import com.hortonworks.spark.atlas.sql.streaming.SparkStreamingQueryEventProcessor
 import com.hortonworks.spark.atlas.utils.Logging
 
 class SparkAtlasStreamingQueryEventTracker(
