@@ -192,8 +192,6 @@ class FirehoseAtlasClient(conf: AtlasClientConf) extends AtlasClient {
     new AtlasTypesDef()
   }
 
-  override def findEntity(typeNang: String, qualifiedName: String): AtlasEntity = { null }
-
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     entities.foreach { e =>
       createEntityCall(e.getTypeName) =
