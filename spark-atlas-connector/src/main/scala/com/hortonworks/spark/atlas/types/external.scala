@@ -270,6 +270,8 @@ object external {
 
   // ================== Hive entities (Hive Warehouse Connector) =====================
   val HWC_TABLE_TYPE_STRING = "hive_table"
+  val HWC_DB_TYPE_STRING = "hive_db"
+  val HWC_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
 
   def hwcTableUniqueAttribute(
       cluster: String,
@@ -282,10 +284,25 @@ object external {
       db: String,
       table: String,
       cluster: String): Seq[AtlasEntity] = {
-    // For HWC tables, we're not going to create new Hive table entities within Spark side.
-    // Therefore, it finds the existing Hive table entities.
-    val entity = AtlasClient.atlasClient().findEntity(
-      HWC_TABLE_TYPE_STRING, hwcTableUniqueAttribute(cluster, db, table))
-    Option(entity).toSeq
+
+    val dbEntity = new AtlasEntity(HWC_DB_TYPE_STRING)
+    dbEntity.setAttribute("qualifiedName",
+      hiveDbUniqueAttribute(cluster, db.toLowerCase))
+    dbEntity.setAttribute("name", db.toLowerCase)
+
+    val sdEntity = new AtlasEntity(HWC_STORAGEDESC_TYPE_STRING)
+    sdEntity.setAttribute("qualifiedName",
+      hiveStorageDescUniqueAttribute(cluster, db, table))
+
+    val tblEntity = new AtlasEntity(HWC_TABLE_TYPE_STRING)
+    tblEntity.setAttribute("qualifiedName",
+      hiveTableUniqueAttribute(cluster, db, table))
+    tblEntity.setAttribute("name", table)
+    tblEntity.setAttribute("db",
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tblEntity.setAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    Seq(tblEntity)
   }
 }
