@@ -33,8 +33,6 @@ trait AtlasClient extends Logging {
 
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
-  def findEntity(typeNang: String, qualifiedName: String): AtlasEntity
-
   final def createEntities(entities: Seq[AtlasEntity]): Unit = this.synchronized {
     if (entities.isEmpty) {
       return
@@ -83,11 +81,6 @@ trait AtlasClient extends Logging {
 
 object AtlasClient {
   @volatile private var client: AtlasClient = null
-
-  protected[atlas] def atlasClient(): AtlasClient = {
-    assert(client != null, "atlasClient(conf) should be called first.")
-    client
-  }
 
   def atlasClient(conf: AtlasClientConf): AtlasClient = {
     if (client == null) {
