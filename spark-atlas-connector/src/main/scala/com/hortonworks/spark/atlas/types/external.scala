@@ -22,7 +22,6 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -31,9 +30,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
-import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 
 
@@ -160,7 +158,7 @@ object external {
   def rdbmsTableToEntity(url: String, tableName: String) : Seq[AtlasEntity] = {
     val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
 
-    val databaseName = getRdbmsDatabaseName(url)
+    val databaseName = JdbcUtils.getDatabaseName(url)
     jdbcEntity.setAttribute(QUALIFIED_NAME_KEY, getRdbmsQualifiedName(databaseName, tableName))
     jdbcEntity.setAttribute(ATTRIBUTE_NAME_KEY, tableName)
     Seq(jdbcEntity)
@@ -175,15 +173,6 @@ object external {
    */
   private def getRdbmsQualifiedName(databaseName: String, tableName: String): String =
     s"${databaseName.toLowerCase}.${tableName.toLowerCase}"
-
-  /**
-   * Gets the database in use by the RDBMS JDBC
-   *
-   * @param url The URL used by a JDBC connector
-   * @return
-   */
-  private def getRdbmsDatabaseName(url: String): String =
-    url.substring(url.lastIndexOf("/") + 1)
 
   def hiveStorageDescUniqueAttribute(
       cluster: String,
