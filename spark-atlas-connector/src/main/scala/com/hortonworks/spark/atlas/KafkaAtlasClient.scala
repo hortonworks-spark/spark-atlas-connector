@@ -51,10 +51,6 @@ class KafkaAtlasClient(atlasClientConf: AtlasClientConf) extends AtlasHook with 
     throw new UnsupportedOperationException("Kafka atlas client doesn't support update type defs")
   }
 
-  override def findEntity(typeName: String, qualifiedName: String): AtlasEntity = {
-    throw new UnsupportedOperationException("Kafka atlas client doesn't support find entities")
-  }
-
   override protected def doCreateEntities(entities: Seq[AtlasEntity]): Unit = {
     val entitiesWithExtInfo = new AtlasEntitiesWithExtInfo()
     entities.foreach(entitiesWithExtInfo.addEntity)
