@@ -130,7 +130,7 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     tableEntity.getAttribute("db") should be (dbEntity)
     tableEntity.getAttribute("owner") should be (SparkUtils.currUser())
     tableEntity.getAttribute("ownerType") should be ("USER")
-    tableEntity.getAttribute("storage") should be (sdEntity)
+    tableEntity.getAttribute("sd") should be (sdEntity)
     tableEntity.getAttribute("spark_schema") should be (schemaEntities.asJava)
   }
 }

@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql
+package com.hortonworks.spark.atlas.sql.streaming
 
 import com.hortonworks.spark.atlas.sql.CommandsHarvester.HWCEntities
+import com.hortonworks.spark.atlas.sql.{Harvester, QueryDetail}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
-import org.apache.spark.sql.kafka010.atlas.KafkaHarvester
 
 
 object HWCStreamingHarvester extends Harvester[WriteToDataSourceV2Exec] {
   override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
     // source topics - can be multiple topics
-    val sourceTopics = KafkaHarvester.extractSourceTopics(node)
-    val inputsEntities: Seq[AtlasEntity] = KafkaHarvester.extractInputEntities(sourceTopics)
+    val inputsEntities: Seq[AtlasEntity] = KafkaHarvester.extractInputEntities(node)
 
     val outputEntities = HWCEntities.getHWCEntity(node.writer)
-    val logMap = KafkaHarvester.makeLogMap(sourceTopics, None, qd)
 
-    val updatedLogMap = logMap ++ Map(
-      "sparkPlanDescription" ->
-      s"${logMap.get("sparkPlanDescription")}\n${qd.qe.sparkPlan.toString()}")
+    val logMap = KafkaHarvester.makeLogMap(node, None, qd)
 
-    KafkaHarvester.makeProcessEntities(inputsEntities, outputEntities, updatedLogMap)
+    KafkaHarvester.makeProcessEntities(inputsEntities, outputEntities, logMap)
   }
 }

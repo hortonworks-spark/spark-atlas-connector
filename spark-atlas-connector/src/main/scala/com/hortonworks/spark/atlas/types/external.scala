@@ -22,6 +22,7 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
+
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
@@ -30,9 +31,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.kafka010.atlas.KafkaTopicInformation
+
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+
 
 object external {
   // External metadata types used to link with external entities
@@ -327,6 +330,8 @@ object external {
 
   // ================== Hive entities (Hive Warehouse Connector) =====================
   val HWC_TABLE_TYPE_STRING = "hive_table"
+  val HWC_DB_TYPE_STRING = "hive_db"
+  val HWC_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
 
   def hwcTableUniqueAttribute(
       cluster: String,
@@ -339,10 +344,25 @@ object external {
       db: String,
       table: String,
       cluster: String): Seq[AtlasEntity] = {
-    // For HWC tables, we're not going to create new Hive table entities within Spark side.
-    // Therefore, it finds the existing Hive table entities.
-    val entity = AtlasClient.atlasClient().findEntity(
-      HWC_TABLE_TYPE_STRING, hwcTableUniqueAttribute(cluster, db, table))
-    Option(entity).toSeq
+
+    val dbEntity = new AtlasEntity(HWC_DB_TYPE_STRING)
+    dbEntity.setAttribute("qualifiedName",
+      hiveDbUniqueAttribute(cluster, db.toLowerCase))
+    dbEntity.setAttribute("name", db.toLowerCase)
+
+    val sdEntity = new AtlasEntity(HWC_STORAGEDESC_TYPE_STRING)
+    sdEntity.setAttribute("qualifiedName",
+      hiveStorageDescUniqueAttribute(cluster, db, table))
+
+    val tblEntity = new AtlasEntity(HWC_TABLE_TYPE_STRING)
+    tblEntity.setAttribute("qualifiedName",
+      hiveTableUniqueAttribute(cluster, db, table))
+    tblEntity.setAttribute("name", table)
+    tblEntity.setAttribute("db",
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tblEntity.setAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
+
+    Seq(tblEntity)
   }
 }
