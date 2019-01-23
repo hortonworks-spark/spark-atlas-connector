@@ -52,9 +52,6 @@ object JdbcUtils {
 
   /**
    * Retrieves database name where in hose:port/dbname format
-   *
-   * @param url
-   * @return
    */
   private def getDatabaseNameEndOfUrl(url: String): String = {
     val parsedUrl = url.substring(url.lastIndexOf("/") + 1)
@@ -66,10 +63,7 @@ object JdbcUtils {
   }
 
   /**
-   * Retrieves the database name based on Teradata format
-   *
-   * @param url
-   * @return
+   * Retrieves the database name based on Derby format
    */
   private def getDatabaseNameDerbyFormat(url: String): String = {
     val parsedUrl = url match {
@@ -86,9 +80,6 @@ object JdbcUtils {
 
   /**
    * Retrieves the database name based on Teradata format
-   *
-   * @param url
-   * @return
    */
   private def getDatabaseNameTeradataFormat(url: String): String = {
     val databaseKey = "/DATABASE="
@@ -103,9 +94,6 @@ object JdbcUtils {
   /**
    * Retrieves the database name based on Oracle format
    * e.g. jdbc:oracle:thin:@localhost:1521:testdb
-   *
-   * @param url
-   * @return
    */
   private def getDatabaseOracleFormat(url: String): String = {
     url.substring(url.toUpperCase().lastIndexOf(":") + 1)
@@ -113,9 +101,6 @@ object JdbcUtils {
 
   /**
    * Retrieves the database name based on Microsoft SQL Server format
-   *
-   * @param url
-   * @return
    */
   private def getDatabaseSqlServerFormat(url: String): String = {
     val databaseNameKey = ";databaseName="

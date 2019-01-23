@@ -39,6 +39,7 @@ import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
@@ -235,6 +236,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = node match {
         case SHCEntities(shcEntities) => shcEntities
+        case JDBCEntities(jdbcEntities) => jdbcEntities
         case KafkaEntities(kafkaEntities) => kafkaEntities.headOption.getOrElse(Seq.empty)
         case e =>
           logWarn(s"Missing output entities: $e")
@@ -291,6 +293,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           fileRelation.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
       case KafkaEntities(kafkaEntities) => kafkaEntities
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
@@ -320,6 +323,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           f.relation.location.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
       case KafkaEntities(kafkaEntities) => kafkaEntities
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
@@ -457,9 +461,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
-    private val JDBC_PROVIDER_CLASS_NAME =
-      "org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider"
-
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
       case l: LogicalRelation
         if l.relation.getClass.getCanonicalName.endsWith(SHC_RELATION_CLASS_NAME) =>
@@ -470,9 +471,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case sids: SaveIntoDataSourceCommand
         if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
         Some(getSHCEntity(sids.options))
-      case sids: SaveIntoDataSourceCommand
-        if sids.dataSource.getClass.getCanonicalName.endsWith(JDBC_PROVIDER_CLASS_NAME) =>
-        Some(getJdbcEnity(sids.options))
       case _ => None
     }
 
@@ -500,12 +498,6 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
         Seq.empty[AtlasEntity]
       }
-    }
-
-    private def getJdbcEnity(options: Map[String, String]) : Seq[AtlasEntity] = {
-      val url = options.getOrElse("url", "")
-      val tableName = options.getOrElse("dbtable", "")
-      external.rdbmsTableToEntity(url, tableName)
     }
   }
 
@@ -540,5 +532,43 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           Seq.empty[AtlasEntity]
       }
     }
+  }
+
+  object JDBCEntities {
+    private val JDBC_RELATION_CLASS_NAME =
+      "org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation"
+
+    private val JDBC_PROVIDER_CLASS_NAME =
+      "org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider"
+
+    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+      case l: LogicalRelation
+        if l.relation.getClass.getCanonicalName.endsWith(JDBC_RELATION_CLASS_NAME) =>
+        val baseRelation = l.relation.asInstanceOf[BaseRelation]
+        val options = baseRelation.getClass.getMethod("jdbcOptions")
+          .invoke(baseRelation).asInstanceOf[JDBCOptions].parameters
+        Some(getJdbcEnity(options))
+      case sids: SaveIntoDataSourceCommand
+        if sids.dataSource.getClass.getCanonicalName.endsWith(JDBC_PROVIDER_CLASS_NAME) =>
+        Some(getJdbcEnity(sids.options))
+      case _ => None
+    }
+
+    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+      case r: RowDataSourceScanExec
+        if r.relation.getClass.getCanonicalName.endsWith(JDBC_PROVIDER_CLASS_NAME) =>
+        val baseRelation = r.relation.asInstanceOf[BaseRelation]
+        val options = baseRelation.getClass.getMethod("jdbcOptions")
+          .invoke(baseRelation).asInstanceOf[JDBCOptions].parameters
+        Some(getJdbcEnity(options))
+      case _ => None
+    }
+
+    private def getJdbcEnity(options: Map[String, String]) : Seq[AtlasEntity] = {
+      val url = options.getOrElse("url", "")
+      val tableName = options.getOrElse("dbtable", "")
+      external.rdbmsTableToEntity(url, tableName)
+    }
+
   }
 }

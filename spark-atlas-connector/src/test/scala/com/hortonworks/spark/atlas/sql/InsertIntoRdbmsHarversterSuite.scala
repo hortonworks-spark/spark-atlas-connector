@@ -17,9 +17,6 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import java.io.{BufferedWriter, FileWriter}
-import java.nio.file.{Files, Path}
-
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import java.sql.DriverManager
 
@@ -27,12 +24,12 @@ import com.hortonworks.spark.atlas.{AtlasClientConf, WithHiveSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.{external, metadata}
-import org.apache.atlas.model.instance.AtlasEntity
 
 class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
   with BeforeAndAfter with WithHiveSupport {
 
-  val tableName = "test_table"
+  val sinkTableName = "sink_table"
+  val sourceTableName = "source_table"
   val databaseName = "testdb"
   val jdbcDriver = "org.apache.derby.jdbc.EmbeddedDriver"
 
@@ -47,74 +44,54 @@ class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
     Class.forName(jdbcDriver)
     val connection = DriverManager.getConnection(connectionURL)
 
-    val DDL = s"CREATE TABLE $tableName (NAME VARCHAR(20))"
+    val createSinkTableQuery = s"CREATE TABLE $sinkTableName (NAME VARCHAR(20))"
+    val createSourceTableQuery = s"CREATE TABLE $sourceTableName (NAME VARCHAR(20))"
+    val insertQuery = s"INSERT INTO $sourceTableName (Name) VALUES ('A'), ('B'), ('C')"
     val statement = connection.createStatement
-    statement.executeUpdate(DDL)
+    statement.executeUpdate(createSinkTableQuery)
+    statement.executeUpdate(createSourceTableQuery)
+    statement.executeUpdate(insertQuery)
 
     // setup Atlas client
     atlasClient = new CreateEntitiesTrackingAtlasClient()
     sparkSession.listenerManager.register(testHelperQueryListener)
   }
 
-  test("insert file into derby database") {
+  test("read from derby table and insert into a different derby table") {
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
-    val csvContent = Seq("A", "B", "C").mkString("\n")
-    val tempFile: Path = writeCsvTextToTempFile(csvContent)
-
-    // insert tempFile into derby database
     val jdbcProperties = new java.util.Properties
     jdbcProperties.setProperty("driver", jdbcDriver)
     val url = s"jdbc:derby:memory:$databaseName;create=false"
-    val df = sparkSession.read.csv(tempFile.toAbsolutePath.toString).toDF("Name")
-    df.write.mode("append").jdbc(url, tableName, jdbcProperties)
+
+    val readDataFrame = sparkSession.read.jdbc(url, sourceTableName, jdbcProperties)
+    readDataFrame.write.mode("append").jdbc(url, sinkTableName, jdbcProperties)
 
     val queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
     val entities = atlasClient.createdEntities
 
-    // we're expecting one file system entities,for input file
-    val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
-    assert(fsEntities.size === 1)
+    // we're expecting two table entities:
+    // one from the source table and another from the sink table
+    val tableEntities = listAtlasEntitiesAsType(entities, external.RDBMS_TABLE)
+    assert(tableEntities.size === 2)
 
-    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, "rdbms_table")
-    assertTableEntity(tableEntity, databaseName + "." + tableName)
+    val inputEntity = getOneEntityOnAttribute(tableEntities, "name", sourceTableName)
+    val outputEntity = getOneEntityOnAttribute(tableEntities, "name", sinkTableName)
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
 
     val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
     val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-    val input = getOnlyOneEntity(inputs, external.FS_PATH_TYPE_STRING)
-    val output = getOnlyOneEntity(outputs, "rdbms_table")
+    assert(inputs.size === 1)
+    assert(outputs.size === 1)
 
     // input/output in 'spark_process' should be same as outer entities
-    assert(input === fsEntities.head)
-    assert(output === tableEntity)
-  }
-
-  private def assertTableEntity(tableEntity: AtlasEntity, tableName: String): Unit = {
-    // only assert qualifiedName and skip assertion on database, and attributes on database
-    // they should be covered in other UT
-    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
-    assert(tableQualifiedName.endsWith(tableName))
-  }
-
-  private def writeCsvTextToTempFile(csvContent: String) = {
-    val tempFile = Files.createTempFile("spark-atlas-connector-csv-temp", ".csv")
-
-    // remove temporary file in shutdown
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      new Runnable {
-        override def run(): Unit = {
-          Files.deleteIfExists(tempFile)
-        }
-      }, 10)
-
-    val bw = new BufferedWriter(new FileWriter(tempFile.toFile))
-    bw.write(csvContent)
-    bw.close()
-    tempFile
+    val input = getOnlyOneEntity(inputs, external.RDBMS_TABLE)
+    val output = getOnlyOneEntity(outputs, external.RDBMS_TABLE)
+    assert(input === inputEntity)
+    assert(output === outputEntity)
   }
 
 }
