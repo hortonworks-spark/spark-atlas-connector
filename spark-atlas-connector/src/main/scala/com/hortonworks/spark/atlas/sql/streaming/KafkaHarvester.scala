@@ -91,7 +91,7 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
     val otherInputEntities = node.query.collectLeaves().flatMap {
       case f: FileSourceScanExec =>
         f.tableIdentifier.map(CommandsHarvester.prepareEntities).getOrElse(
-          f.relation.location.inputFiles.map(external.pathToEntity).toSeq)
+          f.relation.location.inputFiles.flatMap(external.pathToEntities).toSeq)
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
         Seq.empty
