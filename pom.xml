@@ -44,6 +44,7 @@
     <mockito.version>1.10.19</mockito.version>
     <integration.test.enabled>false</integration.test.enabled>
     <jersey.version>1.19</jersey.version>
+    <scoverage.plugin.version>1.3.0</scoverage.plugin.version>
   </properties>
 
   <modules>
@@ -224,6 +225,7 @@
   </dependencies>
 
   <build>
+    <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
     <pluginManagement>
       <plugins>
 
@@ -539,6 +541,15 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.scoverage</groupId>
+        <artifactId>scoverage-maven-plugin</artifactId>
+        <version>${scoverage.plugin.version}</version>
+        <configuration>
+          <highlighting>true</highlighting>
+        </configuration>
       </plugin>
     </plugins>
   </build>
