@@ -24,6 +24,7 @@ import com.hortonworks.spark.atlas.{AtlasClientConf, WithHiveSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.{external, metadata}
+import org.apache.atlas.model.instance.AtlasEntity
 
 class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
   with BeforeAndAfter with WithHiveSupport {
@@ -78,6 +79,8 @@ class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
 
     val inputEntity = getOneEntityOnAttribute(tableEntities, "name", sourceTableName)
     val outputEntity = getOneEntityOnAttribute(tableEntities, "name", sinkTableName)
+    assertTableEntity(inputEntity, sourceTableName)
+    assertTableEntity(outputEntity, sinkTableName)
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
@@ -92,6 +95,11 @@ class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
     val output = getOnlyOneEntity(outputs, external.RDBMS_TABLE)
     assert(input === inputEntity)
     assert(output === outputEntity)
+  }
+
+  private def assertTableEntity(entity: AtlasEntity, tableName: String): Unit = {
+    val tableQualifiedName = getStringAttribute(entity, "qualifiedName")
+    assert(tableQualifiedName.equals(s"$databaseName.$tableName"))
   }
 
 }

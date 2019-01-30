@@ -37,9 +37,6 @@ import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 
 object external {
   // External metadata types used to link with external entities
-  val QUALIFIED_NAME_KEY = "qualifiedName"
-  val ATTRIBUTE_NAME_KEY = "name"
-  val ATTRIBUTE_URI_KEY = "uri"
 
   // ================ File system entities ======================
   val FS_PATH_TYPE_STRING = "fs_path"
@@ -54,10 +51,10 @@ object external {
     }
 
     val fsPath = new Path(uri)
-    entity.setAttribute(ATTRIBUTE_NAME_KEY,
+    entity.setAttribute("name",
       Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
     entity.setAttribute("path", Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
-    entity.setAttribute(QUALIFIED_NAME_KEY, uri.toString)
+    entity.setAttribute("qualifiedName", uri.toString)
     if (uri.getScheme == "hdfs") {
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
     }
@@ -93,11 +90,11 @@ object external {
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
       : Seq[AtlasEntity] = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
-    hbaseEntity.setAttribute(QUALIFIED_NAME_KEY,
+    hbaseEntity.setAttribute("qualifiedName",
       getTableQualifiedName(cluster, nameSpace, tableName))
-    hbaseEntity.setAttribute(ATTRIBUTE_NAME_KEY, tableName.toLowerCase)
+    hbaseEntity.setAttribute("name", tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    hbaseEntity.setAttribute(ATTRIBUTE_URI_KEY, nameSpace.toLowerCase + ":" + tableName.toLowerCase)
+    hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
   }
 
@@ -112,10 +109,10 @@ object external {
     }
 
     val kafkaEntity = new AtlasEntity(KAFKA_TOPIC_STRING)
-    kafkaEntity.setAttribute(QUALIFIED_NAME_KEY, topicName + '@' + clusterName)
-    kafkaEntity.setAttribute(ATTRIBUTE_NAME_KEY, topicName)
+    kafkaEntity.setAttribute("qualifiedName", topicName + '@' + clusterName)
+    kafkaEntity.setAttribute("name", topicName)
     kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, clusterName)
-    kafkaEntity.setAttribute(ATTRIBUTE_URI_KEY, topicName)
+    kafkaEntity.setAttribute("uri", topicName)
     kafkaEntity.setAttribute("topic", topicName)
     Seq(kafkaEntity)
   }
@@ -133,9 +130,9 @@ object external {
                        owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
 
-    dbEntity.setAttribute(QUALIFIED_NAME_KEY,
+    dbEntity.setAttribute("qualifiedName",
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
-    dbEntity.setAttribute(ATTRIBUTE_NAME_KEY, dbDefinition.name.toLowerCase)
+    dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("description", dbDefinition.description)
     dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
@@ -159,8 +156,8 @@ object external {
     val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
 
     val databaseName = JdbcUtils.getDatabaseName(url)
-    jdbcEntity.setAttribute(QUALIFIED_NAME_KEY, getRdbmsQualifiedName(databaseName, tableName))
-    jdbcEntity.setAttribute(ATTRIBUTE_NAME_KEY, tableName)
+    jdbcEntity.setAttribute("qualifiedName", getRdbmsQualifiedName(databaseName, tableName))
+    jdbcEntity.setAttribute("name", tableName)
     Seq(jdbcEntity)
   }
 
@@ -189,13 +186,13 @@ object external {
       table: String,
       isTempTable: Boolean = false): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.setAttribute(QUALIFIED_NAME_KEY,
+    sdEntity.setAttribute("qualifiedName",
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    storageFormat.serde.foreach(sdEntity.setAttribute(ATTRIBUTE_NAME_KEY, _))
+    storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
     storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
     Seq(sdEntity)
   }
@@ -220,9 +217,9 @@ object external {
     schema.map { struct =>
       val entity = new AtlasEntity(HIVE_COLUMN_TYPE_STRING)
 
-      entity.setAttribute(QUALIFIED_NAME_KEY,
+      entity.setAttribute("qualifiedName",
         hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute(ATTRIBUTE_NAME_KEY, struct.name.toLowerCase)
+      entity.setAttribute("name", struct.name.toLowerCase)
       entity.setAttribute("type", struct.dataType.typeName)
       entity.setAttribute("comment", struct.getComment())
       entity
@@ -264,9 +261,9 @@ object external {
       tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
-    tblEntity.setAttribute(QUALIFIED_NAME_KEY,
+    tblEntity.setAttribute("qualifiedName",
       hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
-    tblEntity.setAttribute(ATTRIBUTE_NAME_KEY, table)
+    tblEntity.setAttribute("name", table)
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))

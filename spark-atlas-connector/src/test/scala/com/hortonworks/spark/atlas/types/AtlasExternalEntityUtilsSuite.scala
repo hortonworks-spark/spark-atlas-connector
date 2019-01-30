@@ -48,7 +48,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
 
     val dbEntity = dbEntities.head
     dbEntity.getTypeName should be (external.HIVE_DB_TYPE_STRING)
-    dbEntity.getAttribute(external.ATTRIBUTE_NAME_KEY) should be ("db1")
+    dbEntity.getAttribute("name") should be ("db1")
     dbEntity.getAttribute("location") should be (dbDefinition.locationUri.toString)
     dbEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be ("db1@primary")
   }
@@ -63,7 +63,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     sdEntity.getAttribute("location") should be (null)
     sdEntity.getAttribute("inputFormat") should be (null)
     sdEntity.getAttribute("outputFormat") should be (null)
-    sdEntity.getAttribute(external.ATTRIBUTE_NAME_KEY) should be (null)
+    sdEntity.getAttribute("name") should be (null)
     sdEntity.getAttribute("compressed") should be (java.lang.Boolean.FALSE)
     sdEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1@primary_storage")
@@ -77,12 +77,12 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     val schemaEntities = hiveAtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1", true)
     schemaEntities.length should be (2)
 
-    schemaEntities(0).getAttribute(external.ATTRIBUTE_NAME_KEY) should be ("user")
+    schemaEntities(0).getAttribute("name") should be ("user")
     schemaEntities(0).getAttribute("type") should be ("string")
     schemaEntities(0).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1.user@primary")
 
-    schemaEntities(1).getAttribute(external.ATTRIBUTE_NAME_KEY) should be ("age")
+    schemaEntities(1).getAttribute("name") should be ("age")
     schemaEntities(1).getAttribute("type") should be ("integer")
     schemaEntities(1).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1.age@primary")
@@ -104,7 +104,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     val schemaEntities = tableEntities.filter(_.getTypeName == external.HIVE_COLUMN_TYPE_STRING)
 
     tableEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    tableEntity.getAttribute(external.ATTRIBUTE_NAME_KEY) should be ("tbl1")
+    tableEntity.getAttribute("name") should be ("tbl1")
     tableEntity.getAttribute("db") should be (dbEntity)
     tableEntity.getAttribute("sd") should be (sdEntity)
     tableEntity.getAttribute("columns") should be (schemaEntities.asJava)
@@ -128,8 +128,8 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     val rdbmsEntity = external.rdbmsTableToEntity("jdbc:mysql://localhost:3306/default", tableName)
 
     rdbmsEntity.head.getTypeName should be (external.RDBMS_TABLE)
-    rdbmsEntity.head.getAttribute(external.ATTRIBUTE_NAME_KEY) should be (tableName)
-    rdbmsEntity.head.getAttribute(external.QUALIFIED_NAME_KEY) should be ("default." + tableName)
+    rdbmsEntity.head.getAttribute("name") should be (tableName)
+    rdbmsEntity.head.getAttribute("qualifiedName") should be ("default." + tableName)
   }
 
   test("convert hbase properties to hbase table entity") {
@@ -139,9 +139,9 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     val hbaseEntity = external.hbaseTableToEntity(cluster, tableName, nameSpace)
 
     hbaseEntity.head.getTypeName should be (external.HBASE_TABLE_STRING)
-    hbaseEntity.head.getAttribute(external.ATTRIBUTE_NAME_KEY) should be (tableName)
+    hbaseEntity.head.getAttribute("name") should be (tableName)
     hbaseEntity.head.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (cluster)
-    hbaseEntity.head.getAttribute(external.ATTRIBUTE_URI_KEY) should be (
+    hbaseEntity.head.getAttribute("uri") should be (
       nameSpace + ":" + tableName)
   }
 
