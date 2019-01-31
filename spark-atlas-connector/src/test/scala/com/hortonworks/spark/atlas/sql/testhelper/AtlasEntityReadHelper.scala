@@ -33,6 +33,15 @@ object AtlasEntityReadHelper {
     filteredEntities.head
   }
 
+  def getOneEntityOnAttribute(entities: Seq[AtlasEntity], attrName: String, attrValue: String):
+  AtlasEntity = {
+    val filteredEntities = entities.filter { p =>
+      p.getAttribute(attrName).equals(attrValue)
+    }
+    assert(filteredEntities.size == 1)
+    filteredEntities.head
+  }
+
   def getStringAttribute(entity: AtlasEntity, attrName: String): String = {
     entity.getAttribute(attrName).asInstanceOf[String]
   }

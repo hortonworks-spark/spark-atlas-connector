@@ -20,11 +20,9 @@ package com.hortonworks.spark.atlas.types
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
-
-import org.apache.atlas.AtlasClient
+import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.types._
 import org.scalatest.{FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils, WithHiveSupport}
 
 class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
@@ -125,6 +123,28 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
       tempFile.toURI.toString)
   }
 
+  test("convert jdbc properties to rdbms entity") {
+    val tableName = "employee"
+    val rdbmsEntity = external.rdbmsTableToEntity("jdbc:mysql://localhost:3306/default", tableName)
+
+    rdbmsEntity.head.getTypeName should be (external.RDBMS_TABLE)
+    rdbmsEntity.head.getAttribute("name") should be (tableName)
+    rdbmsEntity.head.getAttribute("qualifiedName") should be ("default." + tableName)
+  }
+
+  test("convert hbase properties to hbase table entity") {
+    val cluster = "primary"
+    val tableName = "employee"
+    val nameSpace = "default"
+    val hbaseEntity = external.hbaseTableToEntity(cluster, tableName, nameSpace)
+
+    hbaseEntity.head.getTypeName should be (external.HBASE_TABLE_STRING)
+    hbaseEntity.head.getAttribute("name") should be (tableName)
+    hbaseEntity.head.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (cluster)
+    hbaseEntity.head.getAttribute("uri") should be (
+      nameSpace + ":" + tableName)
+  }
+
   test("convert s3 path to aws_s3 entities") {
     val pathEntities = external.pathToEntities("s3://testbucket/testpseudodir/testfile")
 
@@ -143,5 +163,6 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     pathEntities.tail.tail.head.getAttribute("qualifiedName") should be (
       "s3://testbucket")
   }
+
 }
 
