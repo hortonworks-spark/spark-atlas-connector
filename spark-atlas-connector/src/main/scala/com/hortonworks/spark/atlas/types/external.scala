@@ -22,7 +22,6 @@ import java.net.{URI, URISyntaxException}
 import java.util.Date
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.AtlasEntity
@@ -31,9 +30,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
-import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 
 
@@ -143,6 +141,35 @@ object external {
     dbEntity.setAttribute("ownerType", "USER")
     Seq(dbEntity)
   }
+
+  // ================ RDBMS based entities ======================
+  val RDBMS_TABLE = "rdbms_table"
+
+  /**
+   * Converts JDBC RDBMS properties into Atlas entity
+   *
+   * @param url
+   * @param tableName
+   * @return
+   */
+  def rdbmsTableToEntity(url: String, tableName: String) : Seq[AtlasEntity] = {
+    val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
+
+    val databaseName = JdbcUtils.getDatabaseName(url)
+    jdbcEntity.setAttribute("qualifiedName", getRdbmsQualifiedName(databaseName, tableName))
+    jdbcEntity.setAttribute("name", tableName)
+    Seq(jdbcEntity)
+  }
+
+  /**
+   * Constructs the the full qualified name of the databse
+   *
+   * @param databaseName
+   * @param tableName
+   * @return
+   */
+  private def getRdbmsQualifiedName(databaseName: String, tableName: String): String =
+    s"${databaseName.toLowerCase}.${tableName.toLowerCase}"
 
   def hiveStorageDescUniqueAttribute(
       cluster: String,
