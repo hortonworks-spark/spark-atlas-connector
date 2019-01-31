@@ -114,12 +114,12 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
 
   test("convert path to entity") {
     val tempFile = Files.createTempFile("tmp", ".txt").toFile
-    val pathEntity = external.pathToEntity(tempFile.getAbsolutePath)
+    val pathEntities = external.pathToEntities(tempFile.getAbsolutePath)
 
-    pathEntity.getTypeName should be (external.FS_PATH_TYPE_STRING)
-    pathEntity.getAttribute("name") should be (tempFile.getAbsolutePath.toLowerCase)
-    pathEntity.getAttribute("path") should be (tempFile.getAbsolutePath.toLowerCase)
-    pathEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+    pathEntities.head.getTypeName should be (external.FS_PATH_TYPE_STRING)
+    pathEntities.head.getAttribute("name") should be (tempFile.getAbsolutePath.toLowerCase)
+    pathEntities.head.getAttribute("path") should be (tempFile.getAbsolutePath.toLowerCase)
+    pathEntities.head.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       tempFile.toURI.toString)
   }
 
@@ -143,6 +143,25 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     hbaseEntity.head.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (cluster)
     hbaseEntity.head.getAttribute("uri") should be (
       nameSpace + ":" + tableName)
+  }
+
+  test("convert s3 path to aws_s3 entities") {
+    val pathEntities = external.pathToEntities("s3://testbucket/testpseudodir/testfile")
+
+    pathEntities.head.getTypeName should be (external.S3_OBJECT_TYPE_STRING)
+    pathEntities.head.getAttribute("name") should be ("testfile")
+    pathEntities.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket/testpseudodir/testfile")
+
+    pathEntities.tail.head.getTypeName should be (external.S3_PSEUDO_DIR_TYPE_STRING)
+    pathEntities.tail.head.getAttribute("name") should be ("/testpseudodir/")
+    pathEntities.tail.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket/testpseudodir/")
+
+    pathEntities.tail.tail.head.getTypeName should be (external.S3_BUCKET_TYPE_STRING)
+    pathEntities.tail.tail.head.getAttribute("name") should be ("testbucket")
+    pathEntities.tail.tail.head.getAttribute("qualifiedName") should be (
+      "s3://testbucket")
   }
 
 }

@@ -31,22 +31,22 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
 
   override def process(e: QueryProgressEvent): Unit = {
 
-    val inputEntities = e.progress.sources.map{
+    val inputEntities = e.progress.sources.flatMap{
       case s if (s.description.contains("FileStreamSource")) =>
         val begin = s.description.indexOf('[')
         val end = s.description.indexOf(']')
         val path = s.description.substring(begin + 1, end)
         logDebug(s"record the streaming query sink input path information $path")
-        external.pathToEntity(path)
+        external.pathToEntities(path)
     }
 
-    var outputEntity: AtlasEntity = null
+    var outputEntities: Seq[AtlasEntity] = Seq()
     if (e.progress.sink.description.contains("FileSink")) {
       val begin = e.progress.sink.description.indexOf('[')
       val end = e.progress.sink.description.indexOf(']')
       val path = e.progress.sink.description.substring(begin + 1, end)
       logDebug(s"record the streaming query sink output path information $path")
-      outputEntity = external.pathToEntity(path)
+      outputEntities = external.pathToEntities(path)
     } else if (e.progress.sink.description.contains("ConsoleSinkProvider")) {
       logInfo(s"do not track the console output as Atlas entity ${e.progress.sink.description}")
       return
@@ -64,12 +64,12 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
     val entities = {
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputEntities, Seq(outputEntity), logMap)
+        internal.updateMLProcessToEntity(inputEntities, outputEntities, logMap)
       } else {
         val pEntity = internal.etlProcessToEntity(
-          inputEntities.toList, List(outputEntity), logMap)
+          inputEntities.toList, List(outputEntities.head), logMap)
 
-        Seq(pEntity) ++ inputEntities ++ Seq(outputEntity)
+        Seq(pEntity) ++ inputEntities ++ outputEntities
       }
     }
     atlasClient.createEntities(entities)
