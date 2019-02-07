@@ -90,6 +90,10 @@
                   <pattern>org.apache.htrace</pattern>
                   <shadedPattern>org.apache.atlas.htrace</shadedPattern>
                 </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.configuration</pattern>
+                  <shadedPattern>org.apache.atlas.commons.configuration</shadedPattern>
+                </relocation>
               </relocations>
             </configuration>
           </execution>
