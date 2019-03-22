@@ -78,7 +78,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       // new table/file entity
       val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
-        List(external.pathToEntity(node.outputPath.toUri.toString)))
+        external.pathToEntities(node.outputPath.toUri.toString))
       val logMap = getPlanInfo(qd)
 
       // ml related cached object
@@ -147,19 +147,19 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   object LoadDataHarvester extends Harvester[LoadDataCommand] {
     override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
-      val pathEntity = external.pathToEntity(node.path)
+      val pathEntities = external.pathToEntities(node.path)
       val outputEntities = prepareEntities(node.table)
       val logMap = getPlanInfo(qd)
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(List(pathEntity), outputEntities, logMap)
+        internal.updateMLProcessToEntity(pathEntities, outputEntities, logMap)
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
-          List(pathEntity), List(outputEntities.head), logMap)
-        Seq(pEntity, pathEntity) ++ outputEntities
+          pathEntities.toList, List(outputEntities.head), logMap)
+        Seq(pEntity) ++ pathEntities ++ outputEntities
       }
     }
   }
@@ -170,7 +170,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         throw new IllegalStateException("Location URI is illegally empty")
       }
 
-      val destEntity = external.pathToEntity(node.storage.locationUri.get.toString)
+      val destEntities = external.pathToEntities(node.storage.locationUri.get.toString)
       val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
 
       val inputs = inputsEntities.flatMap(_.headOption).toList
@@ -178,13 +178,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       // ml related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputs, List(destEntity), logMap)
+        internal.updateMLProcessToEntity(inputs, destEntities, logMap)
       } else {
 
         // create process entity
         val pEntity = internal.etlProcessToEntity(
-          inputs, List(destEntity), logMap)
-        Seq(pEntity, destEntity) ++ inputsEntities.flatten
+          inputs, destEntities.toList, logMap)
+        Seq(pEntity) ++ destEntities ++ inputsEntities.flatten
       }
     }
   }
@@ -290,7 +290,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case v: View => Seq(tableToEntities(v.desc))
       case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
         catalogTable.map(tbl => Seq(tableToEntities(tbl))).getOrElse(
-          fileRelation.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
+          fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntities(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
@@ -320,7 +320,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       case f: FileSourceScanExec =>
         f.tableIdentifier.map(tbl => Seq(prepareEntities(tbl))).getOrElse(
-          f.relation.location.inputFiles.map(file => Seq(external.pathToEntity(file))).toSeq)
+          f.relation.location.inputFiles.flatMap(file => Seq(external.pathToEntities(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)

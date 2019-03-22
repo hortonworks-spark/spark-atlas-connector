@@ -54,6 +54,19 @@ If you're using cluster mode, please also ship this conf file to the remote Driv
 Spark Atlas Connector supports two types of Atlas clients, "kafka" and "rest". You can configure which type of client via setting `atlas.client.type` to whether `kafka` or `rest`.
 The default value is `kafka` which provides stable and secured way of publishing changes. Atlas has embedded Kafka instance so you can test it out in test environment, but it's encouraged to use external kafka cluster in production. If you don't have Kafka cluster in production, you may want to set client to `rest`.
 
+Pre-create Atlas models
+=======================
+
+Spark Atlas Connector checks and creates Atlas models when starting up to ensure all necessary models are created before pushing metadata changes. Since it is only needed for the first time, Spark Atlas Connector provides the way to pre-create Atlas models.
+
+Suppose Spark is installed in `<spark dist>` directory and `atlas-application.properties` is placed on `<spark dist>/conf` directory:
+
+```shell
+java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel
+```
+
+After running above command, you can set `atlas.client.checkModelInStart=false` in `atlas-application.properties` to skip checking and creating models in Spark Atlas Connector's startup.
+
 To Use it in Secure Environment
 ===
 
