@@ -61,8 +61,12 @@ class SparkExecutionPlanProcessor(
             CommandsHarvester.LoadDataHarvester.harvest(c, qd)
 
           case c: CreateViewCommand =>
-            logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
-            CommandsHarvester.CreateViewHarvester.harvest(c, qd)
+            c.viewType match {
+              case PersistedView =>
+                logDebug(s"CREATE VIEW AS SELECT query: ${qd.qe}")
+                CommandsHarvester.CreateViewHarvester.harvest(c, qd)
+              case _ => Seq.empty
+            }
 
           case c: SaveIntoDataSourceCommand =>
             logDebug(s"DATA FRAME SAVE INTO DATA SOURCE: ${qd.qe}")
