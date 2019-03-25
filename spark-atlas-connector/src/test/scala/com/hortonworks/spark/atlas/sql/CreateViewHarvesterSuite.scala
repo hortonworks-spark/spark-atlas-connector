@@ -36,6 +36,7 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val destinationViewName = "destination_" + Random.nextInt(100000)
   private val destinationViewName2 = "destination_" + Random.nextInt(100000)
+  private val destinationViewName3 = "destination_" + Random.nextInt(100000)
   private var destinationTableName = "destination_" + Random.nextInt(100000)
 
   private val testHelperQueryListener = new AtlasQueryExecutionListener()
@@ -114,7 +115,7 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
 
   test("CREATE TEMPORARY VIEW FROM TABLE, SAVE TEMP VIEW TO TABLE") {
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
-    sparkSession.sql(s"SELECT * FROM $sourceTblName").createOrReplaceTempView(destinationViewName)
+    sparkSession.sql(s"SELECT * FROM $sourceTblName").createOrReplaceTempView(destinationViewName3)
 
     var queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
@@ -126,7 +127,7 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     // we don't want to check above queries, so reset the entities in listener
     testHelperQueryListener.clear()
 
-    sparkSession.sql(s"SELECT * FROM $destinationViewName").write.saveAsTable(destinationTableName)
+    sparkSession.sql(s"SELECT * FROM $destinationViewName3").write.saveAsTable(destinationTableName)
 
     queryDetail = testHelperQueryListener.queryDetails.last
     planProcessor.process(queryDetail)
