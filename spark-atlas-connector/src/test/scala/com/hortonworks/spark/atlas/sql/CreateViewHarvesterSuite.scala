@@ -37,7 +37,7 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
   private val destinationViewName = "destination_" + Random.nextInt(100000)
   private val destinationViewName2 = "destination_" + Random.nextInt(100000)
   private val destinationViewName3 = "destination_" + Random.nextInt(100000)
-  private var destinationTableName = "destination_" + Random.nextInt(100000)
+  private val destinationTableName = "destination_" + Random.nextInt(100000)
 
   private val testHelperQueryListener = new AtlasQueryExecutionListener()
 
