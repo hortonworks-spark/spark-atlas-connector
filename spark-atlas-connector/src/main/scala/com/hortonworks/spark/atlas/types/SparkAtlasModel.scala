@@ -58,6 +58,21 @@ object SparkAtlasModel extends Logging {
   def main(args: Array[String]): Unit = {
     val atlasClientConf = new AtlasClientConf
 
+    if (args.length > 0 && args.contains("--interactive-auth")) {
+      // input user name and password
+      val console = System.console
+      val username = console.readLine("Username: ")
+      val password = console.readPassword("Password: ")
+
+      if (username != null && password != null) {
+        atlasClientConf.set(AtlasClientConf.CLIENT_USERNAME, username.trim)
+        atlasClientConf.set(AtlasClientConf.CLIENT_PASSWORD, String.valueOf(password).trim)
+      }
+    }
+
+    logInfo(s"Authentication information - username " +
+      s"${atlasClientConf.get(AtlasClientConf.CLIENT_USERNAME)}")
+
     val atlasClient = new RestAtlasClient(atlasClientConf)
     checkAndCreateTypes(atlasClient)
 
