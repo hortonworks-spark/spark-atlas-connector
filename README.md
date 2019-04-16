@@ -62,8 +62,13 @@ Spark Atlas Connector checks and creates Atlas models when starting up to ensure
 Suppose Spark is installed in `<spark dist>` directory and `atlas-application.properties` is placed on `<spark dist>/conf` directory:
 
 ```shell
-java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel
+java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel --interactive-auth
 ```
+
+The tool will leverage REST client API to request to Atlas which requires authentication. Auth. information is read from `atlas-application.properties`, which should be stored as plain text.
+(It would be same if you decide to leverage REST client API in SAC itself.)
+
+Given the approach is insecure regardless of security mode of cluster, we strongly encourage you to pass `--interactive-auth` as parameter, which asks you to input username and password of Atlas interactively.
 
 After running above command, you can set `atlas.client.checkModelInStart=false` in `atlas-application.properties` to skip checking and creating models in Spark Atlas Connector's startup.
 
