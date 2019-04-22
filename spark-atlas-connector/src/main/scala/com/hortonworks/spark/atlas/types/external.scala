@@ -23,7 +23,6 @@ import java.util.Date
 
 import scala.collection.JavaConverters._
 import org.apache.atlas.AtlasConstants
-import org.apache.atlas.hbase.bridge.HBaseAtlasHook._
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
@@ -145,6 +144,7 @@ object external {
   val HBASE_TABLE_STRING = "hbase_table"
   val HBASE_COLUMNFAMILY_STRING = "hbase_column_family"
   val HBASE_COLUMN_STRING = "hbase_column"
+  val HBASE_TABLE_QUALIFIED_NAME_FORMAT = "%s:%s@%s"
 
   def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
       : Seq[AtlasEntity] = {
@@ -155,6 +155,18 @@ object external {
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
     Seq(hbaseEntity)
+  }
+
+  private def getTableQualifiedName(
+      clusterName: String,
+      nameSpace: String,
+      tableName: String): String = {
+    if (clusterName == null || nameSpace == null || tableName == null) {
+      null
+    } else {
+      String.format(HBASE_TABLE_QUALIFIED_NAME_FORMAT, nameSpace.toLowerCase,
+        tableName.toLowerCase.substring(tableName.toLowerCase.indexOf(":") + 1), clusterName)
+    }
   }
 
   // ================ Kafka entities =======================
