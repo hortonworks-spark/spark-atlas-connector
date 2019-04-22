@@ -84,16 +84,33 @@
               <relocations>
                 <relocation>
                   <pattern>org.apache.hadoop.hbase</pattern>
-                  <shadedPattern>org.apache.atlas.hbase</shadedPattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.shade.org.apache.hbase</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.htrace</pattern>
-                  <shadedPattern>org.apache.atlas.htrace</shadedPattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.shade.org.apache.htrace</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.commons.configuration</pattern>
-                  <shadedPattern>org.apache.atlas.commons.configuration</shadedPattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.shade.org.apache.commons.configuration</shadedPattern>
                 </relocation>
+                <relocation>
+                  <pattern>com.sun.jersey</pattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.shade.com.sun.jersey</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.codehaus.jackson</pattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.shade.org.codehaus.jackson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>javax.ws.rs</pattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.javax.ws.rs</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.fasterxml.jackson</pattern>
+                  <shadedPattern>com.hortonworks.spark.atlas.com.fasterxml.jackson</shadedPattern>
+                </relocation>
+
               </relocations>
             </configuration>
           </execution>
