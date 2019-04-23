@@ -31,15 +31,13 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
 
   override def process(e: QueryProgressEvent): Unit = {
 
-    val inputEntities = e.progress.sources.flatMap {
+    val inputEntities = e.progress.sources.flatMap{
       case s if (s.description.contains("FileStreamSource")) =>
         val begin = s.description.indexOf('[')
         val end = s.description.indexOf(']')
         val path = s.description.substring(begin + 1, end)
         logDebug(s"record the streaming query sink input path information $path")
         external.pathToEntities(path)
-
-      case _ => Seq.empty
     }
 
     var outputEntities: Seq[AtlasEntity] = Seq()
