@@ -17,16 +17,11 @@
 
 package com.hortonworks.spark.atlas.sql.streaming
 
-import scala.util.Try
-
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.{FileSourceScanExec, RDDScanExec}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.kafka010._
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.kafka010.atlas.ExtractFromDataSource
-
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.{CommandsHarvester, QueryDetail}
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
@@ -46,16 +41,7 @@ object KafkaHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
 
   def extractTopic(writer: MicroBatchWriter): Option[KafkaTopicInformation] = {
-    // Unfortunately neither KafkaStreamWriter is a case class nor topic is a field.
-    // Hopefully KafkaStreamWriterFactory is a case class instead, so we can extract
-    // topic information from there, as well as producer parameters.
-    // The cost of createWriterFactory is tiny (case class object creation) for this case,
-    // and we can find the way to cache it once we find the cost is not ignorable.
-    writer.createWriterFactory() match {
-      case KafkaStreamWriterFactory(Some(tp), params, _) =>
-        Some(KafkaTopicInformation(tp, params.get(AtlasClientConf.CLUSTER_NAME.key)))
-      case _ => None
-    }
+    ExtractFromDataSource.extractTopic(writer)
   }
 
   def harvest(

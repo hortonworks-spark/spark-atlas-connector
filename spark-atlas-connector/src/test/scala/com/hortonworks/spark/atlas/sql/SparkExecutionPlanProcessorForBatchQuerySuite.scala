@@ -283,9 +283,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     sendMessages(topics)
 
-    // NOTE: We can't verify Kafka input topics here as it requires custom patch.
-    // We can verify it when SAC relies on custom patched spark-sql-kafka module.
-
     // test for 'subscribePattern'
     val df1 = spark.read.format("kafka")
       .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
@@ -325,12 +322,10 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     // kafka topic
 
-    // NOTE: Given we can't extract Kafka input topics without custom patched Spark,
-    // we have to give up verifying Kafka input topic entities. Commenting out.
-    // val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
-    // val expectedTopics = topics.map(KafkaTopicInformation(_, None))
-    // assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
-    val inputKafkaEntities = Seq.empty[AtlasEntity]
+    // actual topics in 'subscribePattern' cannot be retrieved - it's a limitation
+    val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    val expectedTopics = (topicsToRead2 ++ topicsToRead3).map(KafkaTopicInformation(_, None))
+    assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
 
     // We already have validations for table-relevant entities in other UTs,
     // so minimize validation here.
@@ -376,16 +371,11 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     sendMessages(topicsToRead)
 
-    // NOTE: We can't verify Kafka input topics here as it requires custom patch.
-    // We can verify it when SAC relies on custom patched spark-sql-kafka module.
-
     val df = spark.read.format("kafka")
       .option("kafka.bootstrap.servers", kafkaTestUtils.brokerAddress)
       .option("subscribe", topicsToRead.mkString(","))
       .option("startingOffsets", "earliest")
       .load()
-
-    // We still verify Kafka output topic with custom patch...
 
     val customClusterName = "customCluster"
     df.write
@@ -401,17 +391,18 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val entities = atlasClient.createdEntities
 
     // kafka topic
+    val kafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
+    assert(kafkaEntities.size === topicsToRead.length + 1)
 
-    // NOTE: Given we can't extract Kafka topics without custom patched Spark,
-    // we have to give up verifying Kafka topic entities. Commenting out.
-    // val inputKafkaEntities = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
-    // val expectedTopics = topics.map(KafkaTopicInformation(_, None))
-    // assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
-    val inputKafkaEntities = Seq.empty[AtlasEntity]
+    val inputKafkaEntities = kafkaEntities.filter { entity =>
+      topicsToRead.contains(entity.getAttribute("name"))
+    }
+    val expectedTopics = topicsToRead.map(KafkaTopicInformation(_, None))
+    assertEntitiesKafkaTopicType(expectedTopics, inputKafkaEntities.toSet)
 
-    val kafkaEntity = listAtlasEntitiesAsType(entities, external.KAFKA_TOPIC_STRING)
-    assert(kafkaEntity.size === 1)
-    val outputEntities = kafkaEntity
+    val outputEntities = kafkaEntities.filter { entity =>
+      entity.getAttribute("name") == topicToWrite
+    }
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
