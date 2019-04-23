@@ -38,6 +38,8 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
         val path = s.description.substring(begin + 1, end)
         logDebug(s"record the streaming query sink input path information $path")
         external.pathToEntities(path)
+
+      case _ => Seq.empty
     }
 
     var outputEntities: Seq[AtlasEntity] = Seq()
@@ -52,27 +54,31 @@ extends AbstractEventProcessor[QueryProgressEvent] with AtlasEntityUtils with Lo
       return
     }
 
-    val pName = e.progress.name match {
-      case name: String => name
-      case _ => "unknown"
-    }
-
-    val logMap = Map("executionId" -> e.progress.batchId.toString,
-      "details" -> e.progress.json,
-      "sparkPlanDescription" -> s"Spark StreamingQueryPorgress ${pName}")
-
-    val entities = {
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputEntities, outputEntities, logMap)
-      } else {
-        val pEntity = internal.etlProcessToEntity(
-          inputEntities.toList, List(outputEntities.head), logMap)
-
-        Seq(pEntity) ++ inputEntities ++ outputEntities
+    // record the entities only the cases this processor can capture
+    if (inputEntities.nonEmpty && outputEntities.nonEmpty) {
+      val pName = e.progress.name match {
+        case name: String => name
+        case _ => "unknown"
       }
+
+      val logMap = Map("executionId" -> e.progress.batchId.toString,
+        "details" -> e.progress.json,
+        "sparkPlanDescription" -> s"Spark StreamingQueryPorgress ${pName}")
+
+      val entities = {
+        // ml related cached object
+        if (internal.cachedObjects.contains("model_uid")) {
+          internal.updateMLProcessToEntity(inputEntities, outputEntities, logMap)
+        } else {
+          val pEntity = internal.etlProcessToEntity(
+            inputEntities.toList, List(outputEntities.head), logMap)
+
+          Seq(pEntity) ++ inputEntities ++ outputEntities
+        }
+      }
+      atlasClient.createEntities(entities)
+      logInfo("create the altas entity for Spark Streaming Query Processing Event " +
+        s"${e.progress.id}")
     }
-    atlasClient.createEntities(entities)
-    logInfo(s"create the altas entity for Spark Streaming Query Processing Event ${e.progress.id}")
   }
 }
