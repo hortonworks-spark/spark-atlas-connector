@@ -21,7 +21,6 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import com.google.common.annotations.VisibleForTesting
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -53,6 +52,12 @@ abstract class AbstractEventProcessor[T: ClassTag] extends Logging {
   def startThread(): Unit = {
     eventProcessThread.setName(this.getClass.getSimpleName + "-thread")
     eventProcessThread.setDaemon(true)
+
+    val ctxClassLoader = Thread.currentThread().getContextClassLoader
+    if (ctxClassLoader != null && getClass.getClassLoader != ctxClassLoader) {
+      eventProcessThread.setContextClassLoader(ctxClassLoader)
+    }
+
     eventProcessThread.start()
   }
 

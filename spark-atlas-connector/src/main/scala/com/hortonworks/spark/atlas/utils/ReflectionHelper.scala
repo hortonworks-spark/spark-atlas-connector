@@ -37,4 +37,74 @@ object ReflectionHelper extends Logging {
         None
     }
   }
+
+  def reflectFieldWithContextClassloaderLoosenType(obj: Any, fieldName: String): Option[Any] = {
+    val typeMirror = runtimeMirror(Thread.currentThread().getContextClassLoader)
+    val instanceMirror = typeMirror.reflect(obj)
+
+    val members = instanceMirror.symbol.typeSignature.members
+    val field = members.find(_.name.decodedName.toString == fieldName)
+    field match {
+      case Some(f) =>
+        try {
+          Some(instanceMirror.reflectField(f.asTerm).get)
+        } catch {
+          case NonFatal(e) =>
+            logWarn(s"Failed to reflect field $fieldName from $obj. " +
+              s"Maybe missing to apply necessary patch? $e")
+            None
+        }
+
+      case None =>
+        logWarn(s"Failed to reflect field $fieldName from $obj. " +
+          s"Maybe missing to apply necessary patch?")
+        None
+    }
+  }
+
+  def reflectFieldWithContextClassloader[OUT](obj: Any, fieldName: String): Option[OUT] = {
+    reflectFieldWithContextClassloaderLoosenType(obj, fieldName).map(_.asInstanceOf[OUT])
+  }
+
+  def reflectMethodWithContextClassloaderLoosenType(
+      obj: Any,
+      methodName: String,
+      params: Any*): Option[Any] = {
+    val typeMirror = runtimeMirror(Thread.currentThread().getContextClassLoader)
+    val instanceMirror = typeMirror.reflect(obj)
+
+    val members = instanceMirror.symbol.typeSignature.members
+    val method = members.find(_.name.decodedName.toString == methodName)
+    method match {
+      case Some(f) =>
+        try {
+          Some(instanceMirror.reflectMethod(f.asMethod).apply(params))
+        } catch {
+          case NonFatal(_) =>
+            logWarn(s"Failed to call method $methodName from $obj via reflection. " +
+              s"Maybe missing to apply necessary patch?")
+            None
+        }
+
+      case None =>
+        logWarn(s"Failed to call method $methodName from $obj via reflection. " +
+          s"Maybe missing to apply necessary patch?")
+        None
+    }
+  }
+
+  def reflectMethodWithContextClassloader[OUT](
+      obj: Any,
+      fieldName: String,
+      params: Any*): Option[OUT] = {
+    reflectMethodWithContextClassloaderLoosenType(obj, fieldName, params: _*)
+      .map(_.asInstanceOf[OUT])
+  }
+
+  def classForName(className: String): Class[_] = {
+    Class.forName(className, true, getContextOrClassClassLoader)
+  }
+
+  private def getContextOrClassClassLoader: ClassLoader =
+    Option(Thread.currentThread().getContextClassLoader).getOrElse(getClass.getClassLoader)
 }
