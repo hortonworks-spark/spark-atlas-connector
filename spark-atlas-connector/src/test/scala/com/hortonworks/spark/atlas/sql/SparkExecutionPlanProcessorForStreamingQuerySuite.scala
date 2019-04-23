@@ -17,19 +17,20 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.Files
+import java.util.Locale
 
-import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor, KafkaTopicEntityValidator}
+import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
-import com.hortonworks.spark.atlas.types.metadata
+import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
-
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.kafka010.KafkaTestUtils
+import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
-
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST.{JArray, JInt, JObject}
 
@@ -45,6 +46,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
   var atlasClient: CreateEntitiesTrackingAtlasClient = _
   val testHelperQueryListener = new AtlasQueryExecutionListener()
+  val testHelperStreamingQueryListener = new AtlasStreamingQueryProgressListener()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -53,6 +55,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     atlasClient = new CreateEntitiesTrackingAtlasClient()
     testHelperQueryListener.clear()
     spark.listenerManager.register(testHelperQueryListener)
+    spark.streams.addListener(testHelperStreamingQueryListener)
   }
 
   override def afterAll(): Unit = {
@@ -62,11 +65,112 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     }
     atlasClient = null
     spark.listenerManager.unregister(testHelperQueryListener)
+    spark.streams.removeListener(testHelperStreamingQueryListener)
     super.afterAll()
+  }
+
+  override def beforeEach(): Unit = {
+    atlasClient.clearEntities()
+    testHelperQueryListener.clear()
+    testHelperStreamingQueryListener.clear()
+  }
+
+  test("file source(s) to file sink - micro-batch query") {
+    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+    val streamPlanProcessor = new DirectProcessSparkStreamingQueryEventProcessor(
+      atlasClient, atlasClientConf)
+
+    val tempDir = Files.createTempDirectory("spark-atlas-streaming-files-temp")
+
+    val srcDir = new File(tempDir.toFile, "src")
+    val destDir = new File(tempDir.toFile, "dest")
+    val checkpointDir = new File(tempDir.toFile, "checkpoint")
+
+    // remove temporary directory in shutdown
+    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+      new Runnable {
+        override def run(): Unit = {
+          Files.deleteIfExists(tempDir)
+        }
+      }, 10)
+
+    Files.createDirectories(srcDir.toPath)
+
+    val query = spark
+      .readStream
+      .text(srcDir.getAbsolutePath)
+      .writeStream
+      .format("text")
+      .option("path", destDir.getAbsolutePath)
+      .option("checkpointLocation", checkpointDir.getAbsolutePath)
+      .start()
+
+    try {
+      (0 to 10).foreach { idx =>
+        val writer = new BufferedWriter(new FileWriter(new File(srcDir, s"file-$idx.txt")))
+        writer.write("Hello Scala")
+        writer.close()
+      }
+
+      waitForBatchCompleted(query)
+
+      import org.scalatest.time.SpanSugar._
+      var events: Seq[QueryProgressEvent] = null
+      var queryDetails: Seq[QueryDetail] = null
+      var entitySet: Set[AtlasEntity] = null
+      eventually(timeout(30.seconds)) {
+        queryDetails = testHelperQueryListener.queryDetails
+        queryDetails.foreach(planProcessor.process)
+
+        events = testHelperStreamingQueryListener.progressEvents
+        events.foreach(streamPlanProcessor.process)
+
+        val createdEntities = atlasClient.createdEntities
+        logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
+        entitySet = getUniqueEntities(createdEntities)
+        logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
+
+        // spark_process, path to read, path to write
+        assert(entitySet.size == 3)
+      }
+
+      // input path and output path
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 2)
+
+      val inputFsEntities = fsEntities.filter { e =>
+        getStringAttribute(e, "name").toLowerCase(Locale.ROOT) ==
+          srcDir.getAbsolutePath.toLowerCase(Locale.ROOT)
+      }
+      assert(inputFsEntities.length === 1)
+
+      val outputFsEntities = fsEntities.filter { e =>
+        getStringAttribute(e, "name").toLowerCase(Locale.ROOT) ==
+          destDir.getAbsolutePath.toLowerCase(Locale.ROOT)
+      }
+      assert(outputFsEntities.length === 1)
+
+      // check for 'spark_process'
+      val processEntity = getOnlyOneEntity(entitySet.toSeq, metadata.PROCESS_TYPE_STRING)
+
+      val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
+      val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
+
+      val input = getOnlyOneEntity(inputs, external.FS_PATH_TYPE_STRING)
+      val output = getOnlyOneEntity(outputs, external.FS_PATH_TYPE_STRING)
+
+      // input/output in 'spark_process' should be same as outer entities
+      assert(input === inputFsEntities.head)
+      assert(output === outputFsEntities.head)
+    } finally {
+      query.stop()
+    }
   }
 
   test("Kafka source(s) to kafka sink - micro-batch query") {
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+    val streamPlanProcessor = new DirectProcessSparkStreamingQueryEventProcessor(
+      atlasClient, atlasClientConf)
 
     val topicsToRead1 = Seq("sparkread1", "sparkread2", "sparkread3")
     val topicsToRead2 = Seq("sparkread4", "sparkread5")
@@ -143,14 +247,18 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       sendMessages(topicsToRead1)
       sendMessages(topicsToRead2)
       sendMessages(topicsToRead3)
-      waitForBatchCompleted(query, testHelperQueryListener)
+      waitForBatchCompleted(query)
 
       import org.scalatest.time.SpanSugar._
+      var events: Seq[QueryProgressEvent] = null
       var queryDetails: Seq[QueryDetail] = null
       var entitySet: Set[AtlasEntity] = null
       eventually(timeout(30.seconds)) {
         queryDetails = testHelperQueryListener.queryDetails
         queryDetails.foreach(planProcessor.process)
+
+        events = testHelperStreamingQueryListener.progressEvents
+        events.foreach(streamPlanProcessor.process)
 
         val createdEntities = atlasClient.createdEntities
         logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
@@ -194,12 +302,10 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     }
   }
 
-  private def waitForBatchCompleted(query: StreamingQuery, listener: AtlasQueryExecutionListener)
-  : Unit = {
+  private def waitForBatchCompleted(query: StreamingQuery): Unit = {
     import org.scalatest.time.SpanSugar._
     eventually(timeout(10.seconds)) {
       query.processAllAvailable()
-      assert(listener.queryDetails.nonEmpty)
     }
   }
 
