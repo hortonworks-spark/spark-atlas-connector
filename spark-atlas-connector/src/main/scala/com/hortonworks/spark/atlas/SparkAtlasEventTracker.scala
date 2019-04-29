@@ -17,20 +17,18 @@
 
 package com.hortonworks.spark.atlas
 
-import java.util.concurrent.atomic.AtomicLong
-
 import scala.util.control.NonFatal
-
 import com.google.common.annotations.VisibleForTesting
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogEvent
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
-
 import com.hortonworks.spark.atlas.sql._
 import com.hortonworks.spark.atlas.ml.MLPipelineEventProcessor
 import com.hortonworks.spark.atlas.types.SparkAtlasModel
 import com.hortonworks.spark.atlas.utils.Logging
+
+import scala.collection.mutable
 
 class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasClientConf)
     extends SparkListener with QueryExecutionListener with Logging {
@@ -62,8 +60,6 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   private val mlEventTracker = new MLPipelineEventProcessor(atlasClient, atlasClientConf)
   mlEventTracker.startThread()
 
-  private val executionId = new AtomicLong(0L)
-
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (!shouldContinue) {
       // No op if our tracker is failed to initialize itself
@@ -85,7 +81,12 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
       return
     }
 
-    val qd = QueryDetail(qe, executionId.getAndIncrement(), durationNs, Option(SQLQuery.get()))
+    if (qe.logical.isStreaming) {
+      // streaming query will be tracked via SparkAtlasStreamingQueryEventTracker
+      return
+    }
+
+    val qd = QueryDetail(qe, AtlasUtils.issueExecutionId(), durationNs, Option(SQLQuery.get()))
     executionPlanTracker.pushEvent(qd)
   }
 

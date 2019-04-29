@@ -25,18 +25,18 @@ import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
 import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.kafka010.KafkaTestUtils
-import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.sql.streaming.{StreamTest, StreamingQuery}
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST.{JArray, JInt, JObject}
 
 class SparkExecutionPlanProcessorForStreamingQuerySuite
   extends StreamTest
-  with KafkaTopicEntityValidator {
+  with KafkaTopicEntityValidator
+  with FsEntityValidator {
   import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
 
   val brokerProps: Map[String, Object] = Map[String, Object]()
@@ -47,6 +47,8 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
   var atlasClient: CreateEntitiesTrackingAtlasClient = _
   val testHelperQueryListener = new AtlasQueryExecutionListener()
   val testHelperStreamingQueryListener = new AtlasStreamingQueryProgressListener()
+
+  var planProcessor: DirectProcessSparkExecutionPlanProcessor = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -73,13 +75,462 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     atlasClient.clearEntities()
     testHelperQueryListener.clear()
     testHelperStreamingQueryListener.clear()
+
+    planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
   }
 
   test("file source(s) to file sink - micro-batch query") {
-    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
-    val streamPlanProcessor = new DirectProcessSparkStreamingQueryEventProcessor(
-      atlasClient, atlasClientConf)
+    val (srcDir, destDir, checkpointDir) = createTempDirectories
 
+    val df = spark
+      .readStream
+      .text(srcDir.getAbsolutePath)
+
+    val query = toFileSink(df, "text", destDir.getAbsolutePath, checkpointDir.getAbsolutePath)
+
+    try {
+      writeTestTextFiles(srcDir)
+
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, path to read, path to write
+      assert(entitySet.size == 13)
+
+      // input path and output path (11 + 1)
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 12)
+
+      val inputFsEntities = findFsEntities(fsEntities, srcDir)
+      assert(inputFsEntities.length === 11)
+
+      val outputFsEntities = findFsEntities(fsEntities, destDir)
+      assert(outputFsEntities.length === 1)
+
+      // check for 'spark_process'
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        val input = listAtlasEntitiesAsType(inputs, external.FS_PATH_TYPE_STRING)
+        TestUtils.assertSubsetOf(inputFsEntities.toSet, input.toSet)
+      }, outputs => {
+        val output = getOnlyOneEntity(outputs, external.FS_PATH_TYPE_STRING)
+        assert(output === outputFsEntities.head)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("Kafka source(s) to kafka sink - micro-batch query") {
+    val topicPrefix = "sparkread0"
+    val brokerAddress = testUtils.brokerAddress
+
+    val customClusterName1 = "customCluster1"
+    val (df1, topicsToRead1WithClusterInfo) =
+      kafkaDfSubscribePattern(topicPrefix, customClusterName1, brokerAddress)
+
+    val customClusterName2 = "customCluster2"
+    val (df2, topicsToRead2WithClusterInfo) =
+      kafkaDfSubscribe(topicPrefix, customClusterName2, brokerAddress)
+
+    val customClusterName3 = "customCluster3"
+    val (df3, topicsToRead3WithClusterInfo) =
+      kafkaDfAssign(topicPrefix, customClusterName3, brokerAddress)
+
+    val topicsToRead = topicsToRead1WithClusterInfo.map(_.topicName) ++
+      topicsToRead2WithClusterInfo.map(_.topicName) ++
+      topicsToRead3WithClusterInfo.map(_.topicName)
+
+    val topicToWrite = "sparkwrite"
+    val topics = topicsToRead ++ Seq(topicToWrite)
+
+    topics.toSet[String].foreach { ti =>
+      testUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    val (_, _, checkpointDir) = createTempDirectories
+
+    val df = df1.union(df2).union(df3)
+
+    val customClusterNameForWriter = "customCluster4"
+    val query = toKafkaSink(df, brokerAddress, Some(customClusterNameForWriter),
+      topicToWrite, checkpointDir.getAbsolutePath.toString)
+
+    try {
+      sendMessages(topicsToRead)
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, topic to write, topics to read group 1, 2 and 3
+      assert(entitySet.size == topicsToRead.size + 2)
+
+      val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
+        Some(customClusterNameForWriter))
+
+      val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
+        topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
+      val topicsWithClusterInfo = topicsToReadWithClusterInfo ++ Seq(topicToWriteWithClusterInfo)
+
+      assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
+
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        // unfortunately each batch recognizes topics which topics are having records to process
+        // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+        assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, inputs)
+      }, outputs => {
+        assertEntitiesAreSubsetOfTopics(Seq(topicToWriteWithClusterInfo), outputs)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("kafka source to file sink - micro-batch query") {
+    val topicPrefix = "sparkread1"
+    val brokerAddress = testUtils.brokerAddress
+
+    val customClusterName1 = "customCluster1"
+    val (df1, topicsToRead1WithClusterInfo) =
+      kafkaDfSubscribePattern(topicPrefix, customClusterName1, brokerAddress)
+
+    val customClusterName2 = "customCluster2"
+    val (df2, topicsToRead2WithClusterInfo) =
+      kafkaDfSubscribe(topicPrefix, customClusterName2, brokerAddress)
+
+    val customClusterName3 = "customCluster3"
+    val (df3, topicsToRead3WithClusterInfo) =
+      kafkaDfAssign(topicPrefix, customClusterName3, brokerAddress)
+
+    val topicsToRead = topicsToRead1WithClusterInfo.map(_.topicName) ++
+      topicsToRead2WithClusterInfo.map(_.topicName) ++
+      topicsToRead3WithClusterInfo.map(_.topicName)
+
+    val topicToWrite = "sparkwrite1"
+    val topics = topicsToRead ++ Seq(topicToWrite)
+
+    topics.toSet[String].foreach { ti =>
+      testUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    val (_, destDir, checkpointDir) = createTempDirectories
+
+    val df = df1.union(df2).union(df3)
+
+    val query = toFileSink(df, "json", destDir.getAbsolutePath, checkpointDir.getAbsolutePath)
+
+    try {
+      sendMessages(topicsToRead)
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, file sink, topics to read group 1, 2 and 3
+      assert(entitySet.size == topicsToRead.size + 2)
+
+      val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
+        topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
+
+      assertEntitiesKafkaTopicType(topicsToReadWithClusterInfo, entitySet)
+
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 1)
+
+      val outputFsEntities = findFsEntities(fsEntities, destDir)
+      assert(outputFsEntities == fsEntities)
+
+      // check for 'spark_process'
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        // unfortunately each batch recognizes topics which topics are having records to process
+        // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+        assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, inputs)
+      }, outputs => {
+        assert(outputs.toSet === outputFsEntities.toSet)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("file source to kafka sink - micro-batch query") {
+    val topicToWrite = "sparkwrite"
+
+    val brokerAddress = testUtils.brokerAddress
+
+    val (srcDir, destDir, checkpointDir) = createTempDirectories
+
+    val df = spark
+      .readStream
+      .text(srcDir.getAbsolutePath)
+
+    val customClusterNameForWriter = "customCluster4"
+    val query = toKafkaSink(df, brokerAddress, Some(customClusterNameForWriter),
+      topicToWrite, checkpointDir.getAbsolutePath)
+
+    try {
+      writeTestTextFiles(srcDir)
+
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, files to read (11), topic to write
+      assert(entitySet.size == 13)
+
+      // input path and output path
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 11)
+
+      val inputFsEntities = findFsEntities(fsEntities, srcDir)
+      assert(inputFsEntities.length === 11)
+
+      val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
+        Some(customClusterNameForWriter))
+
+      assertEntitiesKafkaTopicType(Seq(topicToWriteWithClusterInfo), entitySet)
+      val kafkaEntities = listAtlasEntitiesAsType(entitySet.toSeq, KAFKA_TOPIC_STRING)
+
+      // check for 'spark_process'
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        // unfortunately each batch recognizes topics which topics are having records to process
+        // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+        TestUtils.assertSubsetOf(
+          inputs.map(getStringAttribute(_, "qualifiedName")).toSet,
+          inputFsEntities.map(getStringAttribute(_, "qualifiedName")).toSet)
+      }, outputs => {
+        assert(outputs.toSet === kafkaEntities.toSet)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+  test("file & kafka source to file sink - micro-batch query") {
+    val (srcDir, destDir, checkpointDir) = createTempDirectories
+
+    val df1 = spark
+      .readStream
+      .text(srcDir.getAbsolutePath)
+
+    val topicPrefix = "sparkread1"
+    val brokerAddress = testUtils.brokerAddress
+
+    val customClusterName1 = "customCluster1"
+    val (df2, topicsToRead1WithClusterInfo) =
+      kafkaDfSubscribePattern(topicPrefix, customClusterName1, brokerAddress)
+
+    val customClusterName2 = "customCluster2"
+    val (df3, topicsToRead2WithClusterInfo) =
+      kafkaDfSubscribe(topicPrefix, customClusterName2, brokerAddress)
+
+    val customClusterName3 = "customCluster3"
+    val (df4, topicsToRead3WithClusterInfo) =
+      kafkaDfAssign(topicPrefix, customClusterName3, brokerAddress)
+
+    val topicsToRead = topicsToRead1WithClusterInfo.map(_.topicName) ++
+      topicsToRead2WithClusterInfo.map(_.topicName) ++
+      topicsToRead3WithClusterInfo.map(_.topicName)
+
+    topicsToRead.toSet[String].foreach { ti =>
+      testUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    val df = df1
+      .union(df2.selectExpr("CAST(value AS STRING) AS value"))
+      .union(df3.selectExpr("CAST(value AS STRING) AS value"))
+      .union(df4.selectExpr("CAST(value AS STRING) AS value"))
+
+    val query = toFileSink(df, "json", destDir.getAbsolutePath, checkpointDir.getAbsolutePath)
+
+    try {
+      writeTestTextFiles(srcDir)
+      sendMessages(topicsToRead)
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, file sink, topics to read group 1, 2 and 3, path to read
+      assert(entitySet.size == topicsToRead.size + 13)
+
+      val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
+        topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
+
+      assertEntitiesKafkaTopicType(topicsToReadWithClusterInfo, entitySet)
+
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 12)
+
+      val inputFsEntities = findFsEntities(fsEntities, srcDir)
+      assert(inputFsEntities.length === 11)
+
+      val outputFsEntities = findFsEntities(fsEntities, destDir)
+      assert(outputFsEntities.length === 1)
+
+      // check for 'spark_process'
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        val kafkaInputs = listAtlasEntitiesAsType(inputs, external.KAFKA_TOPIC_STRING)
+        val fsInputs = listAtlasEntitiesAsType(inputs, external.FS_PATH_TYPE_STRING)
+          // unfortunately each batch recognizes topics which topics are having records to process
+        // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+        assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, kafkaInputs)
+        assertEntitiesFsType(Map(srcDir -> 11), fsInputs.toSet)
+      }, outputs => {
+        assert(outputs.toSet === outputFsEntities.toSet)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("file & kafka source to kafka sink - micro-batch query") {
+    val (srcDir, destDir, checkpointDir) = createTempDirectories
+
+    val df1 = spark
+      .readStream
+      .text(srcDir.getAbsolutePath)
+
+    val topicPrefix = "sparkread1"
+    val brokerAddress = testUtils.brokerAddress
+
+    val customClusterName1 = "customCluster1"
+    val (df2, topicsToRead1WithClusterInfo) =
+      kafkaDfSubscribePattern(topicPrefix, customClusterName1, brokerAddress)
+
+    val customClusterName2 = "customCluster2"
+    val (df3, topicsToRead2WithClusterInfo) =
+      kafkaDfSubscribe(topicPrefix, customClusterName2, brokerAddress)
+
+    val customClusterName3 = "customCluster3"
+    val (df4, topicsToRead3WithClusterInfo) =
+      kafkaDfAssign(topicPrefix, customClusterName3, brokerAddress)
+
+    val topicsToRead = topicsToRead1WithClusterInfo.map(_.topicName) ++
+      topicsToRead2WithClusterInfo.map(_.topicName) ++
+      topicsToRead3WithClusterInfo.map(_.topicName)
+
+    val topicToWrite = "sparkwrite1"
+    val topics = topicsToRead ++ Seq(topicToWrite)
+
+    topics.toSet[String].foreach { ti =>
+      testUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    val df = df1
+      .union(df2.selectExpr("CAST(value AS STRING) AS value"))
+      .union(df3.selectExpr("CAST(value AS STRING) AS value"))
+      .union(df4.selectExpr("CAST(value AS STRING) AS value"))
+
+    val customClusterNameForWriter = "customCluster4"
+    val query = toKafkaSink(df, brokerAddress, Some(customClusterNameForWriter),
+      topicToWrite, checkpointDir.getAbsolutePath.toString)
+
+    try {
+      writeTestTextFiles(srcDir)
+      sendMessages(topicsToRead)
+      waitForBatchCompleted(query)
+
+      val (queryDetails, entitySet) = processQueryDetails
+      // spark_process, write topic, topics to read group 1, 2 and 3, path to read
+      assert(entitySet.size == topicsToRead.size + 13)
+
+      val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
+        topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
+      val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
+        Some(customClusterNameForWriter))
+
+      val topicsWithClusterInfo = topicsToReadWithClusterInfo ++ Seq(topicToWriteWithClusterInfo)
+
+      assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
+
+      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
+      assert(fsEntities.size === 11)
+
+      val inputFsEntities = findFsEntities(fsEntities, srcDir)
+      assert(inputFsEntities === fsEntities)
+
+      // check for 'spark_process'
+      assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+        val kafkaInputs = listAtlasEntitiesAsType(inputs, external.KAFKA_TOPIC_STRING)
+        val fsInputs = listAtlasEntitiesAsType(inputs, external.FS_PATH_TYPE_STRING)
+        // unfortunately each batch recognizes topics which topics are having records to process
+        // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
+        assertEntitiesAreSubsetOfTopics(topicsToReadWithClusterInfo, kafkaInputs)
+        assertEntitiesFsType(Map(srcDir -> 11), fsInputs.toSet)
+      }, outputs => {
+        assertEntitiesAreSubsetOfTopics(Seq(topicToWriteWithClusterInfo), outputs)
+      })
+    } finally {
+      query.stop()
+    }
+  }
+
+  private def kafkaDfSubscribePattern(
+      topicNamePrefix: String,
+      customClusterName: String,
+      brokerAddress: String): (Dataset[Row], Seq[KafkaTopicInformation]) = {
+    val topics = (1 to 3).map(idx => topicNamePrefix + idx)
+    val topicsWithClusterInfo = topics.map { tp =>
+      KafkaTopicInformation(tp, Some(customClusterName))
+    }
+
+    // test for 'subscribePattern'
+    val df = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", brokerAddress)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
+      .option("subscribePattern", topicNamePrefix + "[1-3]")
+      .option("startingOffsets", "earliest")
+      .load()
+
+    (df, topicsWithClusterInfo)
+  }
+
+  private def kafkaDfSubscribe(
+      topicNamePrefix: String,
+      customClusterName: String,
+      brokerAddress: String): (Dataset[Row], Seq[KafkaTopicInformation]) = {
+    val topics = (4 to 5).map(idx => topicNamePrefix + idx)
+    val topicsWithClusterInfo = topics.map { tp =>
+      KafkaTopicInformation(tp, Some(customClusterName))
+    }
+
+    // test for 'subscribe'
+    val df = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", brokerAddress)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
+      .option("subscribe", topics.mkString(","))
+      .option("startingOffsets", "earliest")
+      .load()
+
+    (df, topicsWithClusterInfo)
+  }
+
+  private def kafkaDfAssign(
+      topicNamePrefix: String,
+      customClusterName: String,
+      brokerAddress: String): (Dataset[Row], Seq[KafkaTopicInformation]) = {
+    val topics = (6 to 7).map(idx => topicNamePrefix + idx)
+    val topicsWithClusterInfo = topics.map { tp =>
+      KafkaTopicInformation(tp, Some(customClusterName))
+    }
+
+    // test for 'assign'
+    val jsonToAssignTopicToRead = {
+      val r = JObject.apply {
+        topics.map {
+          (_, JArray((0 until 10).map(JInt(_)).toList))
+        }.toList
+      }
+      compact(render(r))
+    }
+
+    val df = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", brokerAddress)
+      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName)
+      .option("assign", jsonToAssignTopicToRead)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    (df, topicsWithClusterInfo)
+  }
+
+  private def createTempDirectories: (File, File, File) = {
     val tempDir = Files.createTempDirectory("spark-atlas-streaming-files-temp")
 
     val srcDir = new File(tempDir.toFile, "src")
@@ -96,204 +547,48 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
 
     Files.createDirectories(srcDir.toPath)
 
-    val query = spark
-      .readStream
-      .text(srcDir.getAbsolutePath)
-      .writeStream
-      .format("text")
-      .option("path", destDir.getAbsolutePath)
-      .option("checkpointLocation", checkpointDir.getAbsolutePath)
-      .start()
+    (srcDir, destDir, checkpointDir)
+  }
 
-    try {
-      (0 to 10).foreach { idx =>
-        val writer = new BufferedWriter(new FileWriter(new File(srcDir, s"file-$idx.txt")))
-        writer.write("Hello Scala")
-        writer.close()
-      }
-
-      waitForBatchCompleted(query)
-
-      import org.scalatest.time.SpanSugar._
-      var events: Seq[QueryProgressEvent] = null
-      var queryDetails: Seq[QueryDetail] = null
-      var entitySet: Set[AtlasEntity] = null
-      eventually(timeout(30.seconds)) {
-        queryDetails = testHelperQueryListener.queryDetails
-        queryDetails.foreach(planProcessor.process)
-
-        events = testHelperStreamingQueryListener.progressEvents
-        events.foreach(streamPlanProcessor.process)
-
-        val createdEntities = atlasClient.createdEntities
-        logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
-        entitySet = getUniqueEntities(createdEntities)
-        logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
-
-        // spark_process, path to read, path to write
-        assert(entitySet.size == 3)
-      }
-
-      // input path and output path
-      val fsEntities = listAtlasEntitiesAsType(entitySet.toSeq, external.FS_PATH_TYPE_STRING)
-      assert(fsEntities.size === 2)
-
-      val inputFsEntities = fsEntities.filter { e =>
-        getStringAttribute(e, "name").toLowerCase(Locale.ROOT) ==
-          srcDir.getAbsolutePath.toLowerCase(Locale.ROOT)
-      }
-      assert(inputFsEntities.length === 1)
-
-      val outputFsEntities = fsEntities.filter { e =>
-        getStringAttribute(e, "name").toLowerCase(Locale.ROOT) ==
-          destDir.getAbsolutePath.toLowerCase(Locale.ROOT)
-      }
-      assert(outputFsEntities.length === 1)
-
-      // check for 'spark_process'
-      val processEntity = getOnlyOneEntity(entitySet.toSeq, metadata.PROCESS_TYPE_STRING)
-
-      val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-      val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-
-      val input = getOnlyOneEntity(inputs, external.FS_PATH_TYPE_STRING)
-      val output = getOnlyOneEntity(outputs, external.FS_PATH_TYPE_STRING)
-
-      // input/output in 'spark_process' should be same as outer entities
-      assert(input === inputFsEntities.head)
-      assert(output === outputFsEntities.head)
-    } finally {
-      query.stop()
+  private def writeTestTextFiles(srcDir: File) = {
+    (0 to 10).foreach { idx =>
+      val writer = new BufferedWriter(new FileWriter(new File(srcDir, s"file-$idx.txt")))
+      writer.write("Hello Scala")
+      writer.close()
     }
   }
 
-  test("Kafka source(s) to kafka sink - micro-batch query") {
-    val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
-    val streamPlanProcessor = new DirectProcessSparkStreamingQueryEventProcessor(
-      atlasClient, atlasClientConf)
+  private def toKafkaSink(
+      df: Dataset[Row],
+      brokerAddress: String,
+      customClusterName: Option[String],
+      topic: String,
+      checkpointPath: String): StreamingQuery = {
+    val dsWriter = df.writeStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", brokerAddress)
+      .option("topic", topic)
+      .option("checkpointLocation", checkpointPath)
 
-    val topicsToRead1 = Seq("sparkread1", "sparkread2", "sparkread3")
-    val topicsToRead2 = Seq("sparkread4", "sparkread5")
-    val topicsToRead3 = Seq("sparkread6", "sparkread7")
-    val topicToWrite = "sparkwrite"
+    customClusterName match {
+      case Some(clName) =>
+        dsWriter.option("kafka." + AtlasClientConf.CLUSTER_NAME.key, clName).start()
 
-    val topics = topicsToRead1 ++ topicsToRead2 ++ topicsToRead3 ++ Seq(topicToWrite)
-
-    val brokerAddress = testUtils.brokerAddress
-
-    topics.toSet[String].foreach { ti =>
-      testUtils.createTopic(ti, 10, overwrite = true)
+      case None =>
+        dsWriter.start()
     }
+  }
 
-    val tempDir = Files.createTempDirectory("spark-atlas-kafka-harvester")
-
-    // remove temporary directory in shutdown
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      new Runnable {
-        override def run(): Unit = {
-          Files.deleteIfExists(tempDir)
-        }
-      }, 10)
-
-    // test for 'subscribePattern'
-    val customClusterName1 = "customCluster1"
-    val df1 = spark.readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName1)
-      .option("subscribePattern", "sparkread[1-3]")
-      .option("startingOffsets", "earliest")
-      .load()
-
-    // test for 'subscribe'
-    val customClusterName2 = "customCluster2"
-    val df2 = spark.readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName2)
-      .option("subscribe", topicsToRead2.mkString(","))
-      .option("startingOffsets", "earliest")
-      .load()
-
-    // test for 'assign'
-    val jsonToAssignTopicToRead3 = {
-      val r = JObject.apply {
-        topicsToRead3.map {
-          (_, JArray((0 until 10).map(JInt(_)).toList))
-        }.toList
-      }
-      compact(render(r))
-    }
-
-    val customClusterName3 = "customCluster3"
-    val df3 = spark.readStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterName3)
-      .option("assign", jsonToAssignTopicToRead3)
-      .option("startingOffsets", "earliest")
-      .load()
-
-    val customClusterNameForWriter = "customCluster4"
-    val query = df1.union(df2).union(df3).writeStream
-      .format("kafka")
-      .option("kafka.bootstrap.servers", brokerAddress)
-      .option("kafka." + AtlasClientConf.CLUSTER_NAME.key, customClusterNameForWriter)
-      .option("topic", topicToWrite)
-      .option("checkpointLocation", tempDir.toAbsolutePath.toString)
+  private def toFileSink(
+      df: Dataset[Row],
+      format: String,
+      path: String,
+      checkpointPath: String): StreamingQuery = {
+    df.writeStream
+      .format(format)
+      .option("path", path)
+      .option("checkpointLocation", checkpointPath)
       .start()
-
-    try {
-      sendMessages(topicsToRead1)
-      sendMessages(topicsToRead2)
-      sendMessages(topicsToRead3)
-      waitForBatchCompleted(query)
-
-      import org.scalatest.time.SpanSugar._
-      var events: Seq[QueryProgressEvent] = null
-      var queryDetails: Seq[QueryDetail] = null
-      var entitySet: Set[AtlasEntity] = null
-      eventually(timeout(30.seconds)) {
-        queryDetails = testHelperQueryListener.queryDetails
-        queryDetails.foreach(planProcessor.process)
-
-        events = testHelperStreamingQueryListener.progressEvents
-        events.foreach(streamPlanProcessor.process)
-
-        val createdEntities = atlasClient.createdEntities
-        logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
-        entitySet = getUniqueEntities(createdEntities)
-        logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
-
-        // spark_process, topic to write, topics to read group 1 and 2 and 3
-        assert(entitySet.size == topicsToRead1.size + topicsToRead2.size + topicsToRead3.size + 2)
-      }
-
-      val topicsToRead1WithClusterInfo = topicsToRead1.map { tp =>
-        KafkaTopicInformation(tp, Some(customClusterName1))
-      }
-
-      val topicsToRead2WithClusterInfo = topicsToRead2.map { tp =>
-        KafkaTopicInformation(tp, Some(customClusterName2))
-      }
-
-      val topicsToRead3WithClusterInfo = topicsToRead3.map { tp =>
-        KafkaTopicInformation(tp, Some(customClusterName3))
-      }
-
-      val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
-        Some(customClusterNameForWriter))
-
-      val topicsToReadWithClusterInfo = topicsToRead1WithClusterInfo ++
-        topicsToRead2WithClusterInfo ++ topicsToRead3WithClusterInfo
-      val topicsWithClusterInfo = topicsToReadWithClusterInfo ++ Seq(topicToWriteWithClusterInfo)
-
-      assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
-      assertEntitySparkProcessType(topicsToReadWithClusterInfo, topicToWriteWithClusterInfo,
-        entitySet, queryDetails)
-    } finally {
-      query.stop()
-    }
   }
 
   private def sendMessages(topicsToRead: Seq[String]): Unit = {
@@ -310,26 +605,17 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
   }
 
   private def assertEntitySparkProcessType(
-      topicsToRead: Seq[KafkaTopicInformation],
-      topicToWrite: KafkaTopicInformation,
       entities: Set[AtlasEntity],
-      queryDetails: Seq[QueryDetail])
-    : Unit = {
+      queryDetails: Seq[QueryDetail],
+      fnAssertInputs: Seq[AtlasEntity] => Unit,
+      fnAssertOutputs: Seq[AtlasEntity] => Unit): Unit = {
     val processEntity = getOnlyOneEntity(entities.toSeq, metadata.PROCESS_TYPE_STRING)
 
     val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
     val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
 
-    assert(!inputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
-    assert(!outputs.exists(_.getTypeName != KAFKA_TOPIC_STRING))
-
-    // unfortunately each batch recognizes topics which topics are having records to process
-    // so there's no guarantee that all topics are recognized as 'inputs' for 'spark_process'
-    assert(inputs.map(getStringAttribute(_, "qualifiedName")).toSet.subsetOf(
-      topicsToRead.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet))
-
-    assert(outputs.map(getStringAttribute(_, "qualifiedName")).toSet ===
-      Seq(topicToWrite).map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet)
+    fnAssertInputs(inputs)
+    fnAssertOutputs(outputs)
 
     // verify others
     // it is OK if there's a matching query detail: since only one is exactly
@@ -348,6 +634,18 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     }
 
     assert(anyMatchingFound)
+  }
+
+  private def processQueryDetails: (Seq[QueryDetail], Set[AtlasEntity]) = {
+    val queryDetails: Seq[QueryDetail] = testHelperQueryListener.queryDetails ++
+      testHelperStreamingQueryListener.queryDetails
+    queryDetails.foreach(planProcessor.process)
+
+    val createdEntities = atlasClient.createdEntities
+    logInfo(s"Count of created entities (with duplication): ${createdEntities.size}")
+    val entitySet: Set[AtlasEntity] = getUniqueEntities(createdEntities)
+    logInfo(s"Count of created entities after deduplication: ${entitySet.size}")
+    (queryDetails, entitySet)
   }
 
   private def getUniqueEntities(entities: Seq[AtlasEntity]): Set[AtlasEntity] = {

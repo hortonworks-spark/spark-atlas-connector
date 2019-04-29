@@ -21,6 +21,8 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 import java.util.Date
 
+import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
+
 import scala.collection.JavaConverters._
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
@@ -31,7 +33,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.types.StructType
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 
 
 object external {

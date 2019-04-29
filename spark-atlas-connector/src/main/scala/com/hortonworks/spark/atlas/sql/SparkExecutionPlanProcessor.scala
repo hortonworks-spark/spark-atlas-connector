@@ -17,8 +17,10 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import scala.collection.convert.Wrappers.SeqWrapper
+import com.hortonworks.spark.atlas.sql.CommandsHarvester.WriteToDataSourceV2Harvester
+import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
 
+import scala.collection.convert.Wrappers.SeqWrapper
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
@@ -26,16 +28,17 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCom
 import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-
+import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.Logging
-import com.hortonworks.spark.atlas.sql.streaming.{HWCStreamingHarvester, KafkaHarvester}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.streaming.SinkProgress
 
 
 case class QueryDetail(qe: QueryExecution, executionId: Long,
-  executionTime: Long, query: Option[String] = None)
+  executionTime: Long, query: Option[String] = None, sink: Option[SinkProgress] = None)
 
 class SparkExecutionPlanProcessor(
     private[atlas] val atlasClient: AtlasClient,
@@ -45,12 +48,23 @@ class SparkExecutionPlanProcessor(
   // TODO: We should handle OVERWRITE to remove the old lineage.
   // TODO: We should consider LLAPRelation later
   override protected def process(qd: QueryDetail): Unit = {
-    val entities = qd.qe.sparkPlan.collect {
+    var outNodes: Seq[SparkPlan] = qd.qe.sparkPlan.collect {
       case p: UnionExec => p.children
-      case p: DataWritingCommandExec => p
-      case p: WriteToDataSourceV2Exec => p
-      case p: LeafExecNode => p
-    }.flatMap {
+      case p: DataWritingCommandExec => Seq(p)
+      case p: WriteToDataSourceV2Exec => Seq(p)
+      case p: LeafExecNode => Seq(p)
+    }.flatten
+
+    if (qd.sink.isDefined && !outNodes.exists(_.isInstanceOf[WriteToDataSourceV2Exec])) {
+      val sink = qd.sink.get
+
+      outNodes ++= Seq(
+        WriteToDataSourceV2Exec(
+          new MicroBatchWriter(0,
+            new SinkDataSourceWriter(sink)), qd.qe.sparkPlan))
+    }
+
+    val entities = outNodes.flatMap {
       case r: ExecutedCommandExec =>
         r.cmd match {
           case c: LoadDataCommand =>
@@ -102,16 +116,7 @@ class SparkExecutionPlanProcessor(
         }
 
       case r: WriteToDataSourceV2Exec =>
-        r.writer match {
-          case w: MicroBatchWriter
-              if w.getClass.getMethod("writer").invoke(w)
-                .getClass.toString.endsWith("KafkaStreamWriter") =>
-            val topic = KafkaHarvester.extractTopic(w)
-            KafkaHarvester.harvest(topic, r, qd)
-
-          case w: DataSourceWriter =>
-            HWCSupport.extract(r, qd).getOrElse(Seq.empty)
-        }
+        WriteToDataSourceV2Harvester.harvest(r, qd)
 
       case _ =>
         Seq.empty
@@ -165,62 +170,23 @@ class SparkExecutionPlanProcessor(
 
 }
 
-/**
- * Extracts Atlas entities related with Hive Warehouse Connector plans.
- *
- * Hive Warehouse Connector currently supports four types of operations:
- *   1. SQL / DataFrame Read (batch read)
- *   2. SQL / DataFrame Write (batch write)
- *   3. SQL / DataFrame Write in streaming manner (batch write in streaming)
- *   4. Structured Streaming Write (streaming write)
- *
- * For 1., it is supported by looking logical plans (if available) or physical
- * plans up at `HWCEntities` for every execution plan being processed above
- * when it's possible.
- *
- * For 2. and 3., it checks only when the execution plan is `WriteToDataSourceV2Exec`.
- * It checks the write implementation of DataSourceV2 is HWC or not and dispatches to harvest
- * appropriate entities.
- *
- * For 4., it is same as 2. and 3. but it reuses Kafka harvester to handle input sources
- * under the hood when it dispatches to harvest.
- *
- * See also HCC article, "Integrating Apache Hive with Apache Spark - Hive Warehouse Connector"
- * https://goo.gl/p3EXhz
- */
-object HWCSupport {
-  val BATCH_READ_SOURCE =
-    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseConnector"
-  val BATCH_WRITE =
-    "com.hortonworks.spark.sql.hive.llap.HiveWarehouseDataSourceWriter"
-  val BATCH_STREAM_WRITE =
-    "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataSourceWriter"
-  val STREAM_WRITE =
-    "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
+object SparkExecutionPlanProcessor {
 
-  def extract(plan: WriteToDataSourceV2Exec, qd: QueryDetail): Option[Seq[AtlasEntity]] = {
-    def extractFromWriter(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = writer match {
-      case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
-        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+  class SinkDataSourceWriter(val sinkProgress: SinkProgress) extends StreamWriter {
+    override def createWriterFactory(): DataWriterFactory[InternalRow] =
+      throw new UnsupportedOperationException("should not reach here!")
 
-      case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) =>
-        Some(CommandsHarvester.HWCHarvester.harvest(plan, qd))
+    override def commit(messages: Array[WriterCommitMessage]): Unit =
+      throw new UnsupportedOperationException("should not reach here!")
 
-      case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
-        Some(HWCStreamingHarvester.harvest(plan, qd))
+    override def abort(messages: Array[WriterCommitMessage]): Unit =
+      throw new UnsupportedOperationException("should not reach here!")
 
-      case w: MicroBatchWriter
-          if w.getClass.getMethod("writer").invoke(w)
-            .getClass.toString.endsWith(STREAM_WRITE) =>
-        extractFromWriter(
-          w.getClass.getMethod("writer").invoke(w).asInstanceOf[DataSourceWriter])
+    override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throw new UnsupportedOperationException("should not reach here!")
 
-      case _ => None
-    }
-
-    extractFromWriter(plan.writer)
+    override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit =
+      throw new UnsupportedOperationException("should not reach here!")
   }
+
 }

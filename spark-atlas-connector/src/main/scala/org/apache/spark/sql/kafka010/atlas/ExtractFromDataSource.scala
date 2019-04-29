@@ -19,10 +19,8 @@ package org.apache.spark.sql.kafka010.atlas
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
-
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,10 +31,10 @@ import org.apache.spark.sql.sources.v2.reader.InputPartition
 import org.apache.spark.sql.sources.v2.writer.DataWriterFactory
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 import com.hortonworks.spark.atlas.utils.{Logging, ReflectionHelper}
+import org.apache.spark.sql.sources.v2.DataSourceV2
 
 /**
  * An object that defines an method that extracts `KafkaTopicInformation` from data source plans
@@ -179,12 +177,17 @@ object ExtractFromDataSource extends Logging {
     kafkaClazz.isAssignableFrom(rel.getClass)
   }
 
+  def isKafkaRelationProvider(source: DataSourceV2): Boolean = {
+    val kafkaClazz = ReflectionHelper.classForName(CLASS_NAME_KAFKA_SOURCE_PROVIDER)
+    kafkaClazz.isAssignableFrom(source.getClass)
+  }
+
   def isKafkaRelationProvider(provider: CreatableRelationProvider): Boolean = {
     val kafkaClazz = ReflectionHelper.classForName(CLASS_NAME_KAFKA_SOURCE_PROVIDER)
     kafkaClazz.isAssignableFrom(provider.getClass)
   }
 
-  private def isKafkaSourceRdd(rdd: RDD[_]): Boolean = {
+  def isKafkaSourceRdd(rdd: RDD[_]): Boolean = {
     val kafkaClazz = ReflectionHelper.classForName(CLASS_NAME_KAFKA_SOURCE_RDD)
     kafkaClazz.isAssignableFrom(rdd.getClass)
   }

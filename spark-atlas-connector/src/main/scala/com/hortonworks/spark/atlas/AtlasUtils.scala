@@ -17,9 +17,12 @@
 
 package com.hortonworks.spark.atlas
 
+import java.util.concurrent.atomic.AtomicLong
+
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 
 object AtlasUtils {
+  private val executionId = new AtomicLong(0L)
 
   def entityToReference(entity: AtlasEntity, useGuid: Boolean = false): AtlasObjectId = {
     if (useGuid) {
@@ -28,4 +31,6 @@ object AtlasUtils {
       new AtlasObjectId(entity.getTypeName, "qualifiedName", entity.getAttribute("qualifiedName"))
     }
   }
+
+  def issueExecutionId(): Long = executionId.getAndIncrement()
 }

@@ -55,4 +55,8 @@ object TestUtils {
       bucketSpec = None,
       owner = SparkUtils.currUser())
   }
+
+  def assertSubsetOf[T](set: Set[T], subset: Set[T]): Unit = {
+    assert(subset.subsetOf(set), s"$subset is not a subset of $set")
+  }
 }

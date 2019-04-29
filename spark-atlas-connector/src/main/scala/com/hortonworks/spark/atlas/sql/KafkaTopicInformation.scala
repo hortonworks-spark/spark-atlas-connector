@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql.testhelper
+package com.hortonworks.spark.atlas.sql
 
-import org.apache.spark.sql.streaming.StreamingQueryListener
+case class KafkaTopicInformation(topicName: String, clusterName: Option[String] = None)
 
-import com.hortonworks.spark.atlas.sql.streaming.SparkStreamingQueryEventProcessor
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf}
-
-class DirectProcessSparkStreamingQueryEventProcessor(
-    atlasClient: AtlasClient,
-    atlasClientConf: AtlasClientConf)
-  extends SparkStreamingQueryEventProcessor(atlasClient, atlasClientConf) {
-
-  override def process(e: StreamingQueryListener.QueryProgressEvent): Unit = super.process(e)
+object KafkaTopicInformation {
+  def getQualifiedName(ti: KafkaTopicInformation, defaultClusterName: String): String = {
+    val cName = ti.clusterName.getOrElse(defaultClusterName)
+    s"${ti.topicName}@$cName"
+  }
 }
+

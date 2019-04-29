@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{FileRelation, FileSourceScanExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateDataSourceTableCommand, CreateViewCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
@@ -36,10 +36,11 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Data
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
+import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.streaming.SinkProgress
 
 object CommandsHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
@@ -261,6 +262,50 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
+  object WriteToDataSourceV2Harvester extends Harvester[WriteToDataSourceV2Exec] {
+    override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
+      val sinkEntities = node.writer match {
+        case w: MicroBatchWriter if w.writer.isInstanceOf[SinkDataSourceWriter] =>
+          discoverOutputEntities(w.writer.asInstanceOf[SinkDataSourceWriter].sinkProgress)
+
+        case w => discoverOutputEntities(w)
+      }
+
+      val sourceEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+
+      makeProcessEntities(sourceEntities.flatten, sinkEntities, makeLogMap(qd))
+    }
+
+    private def makeLogMap(qd: QueryDetail): Map[String, String] = {
+      // create process entity
+      Map(
+        "executionId" -> qd.executionId.toString,
+        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
+        "executionTime" -> qd.executionTime.toString,
+        "details" -> qd.qe.toString(),
+        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
+    }
+
+    private def makeProcessEntities(
+        inputsEntities: Seq[AtlasEntity],
+        outputEntities: Seq[AtlasEntity],
+        logMap: Map[String, String]): Seq[AtlasEntity] = {
+      val inputTablesEntities = inputsEntities.toList
+      val outputTableEntities = outputEntities.toList
+
+      // ml related cached object
+      if (internal.cachedObjects.contains("model_uid")) {
+        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
+      } else {
+        // create process entity
+        val pEntity = internal.etlProcessToEntity(
+          inputTablesEntities, outputTableEntities, logMap)
+
+        Seq(pEntity) ++ inputsEntities ++ outputEntities
+      }
+    }
+  }
+
   def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
     val tableName = tableIdentifier.table
     val dbName = tableIdentifier.database.getOrElse("default")
@@ -331,6 +376,31 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
+  private def discoverOutputEntities(sink: SinkProgress): Seq[AtlasEntity] = {
+    if (sink.description.contains("FileSink")) {
+      val begin = sink.description.indexOf('[')
+      val end = sink.description.indexOf(']')
+      val path = sink.description.substring(begin + 1, end)
+      logDebug(s"record the streaming query sink output path information $path")
+      external.pathToEntities(path)
+    } else if (sink.description.contains("ConsoleSinkProvider")) {
+      logInfo(s"do not track the console output as Atlas entity ${sink.description}")
+      Seq.empty
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def discoverOutputEntities(writer: DataSourceWriter): Seq[AtlasEntity] = {
+    writer match {
+      case HWCEntities(hwcEntities) => hwcEntities
+      case KafkaEntities(kafkaEntities) => kafkaEntities
+      case e =>
+        logWarn(s"Missing unknown leaf node: $e")
+        Seq.empty
+    }
+  }
+
   object HWCHarvester extends Harvester[WriteToDataSourceV2Exec] {
     override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
       // Source table entity
@@ -357,6 +427,61 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object HWCEntities extends Logging {
+    /**
+     * Extracts Atlas entities related with Hive Warehouse Connector plans.
+     *
+     * Hive Warehouse Connector currently supports four types of operations:
+     *   1. SQL / DataFrame Read (batch read)
+     *   2. SQL / DataFrame Write (batch write)
+     *   3. SQL / DataFrame Write in streaming manner (batch write in streaming)
+     *   4. Structured Streaming Write (streaming write)
+     *
+     * For 1., it is supported by looking logical plans (if available) or physical
+     * plans up at `HWCEntities` for every execution plan being processed above
+     * when it's possible.
+     *
+     * For 2. and 3., it checks only when the execution plan is `WriteToDataSourceV2Exec`.
+     * It checks the write implementation of DataSourceV2 is HWC or not and dispatches to harvest
+     * appropriate entities.
+     *
+     * For 4., it is same as 2. and 3. but it reuses Kafka harvester to handle input sources
+     * under the hood when it dispatches to harvest.
+     *
+     * See also HCC article, "Integrating Apache Hive with Apache Spark - Hive Warehouse Connector"
+     * https://goo.gl/p3EXhz
+     */
+    object HWCSupport {
+      val BATCH_READ_SOURCE =
+        "com.hortonworks.spark.sql.hive.llap.HiveWarehouseConnector"
+      val BATCH_WRITE =
+        "com.hortonworks.spark.sql.hive.llap.HiveWarehouseDataSourceWriter"
+      val BATCH_STREAM_WRITE =
+        "com.hortonworks.spark.sql.hive.llap.HiveStreamingDataSourceWriter"
+      val STREAM_WRITE =
+        "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
+
+      def extractFromWriter(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = writer match {
+        case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
+          Some(getHWCEntity(w))
+
+        case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) =>
+          Some(getHWCEntity(w))
+
+        case w: DataSourceWriter
+          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
+          Some(getHWCEntity(w))
+
+        case w: MicroBatchWriter
+          if w.getClass.getMethod("writer").invoke(w)
+            .getClass.toString.endsWith(STREAM_WRITE) =>
+          extractFromWriter(
+            w.getClass.getMethod("writer").invoke(w).asInstanceOf[DataSourceWriter])
+
+        case _ => None
+      }
+    }
 
     def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
       case ds: DataSourceV2Relation
@@ -370,6 +495,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
         Some(getHWCEntity(ds.options))
       case _ => None
+    }
+
+    def unapply(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = {
+      HWCSupport.extractFromWriter(writer)
     }
 
     def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
@@ -502,6 +631,15 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object KafkaEntities {
+    private def convertTopicsToEntities(
+        topics: Set[KafkaTopicInformation]): Option[Seq[Seq[AtlasEntity]]] = {
+      if (topics.nonEmpty) {
+        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
+      } else {
+        None
+      }
+    }
+
     def unapply(plan: LogicalPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
       case l: LogicalRelation if ExtractFromDataSource.isKafkaRelation(l.relation) =>
         val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(l.relation)
@@ -512,10 +650,25 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
-      case r: RowDataSourceScanExec if ExtractFromDataSource.isKafkaRelation(r.relation) =>
-        val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(r.relation)
-        Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
+    def unapply(plan: SparkPlan): Option[Seq[Seq[AtlasEntity]]] = {
+      val topics = plan match {
+        case r: RowDataSourceScanExec =>
+          ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(r.relation)
+        case r: RDDScanExec =>
+          ExtractFromDataSource.extractSourceTopicsFromDataSourceV1(r).toSet
+        case r: DataSourceV2ScanExec =>
+          ExtractFromDataSource.extractSourceTopicsFromDataSourceV2(r).toSet
+        case _ => Set.empty[KafkaTopicInformation]
+      }
+
+      convertTopicsToEntities(topics)
+    }
+
+    def unapply(r: DataSourceWriter): Option[Seq[AtlasEntity]] = r match {
+      case writer: MicroBatchWriter => ExtractFromDataSource.extractTopic(writer) match {
+        case Some(topicInformation) => Some(external.kafkaToEntity(clusterName, topicInformation))
+        case _ => None
+      }
 
       case _ => None
     }
