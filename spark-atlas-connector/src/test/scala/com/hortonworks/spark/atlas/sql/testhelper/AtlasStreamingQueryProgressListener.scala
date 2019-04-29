@@ -17,23 +17,47 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import scala.collection.mutable
+import com.hortonworks.spark.atlas.AtlasUtils
+import com.hortonworks.spark.atlas.sql.QueryDetail
+import com.hortonworks.spark.atlas.utils.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 
+import scala.collection.mutable
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 
-class AtlasStreamingQueryProgressListener extends StreamingQueryListener {
-  val progressEvents = new mutable.MutableList[QueryProgressEvent]()
+class AtlasStreamingQueryProgressListener extends StreamingQueryListener with Logging {
+  val queryDetails = new mutable.MutableList[QueryDetail]()
 
   def onQueryStarted(event: QueryStartedEvent): Unit = {}
 
   def onQueryProgress(event: QueryProgressEvent): Unit = {
-    progressEvents += event
+    // FIXME: this is totally duplicated with SparkAtlasStreamingQueryEventTracker...
+    //  Extract into somewhere...
+    val query = SparkSession.active.streams.get(event.progress.id)
+    if (query != null) {
+      query match {
+        case query: StreamingQueryWrapper =>
+          val qd = QueryDetail(query.streamingQuery.lastExecution,
+            AtlasUtils.issueExecutionId(), -1, sink = Some(event.progress.sink))
+          queryDetails += qd
+
+        case query: StreamExecution =>
+          val qd = QueryDetail(query.lastExecution, AtlasUtils.issueExecutionId(), -1,
+            sink = Some(event.progress.sink))
+          queryDetails += qd
+
+        case _ => logWarn(s"Unexpected type of streaming query: ${query.getClass}")
+      }
+    } else {
+      logWarn(s"Cannot find query ${event.progress.id} from active spark session!")
+    }
   }
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
 
   def clear(): Unit = {
-    progressEvents.clear()
+    queryDetails.clear()
   }
 }

@@ -25,7 +25,6 @@ import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, 
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.sql.streaming.KafkaTopicInformation
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.spark.sql.kafka010.KafkaTestUtils
@@ -70,6 +69,7 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Read csv file and save as table") {
+    // FIXME: source files
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")

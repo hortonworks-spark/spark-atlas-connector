@@ -17,8 +17,7 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import java.util.concurrent.atomic.AtomicLong
-
+import com.hortonworks.spark.atlas.AtlasUtils
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -26,11 +25,14 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import scala.collection.mutable
 
 class AtlasQueryExecutionListener extends QueryExecutionListener {
-  private val executionId = new AtomicLong(0L)
   val queryDetails = new mutable.MutableList[QueryDetail]()
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-    queryDetails += QueryDetail(qe, executionId.getAndIncrement(), durationNs)
+    if (qe.logical.isStreaming) {
+      // streaming query will be tracked via SparkAtlasStreamingQueryEventTracker
+      return
+    }
+    queryDetails += QueryDetail(qe, AtlasUtils.issueExecutionId(), durationNs)
   }
 
   override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {

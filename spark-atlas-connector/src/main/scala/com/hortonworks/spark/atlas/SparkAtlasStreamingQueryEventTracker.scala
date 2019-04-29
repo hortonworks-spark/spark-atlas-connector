@@ -17,11 +17,14 @@
 
 package com.hortonworks.spark.atlas
 
+import com.hortonworks.spark.atlas.sql.{QueryDetail, SparkExecutionPlanProcessor}
+
 import scala.collection.mutable
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-import com.hortonworks.spark.atlas.sql.streaming.SparkStreamingQueryEventProcessor
 import com.hortonworks.spark.atlas.utils.Logging
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 
 class SparkAtlasStreamingQueryEventTracker(
      atlasClient: AtlasClient,
@@ -38,9 +41,8 @@ class SparkAtlasStreamingQueryEventTracker(
 
   private val streamQueryHashset = new mutable.HashSet[java.util.UUID]
 
-  private val streamingQueryTracker =
-    new SparkStreamingQueryEventProcessor(atlasClient, atlasClientConf)
-  streamingQueryTracker.startThread()
+  private val executionPlanTracker = new SparkExecutionPlanProcessor(atlasClient, atlasClientConf)
+  executionPlanTracker.startThread()
 
   override def onQueryStarted(event: QueryStartedEvent): Unit = {
     logDebug(s"Start to track the Spark Streaming query in the Spark Atlas $event")
@@ -48,9 +50,27 @@ class SparkAtlasStreamingQueryEventTracker(
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {
     logInfo(s"Track running Spark Streaming query in the Spark Atlas: $event")
-    if(!streamQueryHashset.contains(event.progress.runId)) {
-      streamingQueryTracker.pushEvent(event)
-      streamQueryHashset.add(event.progress.runId)
+    if (!streamQueryHashset.contains(event.progress.runId)) {
+      val query = SparkSession.active.streams.get(event.progress.id)
+      if (query != null) {
+        query match {
+          case query: StreamingQueryWrapper =>
+            val qd = QueryDetail(query.streamingQuery.lastExecution,
+              AtlasUtils.issueExecutionId(), -1, None, Some(event.progress.sink))
+            executionPlanTracker.pushEvent(qd)
+            streamQueryHashset.add(event.progress.runId)
+
+          case query: StreamExecution =>
+            val qd = QueryDetail(query.lastExecution, AtlasUtils.issueExecutionId(),
+              -1, None, Some(event.progress.sink))
+            executionPlanTracker.pushEvent(qd)
+            streamQueryHashset.add(event.progress.runId)
+
+          case _ => logWarn(s"Unexpected type of streaming query: ${query.getClass}")
+        }
+      } else {
+        logWarn(s"Cannot find query ${event.progress.id} from active spark session!")
+      }
     }
   }
 
