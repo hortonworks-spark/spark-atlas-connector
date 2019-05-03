@@ -97,9 +97,9 @@ trait AtlasEntityUtils {
       table: String,
       isHiveTable: Boolean): List[AtlasEntity] = {
     if (isHiveTable) {
-      external.hiveSchemaToEntities(schema, clusterName, db, table)
+      external.hiveColumnToEntities(schema, clusterName, db, table)
     } else {
-      internal.sparkSchemaToEntities(schema, db, table)
+      internal.sparkColumnToEntities(schema, db, table)
     }
   }
 

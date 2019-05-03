@@ -69,7 +69,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   }
 
   test("Read csv file and save as table") {
-    // FIXME: source files
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val csvContent = Seq("a,1", "b,2", "c,3", "d,4").mkString("\n")
@@ -89,24 +88,17 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assertTableEntity(tableEntity, outputTableName)
     assertSchemaEntities(tableEntity, entities)
 
-    // we're expecting three file system entities:
-    // one for input file, one for database warehouse, and one for output table (under
-    // database warehouse since it's a managed table).
+    // we're expecting one file system entities: input file
     val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
-    assert(fsEntities.size === 3)
+    assert(fsEntities.size === 1)
 
     val databaseEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
-    assertDatabaseEntity(databaseEntity, tableEntity, fsEntities, outputTableName)
-
-    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
-
-    val inputFsEntities = fsEntities.filterNot(_ == databaseLocationFsEntity)
-    assert(inputFsEntities.size === 2)
+    assertDatabaseEntity(databaseEntity, tableEntity, outputTableName)
 
     // input file
     // this code asserts on runtime that one of fs entity matches against source path
     val sourcePath = tempFile.toAbsolutePath.toString
-    val inputFsEntity = inputFsEntities.find { p =>
+    val inputFsEntity = fsEntities.find { p =>
       getStringAttribute(p, "name").toLowerCase(Locale.ROOT) == sourcePath.toLowerCase(Locale.ROOT)
     }.get
     assertInputFsEntity(inputFsEntity, sourcePath)
@@ -115,9 +107,10 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
     assertStorageDefinitionEntity(storageEntity, tableEntity)
 
-    val locationEntity = getAtlasEntityAttribute(storageEntity, "locationUri")
-    assert(getStringAttribute(locationEntity, "path").startsWith(
-      getStringAttribute(databaseLocationFsEntity, "path")))
+    val locationString = getStringAttribute(storageEntity, "location")
+    assert(locationString != null && locationString.nonEmpty)
+    assert(locationString.contains("spark-warehouse"))
+    assert(locationString.contains(outputTableName))
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
@@ -163,34 +156,17 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assertTableEntity(tableEntity, outputTableName)
     assertSchemaEntities(tableEntity, entities)
 
-    // we're expecting two file system entities:
-    // one for input file, one for database warehouse.
-    val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
-    assert(fsEntities.size === 2)
-
     // database
     val databaseEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
-    assertDatabaseEntity(databaseEntity, tableEntity, fsEntities, outputTableName)
-
-    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
-
-    // fs
-    val inputFsEntities = fsEntities.filterNot(_ == databaseLocationFsEntity)
-    assert(inputFsEntities.size === 1)
-
-    // input file
-    val inputFsEntity = inputFsEntities.find { p =>
-      getStringAttribute(p, "name").toLowerCase(Locale.ROOT) ==
-        tempDirPathStr.toLowerCase(Locale.ROOT)
-    }.get
-
-    assertInputFsEntity(inputFsEntity, tempDirPathStr)
+    assertDatabaseEntity(databaseEntity, tableEntity, outputTableName)
 
     // storage description
     val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
     assertStorageDefinitionEntity(storageEntity, tableEntity)
 
-    assert(getAtlasEntityAttribute(storageEntity, "locationUri") === inputFsEntity)
+    val databaseLocationString = getStringAttribute(databaseEntity, "location")
+    assert(databaseLocationString != null && databaseLocationString.nonEmpty)
+    assert(databaseLocationString.contains("spark-warehouse"))
   }
 
   test("Save Spark table to Kafka via df.save()") {
@@ -476,10 +452,10 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   private def assertSchemaEntities(tableEntity: AtlasEntity, entities: Seq[AtlasEntity]): Unit = {
     if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
       val columnEntities = listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING)
-      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "spark_schema")
+      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "columns")
       assert(Set(columnEntities) === Set(columnEntitiesInTableAttribute))
     } else {
-      assert(!tableEntity.getAttributes.containsKey("spark_schema"))
+      assert(!tableEntity.getAttributes.containsKey("columns"))
       assert(listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING).isEmpty)
     }
   }
@@ -487,7 +463,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   private def assertDatabaseEntity(
       databaseEntity: AtlasEntity,
       tableEntity: AtlasEntity,
-      fsEntities: Seq[AtlasEntity],
       tableName: String)
     : Unit = {
     val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
@@ -501,10 +476,9 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
     assert(databaseEntity === databaseEntityInTable)
 
-    val databaseLocationFsEntity = getAtlasEntityAttribute(databaseEntity, "locationUri")
-
-    // database warehouse
-    assert(fsEntities.contains(databaseLocationFsEntity))
+    val databaseLocationString = getStringAttribute(databaseEntity, "location")
+    assert(databaseLocationString != null && databaseLocationString.nonEmpty)
+    assert(databaseLocationString.contains("spark-warehouse"))
   }
 
   private def assertInputFsEntity(fsEntity: AtlasEntity, sourcePath: String): Unit = {

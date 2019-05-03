@@ -81,7 +81,6 @@ class SparkCatalogEventProcessor(
             .filterNot(e => excludedTypes.contains(e.getTypeName))
             .map { e =>
               e.removeAttribute("columns")
-              e.removeAttribute("spark_schema")
               e
             }
           atlasClient.createEntities(cleanedEntities)
@@ -182,7 +181,6 @@ class SparkCatalogEventProcessor(
                 .filterNot(e => excludedTypes.contains(e.getTypeName))
                 .map { e =>
                   e.removeAttribute("columns")
-                  e.removeAttribute("spark_schema")
                   e
                 }
               atlasClient.createEntities(cleanedEntities)
@@ -197,7 +195,7 @@ class SparkCatalogEventProcessor(
               atlasClient.createEntities(schemaEntities)
 
               val tableEntity = new AtlasEntity(tableType(isHiveTbl))
-              tableEntity.setAttribute("spark_schema", schemaEntities.asJava)
+              tableEntity.setAttribute("columns", schemaEntities.asJava)
               atlasClient.updateEntityWithUniqueAttr(
                 tableType(isHiveTbl),
                 tableUniqueAttribute(db, table, isHiveTbl),

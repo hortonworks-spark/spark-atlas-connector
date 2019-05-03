@@ -19,7 +19,7 @@ package com.hortonworks.spark.atlas.types
 
 import com.google.common.collect.{ImmutableMap, ImmutableSet}
 import org.apache.atlas.AtlasConstants
-import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasLongType, AtlasStringType}
+import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasDateType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
 
@@ -44,11 +44,13 @@ object metadata {
     ImmutableSet.of("DataSet"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, new AtlasStringType),
+    AtlasTypeUtil.createRequiredAttrDef(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("description", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("location", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
-      "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)))
+      "parameters", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
+    AtlasTypeUtil.createOptionalAttrDef(
+      "ownerType", new AtlasStringType))
 
   // ========= Storage description type =========
   val STORAGEDESC_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -58,13 +60,13 @@ object metadata {
     ImmutableSet.of("Referenceable"),
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("locationUri", FS_PATH_TYPE_STRING),
+    AtlasTypeUtil.createOptionalAttrDef("location", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("inputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("outputFormat", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("serde", new AtlasStringType),
     AtlasTypeUtil.createRequiredAttrDef("compressed", new AtlasBooleanType),
     AtlasTypeUtil.createOptionalAttrDef(
-      "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
+      "parameters", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "table",
       TABLE_TYPE_STRING,
@@ -82,11 +84,12 @@ object metadata {
     AtlasTypeUtil.createRequiredAttrDef("type", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("nullable", new AtlasBooleanType),
     AtlasTypeUtil.createOptionalAttrDef("metadata", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("comment", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "table",
       TABLE_TYPE_STRING,
       AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
-      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "spark_schema")))
+      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "columns")))
 
   // ========= Table type =========
   val TABLE_TYPE = AtlasTypeUtil.createClassTypeDef(
@@ -101,7 +104,7 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "sd", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "spark_schema",
+      "columns",
       "array<spark_column>",
       AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDef("provider", new AtlasStringType),
@@ -111,12 +114,13 @@ object metadata {
       "bucketSpec", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef("owner", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("ownerType", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("createTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("createTime", new AtlasDateType),
     AtlasTypeUtil.createOptionalAttrDef(
-      "properties", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
+      "parameters", new AtlasMapType(new AtlasStringType, new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef("comment", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
-      "unsupportedFeatures", new AtlasArrayType(new AtlasStringType)))
+      "unsupportedFeatures", new AtlasArrayType(new AtlasStringType)),
+    AtlasTypeUtil.createOptionalAttrDef("viewOriginalText", new AtlasStringType))
 
   // ========= Process type =========
   val PROCESS_TYPE = AtlasTypeUtil.createClassTypeDef(

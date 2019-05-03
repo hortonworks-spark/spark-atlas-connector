@@ -190,10 +190,15 @@ object external {
   }
 
   // ================== Spark's Hive Catalog entities =====================
-  val HIVE_DB_TYPE_STRING = "spark_db"
-  val HIVE_STORAGEDESC_TYPE_STRING = "spark_storagedesc"
-  val HIVE_COLUMN_TYPE_STRING = "spark_column"
-  val HIVE_TABLE_TYPE_STRING = "spark_table"
+
+  // Note: given that we use Spark model types for Hive catalog entities (except HWC),
+  // Hive catalog entities should follow Spark model definitions.
+  // In Atlas, the attributes which are not in definition are ignored with WARN messages.
+
+  val HIVE_DB_TYPE_STRING = metadata.DB_TYPE_STRING
+  val HIVE_STORAGEDESC_TYPE_STRING = metadata.STORAGEDESC_TYPE_STRING
+  val HIVE_COLUMN_TYPE_STRING = metadata.COLUMN_TYPE_STRING
+  val HIVE_TABLE_TYPE_STRING = metadata.TABLE_TYPE_STRING
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
@@ -201,7 +206,6 @@ object external {
                        cluster: String,
                        owner: String): Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
-
     dbEntity.setAttribute("qualifiedName",
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
     dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
@@ -260,12 +264,12 @@ object external {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
     sdEntity.setAttribute("qualifiedName",
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
+    storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
+    storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    storageFormat.serde.foreach(sdEntity.setAttribute("name", _))
-    storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
     Seq(sdEntity)
   }
 
@@ -280,7 +284,7 @@ object external {
     s"${parts(0)}.${column.toLowerCase}@${parts(1)}"
   }
 
-  def hiveSchemaToEntities(
+  def hiveColumnToEntities(
       schema: StructType,
       cluster: String,
       db: String,
@@ -317,10 +321,10 @@ object external {
   }
 
   def hiveTableToEntities(
-      tblDefination: CatalogTable,
+      tblDefinition: CatalogTable,
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefination)
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
@@ -329,7 +333,7 @@ object external {
     val sdEntities = hiveStorageDescToEntities(
       tableDefinition.storage, cluster, db, table
       /* isTempTable = false  Spark doesn't support temp table */)
-    val schemaEntities = hiveSchemaToEntities(
+    val schemaEntities = hiveColumnToEntities(
       tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
@@ -339,23 +343,23 @@ object external {
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
-    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
-    tblEntity.setAttribute("db", dbEntities.head)
-    tblEntity.setAttribute("sd", sdEntities.head)
     tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
+    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
+    tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
+    tblEntity.setAttribute("sd", sdEntities.head)
     tblEntity.setAttribute("columns", schemaEntities.asJava)
 
     Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
   }
 
   def hiveTableToEntitiesForAlterTable(
-      tblDefination: CatalogTable,
+      tblDefinition: CatalogTable,
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
     val typesToPick = Seq(HIVE_TABLE_TYPE_STRING, HIVE_COLUMN_TYPE_STRING)
-    val entities = hiveTableToEntities(tblDefination, cluster, mockDbDefinition)
+    val entities = hiveTableToEntities(tblDefinition, cluster, mockDbDefinition)
 
     val dbEntity = entities.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
     val sdEntity = entities.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
