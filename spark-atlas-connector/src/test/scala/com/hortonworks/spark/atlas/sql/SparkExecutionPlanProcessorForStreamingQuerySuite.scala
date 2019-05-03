@@ -601,6 +601,9 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     import org.scalatest.time.SpanSugar._
     eventually(timeout(10.seconds)) {
       query.processAllAvailable()
+      val queryDetails = testHelperQueryListener.queryDetails ++
+        testHelperStreamingQueryListener.queryDetails
+      assert(queryDetails.nonEmpty)
     }
   }
 
