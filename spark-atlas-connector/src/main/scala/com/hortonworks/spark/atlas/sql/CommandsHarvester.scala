@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, CreateDataSourceTableCommand, CreateViewCommand, LoadDataCommand}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation, SaveIntoDataSourceCommand}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.kafka010.atlas.ExtractFromDataSource
@@ -119,6 +119,12 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
           inputTablesEntities, outputTableEntities, logMap)
         Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
       }
+    }
+  }
+
+  object CreateTableHarvester extends Harvester[CreateTableCommand] {
+    override def harvest(node: CreateTableCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+      tableToEntities(node.table)
     }
   }
 
@@ -722,6 +728,5 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val tableName = options.getOrElse("dbtable", "")
       external.rdbmsTableToEntity(url, tableName)
     }
-
   }
 }
