@@ -60,15 +60,11 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     val dbEntities = sparkAtlasEntityUtils.dbToEntities(dbDefinition)
 
     val dbEntity = dbEntities.head
-    val pathEntity = dbEntities.tail.head
     dbEntity.getTypeName should be (metadata.DB_TYPE_STRING)
     dbEntity.getAttribute("name") should be ("db1")
     dbEntity.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (
       AtlasConstants.DEFAULT_CLUSTER_NAME)
-    dbEntity.getAttribute("locationUri") should be (pathEntity)
-    pathEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      "hdfs:///test/db/db1")
-    pathEntity.getAttribute(AtlasClient.NAME) should be ("/test/db/db1")
+    dbEntity.getAttribute("location") should be ("hdfs:///test/db/db1")
     dbEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       sparkSession.sparkContext.applicationId + ".db1")
   }
@@ -80,7 +76,7 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
 
     val sdEntity = sdEntities.head
     sdEntity.getTypeName should be (metadata.STORAGEDESC_TYPE_STRING)
-    sdEntity.getAttribute("locationUri") should be (null)
+    sdEntity.getAttribute("location") should be (null)
     sdEntity.getAttribute("inputFormat") should be (null)
     sdEntity.getAttribute("outputFormat") should be (null)
     sdEntity.getAttribute("serde") should be (null)
@@ -131,7 +127,7 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     tableEntity.getAttribute("owner") should be (SparkUtils.currUser())
     tableEntity.getAttribute("ownerType") should be ("USER")
     tableEntity.getAttribute("sd") should be (sdEntity)
-    tableEntity.getAttribute("spark_schema") should be (schemaEntities.asJava)
+    tableEntity.getAttribute("columns") should be (schemaEntities.asJava)
   }
 }
 

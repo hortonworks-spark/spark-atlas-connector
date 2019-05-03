@@ -17,8 +17,9 @@
 
 package com.hortonworks.spark.atlas.types
 
+import java.util.Date
+
 import com.hortonworks.spark.atlas.AtlasUtils
-import com.hortonworks.spark.atlas.types.external.{HIVE_DB_TYPE_STRING, HIVE_STORAGEDESC_TYPE_STRING, HIVE_TABLE_TYPE_STRING}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -38,18 +39,17 @@ object internal extends Logging {
   def sparkDbToEntities(dbDefinition: CatalogDatabase, cluster: String, owner: String)
     : Seq[AtlasEntity] = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
-    val pathEntities = external.pathToEntities(dbDefinition.locationUri.toString)
 
     dbEntity.setAttribute(
       "qualifiedName", sparkDbUniqueAttribute(dbDefinition.name))
     dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     dbEntity.setAttribute("name", dbDefinition.name)
     dbEntity.setAttribute("description", dbDefinition.description)
-    dbEntity.setAttribute("locationUri", pathEntities.head)
-    dbEntity.setAttribute("properties", dbDefinition.properties.asJava)
+    dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
+    dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
     dbEntity.setAttribute("ownerType", "USER")
-    dbEntity +: pathEntities
+    Seq(dbEntity)
   }
 
   def sparkStorageFormatUniqueAttribute(db: String, table: String): String = {
@@ -61,25 +61,24 @@ object internal extends Logging {
       db: String,
       table: String): Seq[AtlasEntity] = {
     val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
-    val pathEntities = storageFormat.locationUri.map { u => external.pathToEntities(u.toString) }
 
     sdEntity.setAttribute("qualifiedName",
       sparkStorageFormatUniqueAttribute(db, table))
-    pathEntities.map(_.head).foreach { e => sdEntity.setAttribute("locationUri", e) }
+    storageFormat.locationUri.foreach(uri => sdEntity.setAttribute("location", uri.toString))
     storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
     storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
     storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
-    sdEntity.setAttribute("properties", storageFormat.properties.asJava)
+    sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
 
-    sdEntity +: pathEntities.getOrElse(Seq())
+    Seq(sdEntity)
   }
 
   def sparkColumnUniqueAttribute(db: String, table: String, col: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.col-$col"
   }
 
-  def sparkSchemaToEntities(schema: StructType, db: String, table: String): List[AtlasEntity] = {
+  def sparkColumnToEntities(schema: StructType, db: String, table: String): List[AtlasEntity] = {
     schema.map { struct =>
       val entity = new AtlasEntity(metadata.COLUMN_TYPE_STRING)
 
@@ -98,10 +97,10 @@ object internal extends Logging {
   }
 
   def sparkTableToEntities(
-      tblDefination: CatalogTable,
+      tblDefinition: CatalogTable,
       clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefination)
+    val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
@@ -110,7 +109,7 @@ object internal extends Logging {
     val sdEntities =
       sparkStorageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
     val schemaEntities =
-      sparkSchemaToEntities(tableDefinition.schema, db, tableDefinition.identifier.table)
+      sparkColumnToEntities(tableDefinition.schema, db, tableDefinition.identifier.table)
 
     val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
@@ -120,15 +119,15 @@ object internal extends Logging {
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("sd", sdEntities.head)
-    tblEntity.setAttribute("spark_schema", schemaEntities.asJava)
+    tblEntity.setAttribute("columns", schemaEntities.asJava)
     tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
       b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
-    tblEntity.setAttribute("createTime", tableDefinition.createTime)
-    tblEntity.setAttribute("properties", tableDefinition.properties.asJava)
+    tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
+    tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
@@ -136,11 +135,11 @@ object internal extends Logging {
   }
 
   def sparkTableToEntitiesForAlterTable(
-      tblDefination: CatalogTable,
+      tblDefinition: CatalogTable,
       clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
     val typesToPick = Seq(metadata.TABLE_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
-    val entities = sparkTableToEntities(tblDefination, clusterName, mockDbDefinition)
+    val entities = sparkTableToEntities(tblDefinition, clusterName, mockDbDefinition)
 
     val dbEntity = entities.filter(e => e.getTypeName.equals(metadata.DB_TYPE_STRING)).head
     val sdEntity = entities.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head

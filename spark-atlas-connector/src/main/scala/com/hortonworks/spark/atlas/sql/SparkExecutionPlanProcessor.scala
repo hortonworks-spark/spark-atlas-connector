@@ -150,13 +150,11 @@ class SparkExecutionPlanProcessor(
           .map {
             case e if dbTypes.contains(e.getTypeName) =>
               e.removeAttribute("columns")
-              e.removeAttribute("spark_schema")
               e
             case e if e.getTypeName.equals(metadata.PROCESS_TYPE_STRING) =>
               Seq(e.getAttribute("inputs"), e.getAttribute("outputs")).foreach { list =>
                 list.asInstanceOf[SeqWrapper[AtlasEntity]].underlying.foreach { o =>
                   o.removeAttribute("columns")
-                  o.removeAttribute("spark_schema")
                 }
               }
               e
