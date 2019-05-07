@@ -118,20 +118,13 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall(processor.dbType) == 1)
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
-      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) == 1)
-        assert("id" === atlasClient.processedEntity.getAttribute("name"))
-        assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-      }
+      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
     }
 
     SparkUtils.getExternalCatalog().renameTable("db1", "tbl1", "tbl2")
     processor.pushEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-        assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-        assert(atlasClient.updateEntityCall(processor.columnType(isHiveTbl)) == 1)
-      }
+      assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
       assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
     }
 
@@ -145,13 +138,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       // no creation on db type and storage format entities
       assert(atlasClient.createEntityCall(processor.dbType) == 1)
       assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
-      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
-        assert("col1" === atlasClient.processedEntity.getAttribute("name"))
-        assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 2)
-      }
     }
 
     processor.pushEvent(AlterTableEvent("db1", "tbl2", "dataSchema"))
@@ -159,11 +146,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       // no creation on db type and storage format entities
       assert(atlasClient.createEntityCall(processor.dbType) == 1)
       assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-
-      if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-        assert(atlasClient.createEntityCall(processor.columnType(isHiveTbl)) >= 2)
-        assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) >= 2)
-      }
+      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
     }
 
     // SAC-97: Spark delete the table before SAC receives the message.

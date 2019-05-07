@@ -27,7 +27,6 @@ object metadata {
   val METADATA_VERSION = "1.0"
   val DB_TYPE_STRING = "spark_db"
   val STORAGEDESC_TYPE_STRING = "spark_storagedesc"
-  val COLUMN_TYPE_STRING = "spark_column"
   val TABLE_TYPE_STRING = "spark_table"
   val PROCESS_TYPE_STRING = "spark_process"
   val ML_DIRECTORY_TYPE_STRING = "spark_ml_directory"
@@ -73,24 +72,6 @@ object metadata {
       AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
       ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "sd")))
 
-  // ========= Column type =========
-  val COLUMN_TYPE = AtlasTypeUtil.createClassTypeDef(
-    COLUMN_TYPE_STRING,
-    "",
-    METADATA_VERSION,
-    ImmutableSet.of("DataSet"),
-    AtlasTypeUtil.createUniqueRequiredAttrDef(
-      "qualifiedName", new AtlasStringType),
-    AtlasTypeUtil.createRequiredAttrDef("type", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("nullable", new AtlasBooleanType),
-    AtlasTypeUtil.createOptionalAttrDef("metadata", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("comment", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "table",
-      TABLE_TYPE_STRING,
-      AtlasConstraintDef.CONSTRAINT_TYPE_INVERSE_REF,
-      ImmutableMap.of(AtlasConstraintDef.CONSTRAINT_PARAM_ATTRIBUTE, "columns")))
-
   // ========= Table type =========
   val TABLE_TYPE = AtlasTypeUtil.createClassTypeDef(
     TABLE_TYPE_STRING,
@@ -103,10 +84,6 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDefWithConstraint(
       "sd", STORAGEDESC_TYPE_STRING, AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
-    AtlasTypeUtil.createOptionalAttrDefWithConstraint(
-      "columns",
-      "array<spark_column>",
-      AtlasConstraintDef.CONSTRAINT_TYPE_OWNED_REF, null),
     AtlasTypeUtil.createOptionalAttrDef("provider", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
       "partitionColumnNames", new AtlasArrayType(new AtlasStringType)),

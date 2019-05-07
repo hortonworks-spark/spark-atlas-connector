@@ -197,7 +197,6 @@ object external {
 
   val HIVE_DB_TYPE_STRING = metadata.DB_TYPE_STRING
   val HIVE_STORAGEDESC_TYPE_STRING = metadata.STORAGEDESC_TYPE_STRING
-  val HIVE_COLUMN_TYPE_STRING = metadata.COLUMN_TYPE_STRING
   val HIVE_TABLE_TYPE_STRING = metadata.TABLE_TYPE_STRING
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
@@ -273,35 +272,6 @@ object external {
     Seq(sdEntity)
   }
 
-  def hiveColumnUniqueAttribute(
-      cluster: String,
-      db: String,
-      table: String,
-      column: String,
-      isTempTable: Boolean = false): String = {
-    val tableName = hiveTableUniqueAttribute(cluster, db, table, isTempTable)
-    val parts = tableName.split("@")
-    s"${parts(0)}.${column.toLowerCase}@${parts(1)}"
-  }
-
-  def hiveColumnToEntities(
-      schema: StructType,
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): List[AtlasEntity] = {
-    schema.map { struct =>
-      val entity = new AtlasEntity(HIVE_COLUMN_TYPE_STRING)
-
-      entity.setAttribute("qualifiedName",
-        hiveColumnUniqueAttribute(cluster, db, table, struct.name, isTempTable))
-      entity.setAttribute("name", struct.name.toLowerCase)
-      entity.setAttribute("type", struct.dataType.typeName)
-      entity.setAttribute("comment", struct.getComment())
-      entity
-    }.toList
-  }
-
   def hiveTableUniqueAttribute(
       cluster: String,
       db: String,
@@ -333,8 +303,6 @@ object external {
     val sdEntities = hiveStorageDescToEntities(
       tableDefinition.storage, cluster, db, table
       /* isTempTable = false  Spark doesn't support temp table */)
-    val schemaEntities = hiveColumnToEntities(
-      tableDefinition.schema, cluster, db, table /* , isTempTable = false */)
 
     val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
     tblEntity.setAttribute("qualifiedName",
@@ -349,16 +317,14 @@ object external {
     tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("sd", sdEntities.head)
-    tblEntity.setAttribute("columns", schemaEntities.asJava)
 
-    Seq(tblEntity) ++ dbEntities ++ sdEntities ++ schemaEntities
+    Seq(tblEntity) ++ dbEntities ++ sdEntities
   }
 
   def hiveTableToEntitiesForAlterTable(
       tblDefinition: CatalogTable,
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val typesToPick = Seq(HIVE_TABLE_TYPE_STRING, HIVE_COLUMN_TYPE_STRING)
     val entities = hiveTableToEntities(tblDefinition, cluster, mockDbDefinition)
 
     val dbEntity = entities.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
@@ -369,7 +335,7 @@ object external {
     tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
     tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
-    entities.filter(e => typesToPick.contains(e.getTypeName))
+    Seq(tableEntity)
   }
 
   // ================== Hive entities (Hive Warehouse Connector) =====================

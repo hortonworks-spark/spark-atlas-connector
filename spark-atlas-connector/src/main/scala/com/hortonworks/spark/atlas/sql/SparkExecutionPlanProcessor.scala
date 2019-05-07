@@ -142,34 +142,9 @@ class SparkExecutionPlanProcessor(
         }
       }
 
-      if (conf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-        atlasClient.createEntities(entities)
-        logDebug(s"Created entities with columns")
-      } else {
-        // We should handle both cases. The type values will be changed later.
-        val dbTypes = Seq(external.HIVE_TABLE_TYPE_STRING, metadata.TABLE_TYPE_STRING)
-        val excludedTypes = Seq(external.HIVE_COLUMN_TYPE_STRING, metadata.COLUMN_TYPE_STRING)
-        val cleanedEntities = entities
-          .filterNot(e => excludedTypes.contains(e.getTypeName))
-          .map {
-            case e if dbTypes.contains(e.getTypeName) =>
-              e.removeAttribute("columns")
-              e
-            case e if e.getTypeName.equals(metadata.PROCESS_TYPE_STRING) =>
-              Seq(e.getAttribute("inputs"), e.getAttribute("outputs")).foreach { list =>
-                list.asInstanceOf[SeqWrapper[AtlasEntity]].underlying.foreach { o =>
-                  o.removeAttribute("columns")
-                }
-              }
-              e
-            case e => e
-          }
-
-        atlasClient.createEntities(cleanedEntities)
-        logDebug(s"Created entities without columns")
-      }
-    }
-
+      atlasClient.createEntities(entities)
+      logDebug(s"Created entities without columns")
+  }
 }
 
 object SparkExecutionPlanProcessor {
