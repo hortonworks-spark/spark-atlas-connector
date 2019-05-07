@@ -20,7 +20,6 @@ package com.hortonworks.spark.atlas.types
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.types.StructType
 import com.hortonworks.spark.atlas.AtlasClientConf
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import org.apache.spark.ml.Pipeline
@@ -80,38 +79,6 @@ trait AtlasEntityUtils {
       external.hiveStorageDescUniqueAttribute(clusterName, db, table)
     } else {
       internal.sparkStorageFormatUniqueAttribute(db, table)
-    }
-  }
-
-  def columnType(isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.HIVE_COLUMN_TYPE_STRING
-    } else {
-      metadata.COLUMN_TYPE_STRING
-    }
-  }
-
-  def schemaToEntities(
-      schema: StructType,
-      db: String,
-      table: String,
-      isHiveTable: Boolean): List[AtlasEntity] = {
-    if (isHiveTable) {
-      external.hiveColumnToEntities(schema, clusterName, db, table)
-    } else {
-      internal.sparkColumnToEntities(schema, db, table)
-    }
-  }
-
-  def columnUniqueAttribute(
-      db: String,
-      table: String,
-      col: String,
-      isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.hiveColumnUniqueAttribute(clusterName, db, table, col)
-    } else {
-      internal.sparkColumnUniqueAttribute(db, table, col)
     }
   }
 

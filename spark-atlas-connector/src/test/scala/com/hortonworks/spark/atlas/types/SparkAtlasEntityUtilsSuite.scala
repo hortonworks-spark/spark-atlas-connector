@@ -85,27 +85,6 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
       sparkSession.sparkContext.applicationId + ".db1.tbl1.storageFormat")
   }
 
-  test("convert schema to entity") {
-    val schema = new StructType()
-      .add("user", StringType, false)
-      .add("age", IntegerType, true)
-
-    val schemaEntities = sparkAtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1", false)
-    schemaEntities.length should be (2)
-
-    schemaEntities(0).getAttribute("name") should be ("user")
-    schemaEntities(0).getAttribute("type") should be ("string")
-    schemaEntities(0).getAttribute("nullable") should be (java.lang.Boolean.FALSE)
-    schemaEntities(0).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".db1.tbl1.col-user")
-
-    schemaEntities(1).getAttribute("name") should be ("age")
-    schemaEntities(1).getAttribute("type") should be ("integer")
-    schemaEntities(1).getAttribute("nullable") should be (java.lang.Boolean.TRUE)
-    schemaEntities(1).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      sparkSession.sparkContext.applicationId + ".db1.tbl1.col-age")
-  }
-
   test("convert table to entity") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
@@ -119,7 +98,6 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
 
     val dbEntity = tableEntities.find(_.getTypeName == metadata.DB_TYPE_STRING).get
     val sdEntity = tableEntities.find(_.getTypeName == metadata.STORAGEDESC_TYPE_STRING).get
-    val schemaEntities = tableEntities.filter(_.getTypeName == metadata.COLUMN_TYPE_STRING)
 
     tableEntity.getTypeName should be (metadata.TABLE_TYPE_STRING)
     tableEntity.getAttribute("name") should be ("tbl1")
@@ -127,7 +105,6 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     tableEntity.getAttribute("owner") should be (SparkUtils.currUser())
     tableEntity.getAttribute("ownerType") should be ("USER")
     tableEntity.getAttribute("sd") should be (sdEntity)
-    tableEntity.getAttribute("columns") should be (schemaEntities.asJava)
   }
 }
 

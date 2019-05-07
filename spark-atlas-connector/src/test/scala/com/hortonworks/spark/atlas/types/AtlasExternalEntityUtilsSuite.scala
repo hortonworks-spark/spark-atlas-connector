@@ -69,25 +69,6 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
       "db1.tbl1@primary_storage")
   }
 
-  test("convert schema to hive entity") {
-    val schema = new StructType()
-      .add("user", StringType, false)
-      .add("age", IntegerType, true)
-
-    val schemaEntities = hiveAtlasEntityUtils.schemaToEntities(schema, "db1", "tbl1", true)
-    schemaEntities.length should be (2)
-
-    schemaEntities(0).getAttribute("name") should be ("user")
-    schemaEntities(0).getAttribute("type") should be ("string")
-    schemaEntities(0).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      "db1.tbl1.user@primary")
-
-    schemaEntities(1).getAttribute("name") should be ("age")
-    schemaEntities(1).getAttribute("type") should be ("integer")
-    schemaEntities(1).getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      "db1.tbl1.age@primary")
-  }
-
   test("convert table to hive entity") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
@@ -101,13 +82,11 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
 
     val dbEntity = tableEntities.find(_.getTypeName == external.HIVE_DB_TYPE_STRING).get
     val sdEntity = tableEntities.find(_.getTypeName == external.HIVE_STORAGEDESC_TYPE_STRING).get
-    val schemaEntities = tableEntities.filter(_.getTypeName == external.HIVE_COLUMN_TYPE_STRING)
 
     tableEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     tableEntity.getAttribute("name") should be ("tbl1")
     tableEntity.getAttribute("db") should be (dbEntity)
     tableEntity.getAttribute("sd") should be (sdEntity)
-    tableEntity.getAttribute("columns") should be (schemaEntities.asJava)
     tableEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1@primary")
   }

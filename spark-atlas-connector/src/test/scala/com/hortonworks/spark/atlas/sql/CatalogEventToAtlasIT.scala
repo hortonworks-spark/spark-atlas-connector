@@ -105,14 +105,6 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
         processor.storageFormatUniqueAttribute("db2", "tbl1", isHiveTbl))
       sdEntity should not be (null)
 
-      schema.foreach { s =>
-        val colEntity = getEntity(processor.columnType(isHiveTbl),
-          processor.columnUniqueAttribute("db2", "tbl1", s.name, isHiveTbl))
-        colEntity should not be (null)
-        colEntity.getAttribute("name") should be (s.name)
-        colEntity.getAttribute("type") should be (s.dataType.typeName)
-      }
-
       val tblEntity = getEntity(processor.tableType(isHiveTbl),
         processor.tableUniqueAttribute("db2", "tbl1", isHiveTbl))
       tblEntity should not be (null)
@@ -127,14 +119,6 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
         processor.tableUniqueAttribute("db2", "tbl2", isHiveTbl))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be ("tbl2")
-
-      schema.foreach { s =>
-        val colEntity = getEntity(processor.columnType(isHiveTbl),
-          processor.columnUniqueAttribute("db2", "tbl2", s.name, isHiveTbl))
-        colEntity should not be (null)
-        colEntity.getAttribute("name") should be (s.name)
-        colEntity.getAttribute("type") should be (s.dataType.typeName)
-      }
 
       val sdEntity = getEntity(processor.storageFormatType(isHiveTbl),
         processor.storageFormatUniqueAttribute("db2", "tbl2", isHiveTbl))

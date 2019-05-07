@@ -86,7 +86,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
     assertTableEntity(tableEntity, outputTableName)
-    assertSchemaEntities(tableEntity, entities)
 
     // we're expecting one file system entities: input file
     val fsEntities = listAtlasEntitiesAsType(entities, external.FS_PATH_TYPE_STRING)
@@ -154,7 +153,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
     assertTableEntity(tableEntity, outputTableName)
-    assertSchemaEntities(tableEntity, entities)
 
     // database
     val databaseEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
@@ -207,7 +205,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
     assertTableEntity(tableEntity, inputTableName)
-    assertSchemaEntities(tableEntity, entities)
 
     // kafka topic
     val outputKafkaEntity = getOnlyOneEntity(entities, external.KAFKA_TOPIC_STRING)
@@ -308,7 +305,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
     assertTableEntity(tableEntity, outputTableName)
-    assertSchemaEntities(tableEntity, entities)
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
@@ -447,17 +443,6 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     // they should be covered in other UT
     val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
     assert(tableQualifiedName.endsWith(tableName))
-  }
-
-  private def assertSchemaEntities(tableEntity: AtlasEntity, entities: Seq[AtlasEntity]): Unit = {
-    if (atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_COLUMN_ENABLED).toBoolean) {
-      val columnEntities = listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING)
-      val columnEntitiesInTableAttribute = getSeqAtlasEntityAttribute(tableEntity, "columns")
-      assert(Set(columnEntities) === Set(columnEntitiesInTableAttribute))
-    } else {
-      assert(!tableEntity.getAttributes.containsKey("columns"))
-      assert(listAtlasEntitiesAsType(entities, metadata.COLUMN_TYPE_STRING).isEmpty)
-    }
   }
 
   private def assertDatabaseEntity(
