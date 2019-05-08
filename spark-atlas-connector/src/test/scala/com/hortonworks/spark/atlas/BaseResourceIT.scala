@@ -18,30 +18,35 @@
 package com.hortonworks.spark.atlas
 
 import scala.collection.JavaConverters._
-
 import com.sun.jersey.core.util.MultivaluedMapImpl
 import org.apache.atlas.AtlasClientV2
 import org.apache.atlas.model.SearchFilter
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.atlas.model.typedef.{AtlasStructDef, AtlasTypesDef}
 import org.apache.atlas.utils.AuthenticationUtil
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 
-abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll {
+abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
   protected var atlasUrls: Array[String] = null
   private var client: AtlasClientV2 = null
   protected val atlasClientConf = new AtlasClientConf
+  private var uniquePostfix: Long = 0
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-
 
     // set high timeouts so that tests do not fail due to read timeouts while you
     // are stepping through the code in a debugger
     atlasClientConf.set("atlas.client.readTimeoutMSecs", "100000000")
     atlasClientConf.set("atlas.client.connectTimeoutMSecs", "100000000")
     atlasUrls = Array(atlasClientConf.get(AtlasClientConf.ATLAS_REST_ENDPOINT))
+  }
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+
+    uniquePostfix = System.currentTimeMillis()
   }
 
   private def atlasClient(): AtlasClientV2 = {
@@ -92,7 +97,6 @@ abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll {
       .getEntity
   }
 
-
   protected def it(desc: String)(testFn: => Unit): Unit = {
     test(desc) {
       assume(
@@ -101,5 +105,9 @@ abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll {
           " is running")
       testFn
     }
+  }
+
+  protected def uniqueName(name: String): String = {
+    s"${name}_$uniquePostfix"
   }
 }
