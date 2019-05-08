@@ -149,14 +149,30 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
       assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
     }
 
-    // SAC-97: Spark delete the table before SAC receives the message.
-    val t = TableIdentifier("tbl2", Some("db1"))
-    sparkSession.sessionState.catalog.dropTable(t, ignoreIfNotExists = false, purge = true)
     processor.pushEvent(DropTablePreEvent("db1", "tbl2"))
     processor.pushEvent(DropTableEvent("db1", "tbl2"))
-    eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.deleteEntityCall(processor.tableType(isHiveTbl)) == 1)
-    }
+    // sleeping 2 secs - we have to do this to ensure there's no call on deletion, unfortunately...
+    Thread.sleep(2 * 1000)
+    // deletion request should not be added from this event
+    assert(atlasClient.deleteEntityCall.getOrElse(processor.tableType(isHiveTbl), 0) == 0)
+
+    val tableDefinition2 =
+      createTable("db1", "tbl3", new StructType().add("ID", LongType), CatalogStorageFormat.empty)
+    val isHiveTbl2 = processor.isHiveTable(tableDefinition2)
+    SparkUtils.getExternalCatalog().createTable(tableDefinition2, ignoreIfExists = true)
+    processor.pushEvent(CreateTableEvent("db1", "tbl3"))
+
+    // SAC-97: Spark delete the table before SAC receives the message.
+    // We had to change the expectation: we can't delete entity
+    // given we can't get any table information details in event.
+    val t2 = TableIdentifier("tbl3", Some("db1"))
+    sparkSession.sessionState.catalog.dropTable(t2, ignoreIfNotExists = false, purge = true)
+    processor.pushEvent(DropTablePreEvent("db1", "tbl3"))
+    processor.pushEvent(DropTableEvent("db1", "tbl3"))
+    // sleeping 2 secs - we have to do this to ensure there's no call on deletion, unfortunately...
+    Thread.sleep(2 * 1000)
+    // deletion request should not be added from this event
+    assert(atlasClient.deleteEntityCall.getOrElse(processor.tableType(isHiveTbl), 0) == 0)
   }
 }
 
