@@ -18,22 +18,22 @@
 package com.hortonworks.spark.atlas.sql
 
 import java.io.File
-import java.util
 
-import scala.collection.JavaConverters._
 import scala.util.Random
-
 import org.apache.atlas.AtlasClient
-import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveDirCommand
 import org.scalatest.{FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.types.external
 import com.hortonworks.spark.atlas.WithHiveSupport
+import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
 
 
-class InsertIntoHiveDirHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+class InsertIntoHiveDirHarvesterSuite
+  extends FunSuite
+  with Matchers
+  with WithHiveSupport
+  with ProcessEntityValidator {
 
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
@@ -54,27 +54,20 @@ class InsertIntoHiveDirHarvesterSuite extends FunSuite with Matchers with WithHi
     assert(node.cmd.isInstanceOf[InsertIntoHiveDirCommand])
     val cmd = node.cmd.asInstanceOf[InsertIntoHiveDirCommand]
 
-    val entities = CommandsHarvester.InsertIntoHiveDirHarvester.harvest(
-      cmd, qd)
-
-    val pEntity = entities.head
-
-    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
-    inputs.size() should be (1)
-
-    val inputTbl = inputs.asScala.head
-    inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    inputTbl.getAttribute("name") should be (sourceTblName)
-    inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$sourceTblName@primary")
-
-    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
-    outputs.size() should be (1)
-    val outputPath = outputs.asScala.head
-    outputPath.getTypeName should be (external.FS_PATH_TYPE_STRING)
-    val dir = new File("target/dir1").getAbsolutePath
-    outputPath.getAttribute("name") should be (dir.toLowerCase)
+    val entities = CommandsHarvester.InsertIntoHiveDirHarvester.harvest(cmd, qd)
+    validateProcessEntity(entities.head, _ => {}, inputs => {
+      inputs.size should be (1)
+      val inputTbl = inputs.head.entity
+      inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
+      inputTbl.getAttribute("name") should be (sourceTblName)
+      inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+        s"default.$sourceTblName@primary")
+    }, outputs => {
+      outputs.size should be (1)
+      val outputPath = outputs.head.entity
+      outputPath.getTypeName should be (external.FS_PATH_TYPE_STRING)
+      val dir = new File("target/dir1").getAbsolutePath
+      outputPath.getAttribute("name") should be (dir.toLowerCase)
+    })
   }
 }

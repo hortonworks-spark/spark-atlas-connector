@@ -19,7 +19,7 @@ package com.hortonworks.spark.atlas.types
 
 import java.util.Date
 
-import com.hortonworks.spark.atlas.AtlasUtils
+import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasUtils}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
@@ -35,8 +35,10 @@ object internal extends Logging {
 
   def sparkDbUniqueAttribute(db: String): String = SparkUtils.getUniqueQualifiedPrefix() + db
 
-  def sparkDbToEntities(dbDefinition: CatalogDatabase, cluster: String, owner: String)
-    : Seq[AtlasEntity] = {
+  def sparkDbToEntity(
+      dbDefinition: CatalogDatabase,
+      cluster: String,
+      owner: String): AtlasEntityWithDependencies = {
     val dbEntity = new AtlasEntity(metadata.DB_TYPE_STRING)
 
     dbEntity.setAttribute(
@@ -48,17 +50,18 @@ object internal extends Logging {
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
     dbEntity.setAttribute("ownerType", "USER")
-    Seq(dbEntity)
+
+    AtlasEntityWithDependencies(dbEntity)
   }
 
   def sparkStorageFormatUniqueAttribute(db: String, table: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table.storageFormat"
   }
 
-  def sparkStorageFormatToEntities(
+  def sparkStorageFormatToEntity(
       storageFormat: CatalogStorageFormat,
       db: String,
-      table: String): Seq[AtlasEntity] = {
+      table: String): AtlasEntityWithDependencies = {
     val sdEntity = new AtlasEntity(metadata.STORAGEDESC_TYPE_STRING)
 
     sdEntity.setAttribute("qualifiedName",
@@ -70,34 +73,32 @@ object internal extends Logging {
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
 
-    Seq(sdEntity)
+    AtlasEntityWithDependencies(sdEntity)
   }
 
   def sparkTableUniqueAttribute(db: String, table: String): String = {
     SparkUtils.getUniqueQualifiedPrefix() + s"$db.$table"
   }
 
-  def sparkTableToEntities(
+  def sparkTableToEntity(
       tblDefinition: CatalogTable,
       clusterName: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = sparkDbToEntities(dbDefinition, clusterName, tableDefinition.owner)
-    val sdEntities =
-      sparkStorageFormatToEntities(tableDefinition.storage, db, tableDefinition.identifier.table)
+    val dbEntity = sparkDbToEntity(dbDefinition, clusterName, tableDefinition.owner)
+    val sdEntity =
+      sparkStorageFormatToEntity(tableDefinition.storage, db, tableDefinition.identifier.table)
 
     val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
     tblEntity.setAttribute("qualifiedName",
       sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
-    tblEntity.setAttribute("db", dbEntities.head)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("sd", sdEntities.head)
     tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
@@ -109,24 +110,27 @@ object internal extends Logging {
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
-    Seq(tblEntity) ++ dbEntities ++ sdEntities
+    tblEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity.entity, useGuid = false))
+    tblEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity, useGuid = false))
+
+    new AtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
   }
 
-  def sparkTableToEntitiesForAlterTable(
+  def sparkTableToEntityForAlterTable(
       tblDefinition: CatalogTable,
       clusterName: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val entities = sparkTableToEntities(tblDefinition, clusterName, mockDbDefinition)
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
+    val tableEntity = sparkTableToEntity(tblDefinition, clusterName, mockDbDefinition)
+    val deps = tableEntity.dependencies.map(_.entity)
 
-    val dbEntity = entities.filter(e => e.getTypeName.equals(metadata.DB_TYPE_STRING)).head
-    val sdEntity = entities.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head
-    val tableEntity = entities.filter(e => e.getTypeName.equals(metadata.TABLE_TYPE_STRING)).head
+    val dbEntity = deps.filter(e => e.getTypeName.equals(metadata.DB_TYPE_STRING)).head
+    val sdEntity = deps.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head
 
     // override attribute with reference - Atlas should already have these entities
-    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+    tableEntity.entity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.entity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
-    Seq(tableEntity)
+    AtlasEntityWithDependencies(tableEntity.entity)
   }
 
   def sparkProcessUniqueAttribute(executionId: Long): String = {
@@ -139,7 +143,7 @@ object internal extends Logging {
       executionTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
-      query: Option[String] = None): AtlasEntity = {
+      query: Option[String] = None): AtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
     val name = query.getOrElse(sparkProcessUniqueAttribute(executionId))
 
@@ -154,43 +158,53 @@ object internal extends Logging {
     entity.setAttribute("executionTime", executionTime)
     entity.setAttribute("details", qe.toString())
     entity.setAttribute("sparkPlanDescription", qe.sparkPlan.toString())
-    entity
+
+    AtlasEntityWithDependencies(entity, inputs ++ outputs)
   }
 
   // ================ ML related entities ==================
-  def mlDirectoryToEntity(uri: String, directory: String): AtlasEntity = {
+  def mlDirectoryToEntity(uri: String, directory: String): AtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.ML_DIRECTORY_TYPE_STRING)
 
     entity.setAttribute("qualifiedName", s"$uri.$directory")
     entity.setAttribute("name", s"$uri.$directory")
     entity.setAttribute("uri", uri)
     entity.setAttribute("directory", directory)
-    entity
+
+    AtlasEntityWithDependencies(entity)
   }
 
-  def mlPipelineToEntity(pipeline_uid: String, directory: AtlasEntity): AtlasEntity = {
+  def mlPipelineToEntity(
+      pipeline_uid: String,
+      directory: AtlasEntityWithDependencies): AtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.ML_PIPELINE_TYPE_STRING)
 
     entity.setAttribute("qualifiedName", pipeline_uid)
     entity.setAttribute("name", pipeline_uid)
-    entity.setAttribute("directory", directory)
-    entity
+    entity.setAttribute("directory",
+      AtlasUtils.entityToReference(directory.entity, useGuid = false))
+
+    new AtlasEntityWithDependencies(entity, Seq(directory))
   }
 
-  def mlModelToEntity(model_uid: String, directory: AtlasEntity): AtlasEntity = {
+  def mlModelToEntity(
+      model_uid: String,
+      directory: AtlasEntityWithDependencies): AtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.ML_MODEL_TYPE_STRING)
 
     val uid = model_uid.replaceAll("pipeline", "model")
     entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
-    entity.setAttribute("directory", directory)
-    entity
+    entity.setAttribute("directory",
+      AtlasUtils.entityToReference(directory.entity, useGuid = false))
+
+    new AtlasEntityWithDependencies(entity, Seq(directory))
   }
 
   def etlProcessToEntity(
-      inputs: List[AtlasEntity],
-      outputs: List[AtlasEntity],
-      logMap: Map[String, String]): AtlasEntity = {
+      inputs: Seq[AtlasEntityWithDependencies],
+      outputs: Seq[AtlasEntityWithDependencies],
+      logMap: Map[String, String]): AtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
@@ -201,22 +215,32 @@ object internal extends Logging {
     entity.setAttribute("qualifiedName", appId)
     entity.setAttribute("name", appName)
     entity.setAttribute("currUser", SparkUtils.currUser())
-    entity.setAttribute("inputs", inputs.asJava)  // Dataset and Model entity
-    entity.setAttribute("outputs", outputs.asJava)  // Dataset entity
+
+    val inputObjIds = inputs.map { input =>
+      AtlasUtils.entityToReference(input.entity, useGuid = false)
+    }.asJava
+
+    val outputObjIds = outputs.map { output =>
+      AtlasUtils.entityToReference(output.entity, useGuid = false)
+    }.asJava
+
+    entity.setAttribute("inputs", inputObjIds)  // Dataset and Model entity
+    entity.setAttribute("outputs", outputObjIds)  // Dataset entity
     logMap.foreach { case (k, v) => entity.setAttribute(k, v)}
-    entity
+
+    new AtlasEntityWithDependencies(entity, inputs ++ outputs)
   }
 
   def updateMLProcessToEntity(
-      inputs: Seq[AtlasEntity],
-      outputs: Seq[AtlasEntity],
-      logMap: Map[String, String]): Seq[AtlasEntity] = {
+      inputs: Seq[AtlasEntityWithDependencies],
+      outputs: Seq[AtlasEntityWithDependencies],
+      logMap: Map[String, String]): AtlasEntityWithDependencies = {
 
     val model_uid = internal.cachedObjects("model_uid").asInstanceOf[String]
     val modelEntity = internal.cachedObjects(s"${model_uid}_modelEntity").
-      asInstanceOf[AtlasEntity]
+      asInstanceOf[AtlasEntityWithDependencies]
     val modelDirEntity = internal.cachedObjects(s"${model_uid}_modelDirEntity").
-      asInstanceOf[AtlasEntity]
+      asInstanceOf[AtlasEntityWithDependencies]
 
     if (internal.cachedObjects.contains("fit_process")) {
 
@@ -224,8 +248,7 @@ object internal extends Logging {
       val processEntity = internal.etlProcessToEntity(
         List(inputs.head), List(outputs.head), logMap)
 
-      (Seq(processEntity, modelDirEntity, modelEntity)
-        ++ inputs ++ outputs)
+      processEntity.dependenciesAdded(Seq(modelDirEntity, modelEntity))
     } else {
       val new_inputs = List(inputs.head, modelDirEntity, modelEntity)
 
@@ -233,8 +256,7 @@ object internal extends Logging {
       val processEntity = internal.etlProcessToEntity(
         new_inputs, List(outputs.head), logMap)
 
-      (Seq(processEntity, modelDirEntity, modelEntity)
-        ++ new_inputs ++ outputs)
+      processEntity.dependenciesAdded(Seq(modelDirEntity, modelEntity))
     }
   }
 }

@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas.sql.testhelper
 import java.io.File
 import java.util.Locale
 
-import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
+import com.hortonworks.spark.atlas.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
 import com.hortonworks.spark.atlas.types.external
 import org.apache.atlas.model.instance.AtlasEntity
 import org.scalatest.FunSuite

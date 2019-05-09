@@ -18,13 +18,11 @@
 package com.hortonworks.spark.atlas.types
 
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
-
-import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, TestUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
@@ -57,32 +55,34 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
 
   test("convert catalog db to entity") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
-    val dbEntities = sparkAtlasEntityUtils.dbToEntities(dbDefinition)
+    val dbEntity = sparkAtlasEntityUtils.dbToEntity(dbDefinition)
 
-    val dbEntity = dbEntities.head
-    dbEntity.getTypeName should be (metadata.DB_TYPE_STRING)
-    dbEntity.getAttribute("name") should be ("db1")
-    dbEntity.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (
+    dbEntity.entity.getTypeName should be (metadata.DB_TYPE_STRING)
+    dbEntity.entity.getAttribute("name") should be ("db1")
+    dbEntity.entity.getAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE) should be (
       AtlasConstants.DEFAULT_CLUSTER_NAME)
-    dbEntity.getAttribute("location") should be ("hdfs:///test/db/db1")
-    dbEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+    dbEntity.entity.getAttribute("location") should be ("hdfs:///test/db/db1")
+    dbEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       sparkSession.sparkContext.applicationId + ".db1")
+
+    dbEntity.dependencies.length should be (0)
   }
 
   test("convert catalog storage format to entity") {
     val storageFormat = createStorageFormat()
-    val sdEntities =
-      sparkAtlasEntityUtils.storageFormatToEntities(storageFormat, "db1", "tbl1", false)
+    val sdEntity =
+      sparkAtlasEntityUtils.storageFormatToEntity(storageFormat, "db1", "tbl1", false)
 
-    val sdEntity = sdEntities.head
-    sdEntity.getTypeName should be (metadata.STORAGEDESC_TYPE_STRING)
-    sdEntity.getAttribute("location") should be (null)
-    sdEntity.getAttribute("inputFormat") should be (null)
-    sdEntity.getAttribute("outputFormat") should be (null)
-    sdEntity.getAttribute("serde") should be (null)
-    sdEntity.getAttribute("compressed") should be (java.lang.Boolean.FALSE)
-    sdEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+    sdEntity.entity.getTypeName should be (metadata.STORAGEDESC_TYPE_STRING)
+    sdEntity.entity.getAttribute("location") should be (null)
+    sdEntity.entity.getAttribute("inputFormat") should be (null)
+    sdEntity.entity.getAttribute("outputFormat") should be (null)
+    sdEntity.entity.getAttribute("serde") should be (null)
+    sdEntity.entity.getAttribute("compressed") should be (java.lang.Boolean.FALSE)
+    sdEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       sparkSession.sparkContext.applicationId + ".db1.tbl1.storageFormat")
+
+    sdEntity.dependencies.length should be (0)
   }
 
   test("convert table to entity") {
@@ -93,18 +93,22 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", "tbl1", schema, sd)
 
-    val tableEntities = sparkAtlasEntityUtils.tableToEntities(tableDefinition, Some(dbDefinition))
-    val tableEntity = tableEntities.head
+    val tableEntity = sparkAtlasEntityUtils.tableToEntity(tableDefinition, Some(dbDefinition))
+    val tableDeps = tableEntity.dependencies.map(_.entity)
 
-    val dbEntity = tableEntities.find(_.getTypeName == metadata.DB_TYPE_STRING).get
-    val sdEntity = tableEntities.find(_.getTypeName == metadata.STORAGEDESC_TYPE_STRING).get
+    val dbEntity = tableDeps.find(_.getTypeName == metadata.DB_TYPE_STRING).get
+    val sdEntity = tableDeps.find(_.getTypeName == metadata.STORAGEDESC_TYPE_STRING).get
 
-    tableEntity.getTypeName should be (metadata.TABLE_TYPE_STRING)
-    tableEntity.getAttribute("name") should be ("tbl1")
-    tableEntity.getAttribute("db") should be (dbEntity)
-    tableEntity.getAttribute("owner") should be (SparkUtils.currUser())
-    tableEntity.getAttribute("ownerType") should be ("USER")
-    tableEntity.getAttribute("sd") should be (sdEntity)
+    tableEntity.entity.getTypeName should be (metadata.TABLE_TYPE_STRING)
+    tableEntity.entity.getAttribute("name") should be ("tbl1")
+    tableEntity.entity.getAttribute("owner") should be (SparkUtils.currUser())
+    tableEntity.entity.getAttribute("ownerType") should be ("USER")
+
+    tableEntity.entity.getAttribute("db") should be (
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+
+    tableEntity.entity.getAttribute("sd") should be (
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
   }
 }
 

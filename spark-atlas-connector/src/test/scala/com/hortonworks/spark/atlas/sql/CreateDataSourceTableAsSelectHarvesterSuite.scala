@@ -70,7 +70,8 @@ class CreateDataSourceTableAsSelectHarvesterSuite
 
     val qd = QueryDetail(df.queryExecution, 0L, 0L)
     val entities = CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(cmd, qd)
-    val maybeEntity = entities.find(e => e.getTypeName == "spark_table")
+    val processDeps = entities.head.dependencies
+    val maybeEntity = processDeps.find(e => e.entity.getTypeName == "spark_table").map(_.entity)
 
     assert(maybeEntity.isDefined, s"Output entity for table [$destTblName] was not found.")
     assert(maybeEntity.get.getAttribute("name") == destTblName)

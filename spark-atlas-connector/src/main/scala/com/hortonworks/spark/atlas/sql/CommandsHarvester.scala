@@ -21,7 +21,6 @@ import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods._
 
 import scala.util.Try
-import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -35,7 +34,7 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies}
 import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
@@ -46,85 +45,53 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   override val conf: AtlasClientConf = new AtlasClientConf
 
   object InsertIntoHiveTableHarvester extends Harvester[InsertIntoHiveTable] {
-    override def harvest(node: InsertIntoHiveTable, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: InsertIntoHiveTable,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // source tables entities
-      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
-      val outputEntities = tableToEntities(node.table)
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = List(outputEntities.head)
-      val logMap = getPlanInfo(qd)
+      val outputEntities = Seq(tableToEntity(node.table))
 
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-      } else {
-        // create process entity
-        // Atlas doesn't support cycle here.
-        val cleanedOutput = cleanOutput(inputTablesEntities, outputTableEntities)
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, cleanedOutput, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ cleanedOutput
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
-    override def harvest(node: InsertIntoHadoopFsRelationCommand, qd: QueryDetail)
-        : Seq[AtlasEntity] = {
+    override def harvest(
+        node: InsertIntoHadoopFsRelationCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // source tables/files entities
-      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table/file entity
-      val outputEntities = node.catalogTable.map(tableToEntities(_)).getOrElse(
-        external.pathToEntities(node.outputPath.toUri.toString))
-      val logMap = getPlanInfo(qd)
+      val outputEntities = Seq(node.catalogTable.map(tableToEntity(_)).getOrElse(
+        external.pathToEntity(node.outputPath.toUri.toString)))
 
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-      } else {
-        val cleanedOutput = cleanOutput(inputTablesEntities, outputEntities)
-        val processEntity = internal.etlProcessToEntity(
-          inputTablesEntities, cleanedOutput.headOption.toList, logMap)
-        Seq(processEntity) ++ inputsEntities.flatten ++ cleanedOutput
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object CreateHiveTableAsSelectHarvester extends Harvester[CreateHiveTableAsSelectCommand] {
     override def harvest(
         node: CreateHiveTableAsSelectCommand,
-        qd: QueryDetail): Seq[AtlasEntity] = {
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // source tables entities
-      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       // new table entity
-      val outputEntities = tableToEntities(node.tableDesc.copy(owner = SparkUtils.currUser()))
+      val outputEntities = Seq(tableToEntity(node.tableDesc.copy(owner = SparkUtils.currUser())))
 
-      // create process entity
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = List(outputEntities.head)
-      val logMap = getPlanInfo(qd)
-
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object CreateTableHarvester extends Harvester[CreateTableCommand] {
-    override def harvest(node: CreateTableCommand, qd: QueryDetail): Seq[AtlasEntity] = {
-      tableToEntities(node.table)
+    override def harvest(
+        node: CreateTableCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+      Seq(tableToEntity(node.table))
     }
   }
 
@@ -132,76 +99,48 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     extends Harvester[CreateDataSourceTableAsSelectCommand] {
     override def harvest(
         node: CreateDataSourceTableAsSelectCommand,
-        qd: QueryDetail): Seq[AtlasEntity] = {
-      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
-      val outputEntities = tableToEntities(node.table)
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = List(outputEntities.head)
-      val logMap = getPlanInfo(qd)
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val outputEntities = Seq(tableToEntity(node.table))
 
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object LoadDataHarvester extends Harvester[LoadDataCommand] {
-    override def harvest(node: LoadDataCommand, qd: QueryDetail): Seq[AtlasEntity] = {
-      val pathEntities = external.pathToEntities(node.path)
-      val outputEntities = prepareEntities(node.table)
-      val logMap = getPlanInfo(qd)
+    override def harvest(
+        node: LoadDataCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+      val inputEntities = Seq(external.pathToEntity(node.path))
+      val outputEntities = Seq(prepareEntity(node.table))
 
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(pathEntities, outputEntities, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          pathEntities.toList, List(outputEntities.head), logMap)
-        Seq(pEntity) ++ pathEntities ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object InsertIntoHiveDirHarvester extends Harvester[InsertIntoHiveDirCommand] {
-    override def harvest(node: InsertIntoHiveDirCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: InsertIntoHiveDirCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       if (node.storage.locationUri.isEmpty) {
         throw new IllegalStateException("Location URI is illegally empty")
       }
 
-      val destEntities = external.pathToEntities(node.storage.locationUri.get.toString)
-      val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
+      val inputEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
+      val outputEntities = Seq(external.pathToEntity(node.storage.locationUri.get.toString))
 
-      val inputs = inputsEntities.flatMap(_.headOption).toList
-      val logMap = getPlanInfo(qd)
-
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputs, destEntities, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputs, destEntities.toList, logMap)
-        Seq(pEntity) ++ destEntities ++ inputsEntities.flatten
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object CreateViewHarvester extends Harvester[CreateViewCommand] {
-    override def harvest(node: CreateViewCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: CreateViewCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // from table entities
       val child = node.child.asInstanceOf[Project].child
       val inputEntities = child match {
-        case r: UnresolvedRelation => prepareEntities(r.tableIdentifier)
+        case r: UnresolvedRelation => Seq(prepareEntity(r.tableIdentifier))
         case _: OneRowRelation => Seq.empty
         case n =>
           logWarn(s"Unknown leaf node: $n")
@@ -210,113 +149,62 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
       // new view entities
       val viewIdentifier = node.name
-      val outputEntities = prepareEntities(viewIdentifier)
+      val outputEntities = Seq(prepareEntity(viewIdentifier))
 
-      // create process entity
-      val inputTableEntity = inputEntities.headOption.toList
-      val outputTableEntity = List(outputEntities.head)
-      val logMap = getPlanInfo(qd)
-
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTableEntity, outputTableEntity, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTableEntity, outputTableEntity, logMap)
-        Seq(pEntity) ++ inputEntities ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object CreateDataSourceTableHarvester extends Harvester[CreateDataSourceTableCommand] {
-    override def harvest(node: CreateDataSourceTableCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: CreateDataSourceTableCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // only have table entities
-      tableToEntities(node.table)
+      Seq(tableToEntity(node.table))
     }
   }
 
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
-    override def harvest(node: SaveIntoDataSourceCommand, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: SaveIntoDataSourceCommand,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // source table entity
-      val inputsEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = node match {
-        case SHCEntities(shcEntities) => shcEntities
-        case JDBCEntities(jdbcEntities) => jdbcEntities
-        case KafkaEntities(kafkaEntities) => kafkaEntities.headOption.getOrElse(Seq.empty)
+        case SHCEntities(shcEntities) => Seq(shcEntities)
+        case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
+        case KafkaEntities(kafkaEntities) => kafkaEntities
         case e =>
           logWarn(s"Missing output entities: $e")
           Seq.empty
       }
 
-      // create process entity
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = outputEntities.toList
-      val logMap = getPlanInfo(qd)
-
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
-      } else {
-
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
   object WriteToDataSourceV2Harvester extends Harvester[WriteToDataSourceV2Exec] {
-    override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
-      val sinkEntities = node.writer match {
+    override def harvest(
+        node: WriteToDataSourceV2Exec,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+      val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
+
+      val outputEntities = node.writer match {
         case w: MicroBatchWriter if w.writer.isInstanceOf[SinkDataSourceWriter] =>
           discoverOutputEntities(w.writer.asInstanceOf[SinkDataSourceWriter].sinkProgress)
 
         case w => discoverOutputEntities(w)
       }
 
-      val sourceEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
-
-      makeProcessEntities(sourceEntities.flatten, sinkEntities, makeLogMap(qd))
-    }
-
-    private def makeLogMap(qd: QueryDetail): Map[String, String] = {
-      // create process entity
-      Map(
-        "executionId" -> qd.executionId.toString,
-        "remoteUser" -> SparkUtils.currSessionUser(qd.qe),
-        "executionTime" -> qd.executionTime.toString,
-        "details" -> qd.qe.toString(),
-        "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
-    }
-
-    private def makeProcessEntities(
-        inputsEntities: Seq[AtlasEntity],
-        outputEntities: Seq[AtlasEntity],
-        logMap: Map[String, String]): Seq[AtlasEntity] = {
-      val inputTablesEntities = inputsEntities.toList
-      val outputTableEntities = outputEntities.toList
-
-      // ml related cached object
-      if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputEntities, logMap)
-      } else {
-        // create process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-
-        Seq(pEntity) ++ inputsEntities ++ outputEntities
-      }
+      makeProcessEntities(inputEntities, outputEntities, qd)
     }
   }
 
-  def prepareEntities(tableIdentifier: TableIdentifier): Seq[AtlasEntity] = {
+  def prepareEntity(tableIdentifier: TableIdentifier): AtlasEntityWithDependencies = {
     val tableName = tableIdentifier.table
     val dbName = tableIdentifier.database.getOrElse("default")
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
-    tableToEntities(tableDef)
+    tableToEntity(tableDef)
   }
 
   private def getPlanInfo(qd: QueryDetail): Map[String, String] = {
@@ -327,21 +215,33 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       "sparkPlanDescription" -> qd.qe.sparkPlan.toString())
   }
 
+  private def makeProcessEntities(
+      inputsEntities: Seq[AtlasEntityWithDependencies],
+      outputEntities: Seq[AtlasEntityWithDependencies],
+      qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+    val logMap = getPlanInfo(qd)
+
+    val cleanedOutput = cleanOutput(inputsEntities, outputEntities)
+
+    // ml related cached object
+    if (internal.cachedObjects.contains("model_uid")) {
+      Seq(internal.updateMLProcessToEntity(inputsEntities, cleanedOutput, logMap))
+    } else {
+      // create process entity
+      Seq(internal.etlProcessToEntity(inputsEntities, cleanedOutput, logMap))
+    }
+  }
+
   private def discoverInputsEntities(
       plan: LogicalPlan,
-      executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
+      executedPlan: SparkPlan): Seq[AtlasEntityWithDependencies] = {
     val tChildren = plan.collectLeaves()
-    // NOTE: Each element in output should be Sequence which first element represents
-    // actual input entity (rest entities can be dependencies of input entity).
-    // If multiple inputs are extracted from one Relation, they should be provided like
-    // Seq(Seq(entities for first), Seq(entities for second), ...)
-
     tChildren.flatMap {
-      case r: HiveTableRelation => Seq(tableToEntities(r.tableMeta))
-      case v: View => Seq(tableToEntities(v.desc))
+      case r: HiveTableRelation => Seq(tableToEntity(r.tableMeta))
+      case v: View => Seq(tableToEntity(v.desc))
       case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
-        catalogTable.map(tbl => Seq(tableToEntities(tbl))).getOrElse(
-          fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntities(file))).toSeq)
+        catalogTable.map(tbl => Seq(tableToEntity(tbl))).getOrElse(
+          fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
@@ -354,24 +254,19 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   private def discoverInputsEntities(
       sparkPlan: SparkPlan,
-      executedPlan: SparkPlan): Seq[Seq[AtlasEntity]] = {
-    // NOTE: Each element in output should be Sequence which first element represents
-    // actual input entity (rest entities can be dependencies of input entity).
-    // If multiple inputs are extracted from one Relation, they should be provided like
-    // Seq(Seq(entities for first), Seq(entities for second), ...)
-
+      executedPlan: SparkPlan): Seq[AtlasEntityWithDependencies] = {
     sparkPlan.collectLeaves().flatMap {
       case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
         Try {
           val method = h.getClass.getMethod("relation")
           method.setAccessible(true)
           val relation = method.invoke(h).asInstanceOf[HiveTableRelation]
-          Seq(tableToEntities(relation.tableMeta))
+          Seq(tableToEntity(relation.tableMeta))
         }.getOrElse(Seq.empty)
 
       case f: FileSourceScanExec =>
-        f.tableIdentifier.map(tbl => Seq(prepareEntities(tbl))).getOrElse(
-          f.relation.location.inputFiles.flatMap(file => Seq(external.pathToEntities(file))).toSeq)
+        f.tableIdentifier.map(tbl => Seq(prepareEntity(tbl))).getOrElse(
+          f.relation.location.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)
       case SHCEntities(shcEntities) => Seq(shcEntities)
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
@@ -382,13 +277,13 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def discoverOutputEntities(sink: SinkProgress): Seq[AtlasEntity] = {
+  private def discoverOutputEntities(sink: SinkProgress): Seq[AtlasEntityWithDependencies] = {
     if (sink.description.contains("FileSink")) {
       val begin = sink.description.indexOf('[')
       val end = sink.description.indexOf(']')
       val path = sink.description.substring(begin + 1, end)
       logDebug(s"record the streaming query sink output path information $path")
-      external.pathToEntities(path)
+      Seq(external.pathToEntity(path))
     } else if (sink.description.contains("ConsoleSinkProvider")) {
       logInfo(s"do not track the console output as Atlas entity ${sink.description}")
       Seq.empty
@@ -397,10 +292,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def discoverOutputEntities(writer: DataSourceWriter): Seq[AtlasEntity] = {
+  private def discoverOutputEntities(writer: DataSourceWriter): Seq[AtlasEntityWithDependencies] = {
     writer match {
-      case HWCEntities(hwcEntities) => hwcEntities
-      case KafkaEntities(kafkaEntities) => kafkaEntities
+      case HWCEntities(hwcEntities) => Seq(hwcEntities)
+      case KafkaEntities(kafkaEntities) => Seq(kafkaEntities)
       case e =>
         logWarn(s"Missing unknown leaf node: $e")
         Seq.empty
@@ -408,26 +303,27 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   object HWCHarvester extends Harvester[WriteToDataSourceV2Exec] {
-    override def harvest(node: WriteToDataSourceV2Exec, qd: QueryDetail): Seq[AtlasEntity] = {
+    override def harvest(
+        node: WriteToDataSourceV2Exec,
+        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
       // Source table entity
       val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
 
       // Supports Spark HWC (destination table entity)
-      val outputEntities = HWCEntities.getHWCEntity(node.writer)
+      val outputEntities = HWCEntities.getHWCEntity(node.writer) match {
+        case Some(entity) => Seq(entity)
+        case None => Seq.empty
+      }
 
       // Creates process entity
-      val inputTablesEntities = inputsEntities.flatMap(_.headOption).toList
-      val outputTableEntities = outputEntities.toList
       val logMap = getPlanInfo(qd)
 
       // ML related cached object
       if (internal.cachedObjects.contains("model_uid")) {
-        internal.updateMLProcessToEntity(inputTablesEntities, outputTableEntities, logMap)
+        Seq(internal.updateMLProcessToEntity(inputsEntities, outputEntities, logMap))
       } else {
         // Creates process entity
-        val pEntity = internal.etlProcessToEntity(
-          inputTablesEntities, outputTableEntities, logMap)
-        Seq(pEntity) ++ inputsEntities.flatten ++ outputEntities
+        Seq(internal.etlProcessToEntity(inputsEntities, outputEntities, logMap))
       }
     }
   }
@@ -466,18 +362,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       val STREAM_WRITE =
         "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
 
-      def extractFromWriter(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = writer match {
+      def extractFromWriter(
+          writer: DataSourceWriter): Option[AtlasEntityWithDependencies] = writer match {
         case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) =>
-          Some(getHWCEntity(w))
+          if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) => getHWCEntity(w)
 
         case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) =>
-          Some(getHWCEntity(w))
+          if w.getClass.getCanonicalName.endsWith(BATCH_STREAM_WRITE) => getHWCEntity(w)
 
         case w: DataSourceWriter
-          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) =>
-          Some(getHWCEntity(w))
+          if w.getClass.getCanonicalName.endsWith(STREAM_WRITE) => getHWCEntity(w)
 
         case w: MicroBatchWriter
           if w.getClass.getMethod("writer").invoke(w)
@@ -489,25 +383,25 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
     }
 
-    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: LogicalPlan): Option[AtlasEntityWithDependencies] = plan match {
       case ds: DataSourceV2Relation
           if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
-        Some(getHWCEntity(ds.options))
+        getHWCEntity(ds.options)
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: SparkPlan): Option[AtlasEntityWithDependencies] = plan match {
       case ds: DataSourceV2ScanExec
           if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
-        Some(getHWCEntity(ds.options))
+        getHWCEntity(ds.options)
       case _ => None
     }
 
-    def unapply(writer: DataSourceWriter): Option[Seq[AtlasEntity]] = {
+    def unapply(writer: DataSourceWriter): Option[AtlasEntityWithDependencies] = {
       HWCSupport.extractFromWriter(writer)
     }
 
-    def getHWCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+    def getHWCEntity(options: Map[String, String]): Option[AtlasEntityWithDependencies] = {
       if (options.contains("query")) {
         val sql = options("query")
         // HACK ALERT! Currently SAC and HWC only know the query that has to be pushed down
@@ -520,27 +414,27 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             val db = r.tableIdentifier.database.getOrElse(
               options.getOrElse("default.db", "default"))
             val tableName = r.tableIdentifier.table
-            external.hwcTableToEntities(db, tableName, clusterName)
+            Seq(external.hwcTableToEntity(db, tableName, clusterName))
           case _: OneRowRelation => Seq.empty
           case n =>
             logWarn(s"Unknown leaf node: $n")
             Seq.empty
-        }
+        }.headOption
       } else {
         val (db, tableName) = getDbTableNames(
           options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
-        external.hwcTableToEntities(db, tableName, clusterName)
+        Some(external.hwcTableToEntity(db, tableName, clusterName))
       }
     }
 
-    def getHWCEntity(r: DataSourceWriter): Seq[AtlasEntity] = r match {
+    def getHWCEntity(r: DataSourceWriter): Option[AtlasEntityWithDependencies] = r match {
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_WRITE) =>
         val f = r.getClass.getDeclaredField("options")
         f.setAccessible(true)
         val options = f.get(r).asInstanceOf[java.util.Map[String, String]]
         val (db, tableName) = getDbTableNames(
           options.getOrDefault("default.db", "default"), options.getOrDefault("table", ""))
-        external.hwcTableToEntities(db, tableName, clusterName)
+        Some(external.hwcTableToEntity(db, tableName, clusterName))
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_STREAM_WRITE) =>
         val dbField = r.getClass.getDeclaredField("db")
@@ -551,7 +445,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         tableField.setAccessible(true)
         val table = tableField.get(r).asInstanceOf[String]
 
-        external.hwcTableToEntities(db, table, clusterName)
+        Some(external.hwcTableToEntity(db, table, clusterName))
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.STREAM_WRITE) =>
         val dbField = r.getClass.getDeclaredField("db")
@@ -562,14 +456,14 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         tableField.setAccessible(true)
         val table = tableField.get(r).asInstanceOf[String]
 
-        external.hwcTableToEntities(db, table, clusterName)
+        Some(external.hwcTableToEntity(db, table, clusterName))
 
       case w: MicroBatchWriter
           if w.getClass.getMethod("writer").invoke(w)
             .getClass.toString.endsWith(HWCSupport.STREAM_WRITE) =>
         getHWCEntity(w.getClass.getMethod("writer").invoke(w).asInstanceOf[DataSourceWriter])
 
-      case _ => Seq.empty
+      case _ => None
     }
 
     // This logic was ported from HWC's `SchemaUtil.getDbTableNames`
@@ -596,30 +490,30 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val RELATION_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.hbase.DefaultSource"
 
-    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: LogicalPlan): Option[AtlasEntityWithDependencies] = plan match {
       case l: LogicalRelation
         if l.relation.getClass.getCanonicalName.endsWith(SHC_RELATION_CLASS_NAME) =>
         val baseRelation = l.relation.asInstanceOf[BaseRelation]
         val options = baseRelation.getClass.getMethod("parameters")
           .invoke(baseRelation).asInstanceOf[Map[String, String]]
-        Some(getSHCEntity(options))
+        getSHCEntity(options)
       case sids: SaveIntoDataSourceCommand
         if sids.dataSource.getClass.getCanonicalName.endsWith(RELATION_PROVIDER_CLASS_NAME) =>
-        Some(getSHCEntity(sids.options))
+        getSHCEntity(sids.options)
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: SparkPlan): Option[AtlasEntityWithDependencies] = plan match {
       case r: RowDataSourceScanExec
         if r.relation.getClass.getCanonicalName.endsWith(SHC_RELATION_CLASS_NAME) =>
         val baseRelation = r.relation.asInstanceOf[BaseRelation]
         val options = baseRelation.getClass.getMethod("parameters")
           .invoke(baseRelation).asInstanceOf[Map[String, String]]
-        Some(getSHCEntity(options))
+        getSHCEntity(options)
       case _ => None
     }
 
-    def getSHCEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+    def getSHCEntity(options: Map[String, String]): Option[AtlasEntityWithDependencies] = {
       if (options.getOrElse("catalog", "") != "") {
         val catalog = options("catalog")
         val cluster = options.getOrElse(AtlasClientConf.CLUSTER_NAME.key, clusterName)
@@ -629,16 +523,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         // `asInstanceOf` is required. Otherwise, it fails compilation.
         val nSpace = tableMeta.getOrElse("namespace", "default").asInstanceOf[String]
         val tName = tableMeta("name").asInstanceOf[String]
-        external.hbaseTableToEntity(cluster, tName, nSpace)
+        Some(external.hbaseTableToEntity(cluster, tName, nSpace))
       } else {
-        Seq.empty[AtlasEntity]
+        None
       }
     }
   }
 
   object KafkaEntities {
     private def convertTopicsToEntities(
-        topics: Set[KafkaTopicInformation]): Option[Seq[Seq[AtlasEntity]]] = {
+        topics: Set[KafkaTopicInformation]): Option[Seq[AtlasEntityWithDependencies]] = {
       if (topics.nonEmpty) {
         Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
       } else {
@@ -646,17 +540,17 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
     }
 
-    def unapply(plan: LogicalPlan): Option[Seq[Seq[AtlasEntity]]] = plan match {
+    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntityWithDependencies]] = plan match {
       case l: LogicalRelation if ExtractFromDataSource.isKafkaRelation(l.relation) =>
         val topics = ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(l.relation)
         Some(topics.map(external.kafkaToEntity(clusterName, _)).toSeq)
       case sids: SaveIntoDataSourceCommand
         if ExtractFromDataSource.isKafkaRelationProvider(sids.dataSource) =>
-        Some(Seq(getKafkaEntity(sids.options)))
+        getKafkaEntity(sids.options).map(Seq(_))
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[Seq[Seq[AtlasEntity]]] = {
+    def unapply(plan: SparkPlan): Option[Seq[AtlasEntityWithDependencies]] = {
       val topics = plan match {
         case r: RowDataSourceScanExec =>
           ExtractFromDataSource.extractSourceTopicsFromKafkaRelation(r.relation)
@@ -670,7 +564,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       convertTopicsToEntities(topics)
     }
 
-    def unapply(r: DataSourceWriter): Option[Seq[AtlasEntity]] = r match {
+    def unapply(r: DataSourceWriter): Option[AtlasEntityWithDependencies] = r match {
       case writer: MicroBatchWriter => ExtractFromDataSource.extractTopic(writer) match {
         case Some(topicInformation) => Some(external.kafkaToEntity(clusterName, topicInformation))
         case _ => None
@@ -679,16 +573,16 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case _ => None
     }
 
-    def getKafkaEntity(options: Map[String, String]): Seq[AtlasEntity] = {
+    def getKafkaEntity(options: Map[String, String]): Option[AtlasEntityWithDependencies] = {
       options.get("topic") match {
         case Some(topic) =>
           val cluster = options.get("kafka." + AtlasClientConf.CLUSTER_NAME.key)
-          external.kafkaToEntity(clusterName, KafkaTopicInformation(topic, cluster))
+          Some(external.kafkaToEntity(clusterName, KafkaTopicInformation(topic, cluster)))
 
         case _ =>
           // output topic not specified: maybe each output row contains target topic name
           // giving up
-          Seq.empty[AtlasEntity]
+          None
       }
     }
   }
@@ -700,7 +594,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     private val JDBC_PROVIDER_CLASS_NAME =
       "org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider"
 
-    def unapply(plan: LogicalPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: LogicalPlan): Option[AtlasEntityWithDependencies] = plan match {
       case l: LogicalRelation
         if l.relation.getClass.getCanonicalName.endsWith(JDBC_RELATION_CLASS_NAME) =>
         val baseRelation = l.relation.asInstanceOf[BaseRelation]
@@ -713,7 +607,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[Seq[AtlasEntity]] = plan match {
+    def unapply(plan: SparkPlan): Option[AtlasEntityWithDependencies] = plan match {
       case r: RowDataSourceScanExec
         if r.relation.getClass.getCanonicalName.endsWith(JDBC_PROVIDER_CLASS_NAME) =>
         val baseRelation = r.relation.asInstanceOf[BaseRelation]
@@ -723,7 +617,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       case _ => None
     }
 
-    private def getJdbcEnity(options: Map[String, String]) : Seq[AtlasEntity] = {
+    private def getJdbcEnity(options: Map[String, String]): AtlasEntityWithDependencies = {
       val url = options.getOrElse("url", "")
       val tableName = options.getOrElse("dbtable", "")
       external.rdbmsTableToEntity(url, tableName)

@@ -19,13 +19,12 @@ package com.hortonworks.spark.atlas.sql
 
 import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.Files
-import java.util.Locale
 
 import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import com.hortonworks.spark.atlas.{AtlasClientConf, TestUtils}
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, TestUtils}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.kafka010.KafkaTestUtils
@@ -37,7 +36,7 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
   extends StreamTest
   with KafkaTopicEntityValidator
   with FsEntityValidator {
-  import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+  import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 
   val brokerProps: Map[String, Object] = Map[String, Object]()
   var testUtils: KafkaTestUtils = _
@@ -614,8 +613,18 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       fnAssertOutputs: Seq[AtlasEntity] => Unit): Unit = {
     val processEntity = getOnlyOneEntity(entities.toSeq, metadata.PROCESS_TYPE_STRING)
 
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
+    val inputIds = getSeqAtlasObjectIdAttribute(processEntity, "inputs")
+    val outputIds = getSeqAtlasObjectIdAttribute(processEntity, "outputs")
+
+    val inputs = entities.filter { entity =>
+      inputIds.contains(AtlasUtils.entityToReference(entity, useGuid = false))
+    }.toSeq
+    val outputs = entities.filter { entity =>
+      outputIds.contains(AtlasUtils.entityToReference(entity, useGuid = false))
+    }.toSeq
+
+    assert(inputIds.size == inputs.size)
+    assert(outputIds.size == outputs.size)
 
     fnAssertInputs(inputs)
     fnAssertOutputs(outputs)

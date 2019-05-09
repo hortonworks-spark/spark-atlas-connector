@@ -20,14 +20,17 @@ package com.hortonworks.spark.atlas.sql
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import java.sql.DriverManager
 
-import com.hortonworks.spark.atlas.{AtlasClientConf, WithHiveSupport}
-import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
+import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import org.apache.atlas.model.instance.AtlasEntity
 
-class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
-  with BeforeAndAfter with WithHiveSupport {
+class InsertIntoRdbmsHarvesterSuite
+  extends FunSuite
+  with Matchers
+  with BeforeAndAfter
+  with WithHiveSupport {
 
   val sinkTableName = "sink_table"
   val sourceTableName = "source_table"
@@ -77,24 +80,22 @@ class InsertIntoRdbmsHarversterSuite extends FunSuite with Matchers
     val tableEntities = listAtlasEntitiesAsType(entities, external.RDBMS_TABLE)
     assert(tableEntities.size === 2)
 
-    val inputEntity = getOneEntityOnAttribute(tableEntities, "name", sourceTableName)
-    val outputEntity = getOneEntityOnAttribute(tableEntities, "name", sinkTableName)
+    val inputEntity = getOnlyOneEntityOnAttribute(tableEntities, "name", sourceTableName)
+    val outputEntity = getOnlyOneEntityOnAttribute(tableEntities, "name", sinkTableName)
     assertTableEntity(inputEntity, sourceTableName)
     assertTableEntity(outputEntity, sinkTableName)
 
     // check for 'spark_process'
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
 
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
+    val inputs = getSeqAtlasObjectIdAttribute(processEntity, "inputs")
+    val outputs = getSeqAtlasObjectIdAttribute(processEntity, "outputs")
     assert(inputs.size === 1)
     assert(outputs.size === 1)
 
     // input/output in 'spark_process' should be same as outer entities
-    val input = getOnlyOneEntity(inputs, external.RDBMS_TABLE)
-    val output = getOnlyOneEntity(outputs, external.RDBMS_TABLE)
-    assert(input === inputEntity)
-    assert(output === outputEntity)
+    assert(AtlasUtils.entityToReference(inputEntity) === inputs.head)
+    assert(AtlasUtils.entityToReference(outputEntity) === outputs.head)
   }
 
   private def assertTableEntity(entity: AtlasEntity, tableName: String): Unit = {

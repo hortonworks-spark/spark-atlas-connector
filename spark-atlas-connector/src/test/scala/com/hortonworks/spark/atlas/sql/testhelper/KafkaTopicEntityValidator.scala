@@ -20,7 +20,7 @@ package com.hortonworks.spark.atlas.sql.testhelper
 import com.hortonworks.spark.atlas.TestUtils
 import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 import org.scalatest.FunSuite
-import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
+import com.hortonworks.spark.atlas.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
 import com.hortonworks.spark.atlas.types.external.KAFKA_TOPIC_STRING
 import org.apache.atlas.model.instance.AtlasEntity
 

@@ -27,9 +27,8 @@ import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.{FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.TestUtils._
-import com.hortonworks.spark.atlas.WithHiveSupport
+import com.hortonworks.spark.atlas.{AtlasUtils, WithHiveSupport}
 
 class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
 
@@ -41,9 +40,9 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
 
-    val tableEntities = internal.sparkTableToEntities(
+    val tableEntities = internal.sparkTableToEntity(
       tableDefinition, AtlasConstants.DEFAULT_CLUSTER_NAME, Some(dbDefinition))
-    val tableEntity = tableEntities.head
+    val tableEntity = tableEntities.entity
 
     tableEntity
   }
@@ -54,12 +53,14 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
     val modelDir = "tmp/model"
 
     val pipelineDirEntity = internal.mlDirectoryToEntity(uri, pipelineDir)
-    pipelineDirEntity.getAttribute("uri") should be (uri)
-    pipelineDirEntity.getAttribute("directory") should be (pipelineDir)
+    pipelineDirEntity.entity.getAttribute("uri") should be (uri)
+    pipelineDirEntity.entity.getAttribute("directory") should be (pipelineDir)
+    pipelineDirEntity.dependencies.length should be (0)
 
     val modelDirEntity = internal.mlDirectoryToEntity(uri, modelDir)
-    modelDirEntity.getAttribute("uri") should be (uri)
-    modelDirEntity.getAttribute("directory") should be (modelDir)
+    modelDirEntity.entity.getAttribute("uri") should be (uri)
+    modelDirEntity.entity.getAttribute("directory") should be (modelDir)
+    modelDirEntity.dependencies.length should be (0)
 
     val df = sparkSession.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
@@ -80,17 +81,23 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
     pipeline.write.overwrite().save(pipelineDir)
 
     val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
-    pipelineEntity.getTypeName should be (metadata.ML_PIPELINE_TYPE_STRING)
-    pipelineEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (pipeline.uid)
-    pipelineEntity.getAttribute("name") should be (pipeline.uid)
-    pipelineEntity.getAttribute("directory") should be (pipelineDirEntity)
+    pipelineEntity.entity.getTypeName should be (metadata.ML_PIPELINE_TYPE_STRING)
+    pipelineEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+      pipeline.uid)
+    pipelineEntity.entity.getAttribute("name") should be (pipeline.uid)
+    pipelineEntity.entity.getAttribute("directory") should be (
+      AtlasUtils.entityToReference(pipelineDirEntity.entity, useGuid = false))
+    pipelineEntity.dependencies should be (Seq(pipelineDirEntity))
 
     val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
     val modelUid = model.uid.replaceAll("pipeline", "model")
-    modelEntity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
-    modelEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
-    modelEntity.getAttribute("name") should be (modelUid)
-    modelEntity.getAttribute("directory") should be (modelDirEntity)
+    modelEntity.entity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
+    modelEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
+    modelEntity.entity.getAttribute("name") should be (modelUid)
+    modelEntity.entity.getAttribute("directory") should be (
+      AtlasUtils.entityToReference(modelDirEntity.entity, useGuid = false))
+
+    modelEntity.dependencies should be (Seq(modelDirEntity))
 
     FileUtils.deleteDirectory(new File("tmp"))
   }

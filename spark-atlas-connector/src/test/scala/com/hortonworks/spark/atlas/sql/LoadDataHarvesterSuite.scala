@@ -21,22 +21,24 @@ import java.io.{File, FileOutputStream, PrintWriter}
 import java.nio.file.Files
 import java.util
 
+import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
+
 import scala.util.Random
 import scala.collection.JavaConverters._
-
 import org.apache.atlas.AtlasClient
-import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql.SparkSession
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.command.{ExecutedCommandExec, LoadDataCommand}
 import org.scalatest.{FunSuite, Matchers}
-
 import com.hortonworks.spark.atlas.types.external
-import com.hortonworks.spark.atlas.WithHiveSupport
+import com.hortonworks.spark.atlas.{TestUtils, WithHiveSupport}
 
 
-class LoadDataHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+class LoadDataHarvesterSuite
+  extends FunSuite
+  with Matchers
+  with WithHiveSupport
+  with ProcessEntityValidator {
 
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
@@ -61,23 +63,18 @@ class LoadDataHarvesterSuite extends FunSuite with Matchers with WithHiveSupport
 
     val entities = CommandsHarvester.LoadDataHarvester.harvest(
       execNode.cmd.asInstanceOf[LoadDataCommand], qd)
-    val pEntity = entities.head
-
-    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasEntity]]
-    inputs.size() should be (1)
-
-    val inputPath = inputs.asScala.head
-    inputPath.getTypeName should be (external.FS_PATH_TYPE_STRING)
-    inputPath.getAttribute("name") should be (file.getAbsolutePath.toLowerCase)
-
-    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasEntity]]
-    outputs.size() should be (1)
-    val outputTable = outputs.asScala.head
-    outputTable.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    outputTable.getAttribute("name") should be (sourceTblName)
-    outputTable.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      s"default.$sourceTblName@primary")
+    validateProcessEntity(entities.head, _ => {}, inputs => {
+      inputs.size should be (1)
+      val inputEntity = inputs.head.entity
+      inputEntity.getTypeName should be (external.FS_PATH_TYPE_STRING)
+      inputEntity.getAttribute("name") should be (file.getAbsolutePath.toLowerCase)
+    }, outputs => {
+      outputs.size should be (1)
+      val outputEntity = outputs.head.entity
+      outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
+      outputEntity.getAttribute("name") should be (sourceTblName)
+      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+        s"default.$sourceTblName@primary")
+    })
   }
 }

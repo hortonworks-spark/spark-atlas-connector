@@ -21,12 +21,12 @@ import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.{Files, Path}
 import java.util.Locale
 
-import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor, KafkaTopicEntityValidator}
+import com.hortonworks.spark.atlas.sql.testhelper._
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.SparkUtils
-import com.hortonworks.spark.atlas.AtlasClientConf
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils}
 import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.io.FileUtils
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.StreamTest
 import org.json4s.JsonAST.{JArray, JInt, JObject}
@@ -34,8 +34,9 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 
 class SparkExecutionPlanProcessorForBatchQuerySuite
   extends StreamTest
+    with ProcessEntityValidator
   with KafkaTopicEntityValidator {
-  import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+  import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 
   val brokerProps: Map[String, Object] = Map[String, Object]()
   var kafkaTestUtils: KafkaTestUtils = _
@@ -112,28 +113,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assert(locationString.contains(outputTableName))
 
     // check for 'spark_process'
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
-
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-
-    val input = getOnlyOneEntity(inputs, external.FS_PATH_TYPE_STRING)
-    val output = getOnlyOneEntity(outputs, metadata.TABLE_TYPE_STRING)
-
-    // input/output in 'spark_process' should be same as outer entities
-    assert(input === inputFsEntity)
-    assert(output === tableEntity)
-
-    val expectedMap = Map(
-      "executionId" -> queryDetail.executionId.toString,
-      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
-      "details" -> queryDetail.qe.toString()
-    )
-
-    expectedMap.foreach { case (key, value) =>
-      assert(processEntity.getAttribute(key) === value)
-    }
+    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+      Seq(inputFsEntity), Seq(tableEntity))
   }
 
   test("Create external table against JSON files") {
@@ -214,28 +195,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assertEntitiesKafkaTopicType(expectedTopics, entities.toSet)
 
     // check for 'spark_process'
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
-
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-
-    val input = getOnlyOneEntity(inputs, metadata.TABLE_TYPE_STRING)
-    val output = getOnlyOneEntity(outputs, external.KAFKA_TOPIC_STRING)
-
-    // input/output in 'spark_process' should be same as outer entities
-    assert(input === tableEntity)
-    assert(output === outputKafkaEntity)
-
-    val expectedMap = Map(
-      "executionId" -> queryDetail.executionId.toString,
-      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
-      "details" -> queryDetail.qe.toString()
-    )
-
-    expectedMap.foreach { case (key, value) =>
-      assert(processEntity.getAttribute(key) === value)
-    }
+    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+      Seq(tableEntity), Seq(outputKafkaEntity))
   }
 
   test("Read Kafka topics with various options of subscription " +
@@ -307,27 +268,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assertTableEntity(tableEntity, outputTableName)
 
     // check for 'spark_process'
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
-
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-
-    val output = getOnlyOneEntity(outputs, metadata.TABLE_TYPE_STRING)
-
-    // input/output in 'spark_process' should be same as outer entities
-    assert(inputs.toSet === inputKafkaEntities.toSet)
-    assert(output === tableEntity)
-
-    val expectedMap = Map(
-      "executionId" -> queryDetail.executionId.toString,
-      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
-      "details" -> queryDetail.qe.toString()
-    )
-
-    expectedMap.foreach { case (key, value) =>
-      assert(processEntity.getAttribute(key) === value)
-    }
+    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+      inputKafkaEntities, Seq(tableEntity))
   }
 
   test("Read Kafka topics and save to Kafka via df.save()") {
@@ -377,25 +319,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     }
 
     // check for 'spark_process'
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
-
-    val inputs = getSeqAtlasEntityAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasEntityAttribute(processEntity, "outputs")
-
-    // input/output in 'spark_process' should be same as outer entities
-    assert(inputs.toSet === inputKafkaEntities.toSet)
-    assert(outputs === outputEntities)
-
-    val expectedMap = Map(
-      "executionId" -> queryDetail.executionId.toString,
-      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
-      "details" -> queryDetail.qe.toString()
-    )
-
-    expectedMap.foreach { case (key, value) =>
-      assert(processEntity.getAttribute(key) === value)
-    }
+    validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
+      inputKafkaEntities, outputEntities)
   }
 
   private def writeCSVtextToTempFile(csvContent: String) = {
@@ -448,8 +373,7 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
   private def assertDatabaseEntity(
       databaseEntity: AtlasEntity,
       tableEntity: AtlasEntity,
-      tableName: String)
-    : Unit = {
+      tableName: String): Unit = {
     val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
     // remove table name + '.' prior to table name
     val databaseQualifiedName = tableQualifiedName.substring(0,
@@ -458,12 +382,23 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
 
     // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
-    assert(databaseEntity === databaseEntityInTable)
+    val databaseEntityInTable = getAtlasObjectIdAttribute(tableEntity, "db")
+    assert(AtlasUtils.entityToReference(databaseEntity) === databaseEntityInTable)
 
     val databaseLocationString = getStringAttribute(databaseEntity, "location")
     assert(databaseLocationString != null && databaseLocationString.nonEmpty)
     assert(databaseLocationString.contains("spark-warehouse"))
+  }
+
+  private def assertStorageDefinitionEntity(
+      sdEntity: AtlasEntity,
+      tableEntity: AtlasEntity): Unit = {
+    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
+    val storageQualifiedName = tableQualifiedName + ".storageFormat"
+    assert(getStringAttribute(sdEntity, "qualifiedName") === storageQualifiedName)
+
+    val storageEntityInTableAttribute = getAtlasObjectIdAttribute(tableEntity, "sd")
+    assert(AtlasUtils.entityToReference(sdEntity) === storageEntityInTableAttribute)
   }
 
   private def assertInputFsEntity(fsEntity: AtlasEntity, sourcePath: String): Unit = {
@@ -473,19 +408,23 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
       "file://" + sourcePath)
   }
 
-  private def assertStorageDefinitionEntity(sdEntity: AtlasEntity, tableEntity: AtlasEntity)
-    : Unit = {
-    val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
-    val storageQualifiedName = tableQualifiedName + ".storageFormat"
-    assert(getStringAttribute(sdEntity, "qualifiedName") === storageQualifiedName)
-
-    val storageEntityInTableAttribute = getAtlasEntityAttribute(tableEntity, "sd")
-    assert(sdEntity === storageEntityInTableAttribute)
-  }
-
   private def assertPathsEquals(path1: String, path2: String): Unit = {
     // we are comparing paths with lower case, since we may want to run the test
     // from case-insensitive filesystem
     assert(path1.toLowerCase(Locale.ROOT) === path2.toLowerCase(Locale.ROOT))
   }
+
+  private def assertProcessEntity(entity: AtlasEntity, queryDetail: QueryDetail): Unit = {
+    val expectedMap = Map(
+      "executionId" -> queryDetail.executionId.toString,
+      "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
+      "executionTime" -> queryDetail.executionTime.toString,
+      "details" -> queryDetail.qe.toString()
+    )
+
+    expectedMap.foreach { case (key, value) =>
+      assert(entity.getAttribute(key) === value)
+    }
+  }
+
 }

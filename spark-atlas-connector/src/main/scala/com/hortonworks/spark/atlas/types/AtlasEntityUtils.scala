@@ -20,11 +20,11 @@ package com.hortonworks.spark.atlas.types
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import com.hortonworks.spark.atlas.AtlasClientConf
-import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies}
+import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 import org.apache.spark.ml.Pipeline
 
-trait AtlasEntityUtils {
+trait AtlasEntityUtils extends Logging {
 
   def conf: AtlasClientConf
 
@@ -38,11 +38,11 @@ trait AtlasEntityUtils {
     }
   }
 
-  def dbToEntities(dbDefinition: CatalogDatabase): Seq[AtlasEntity] = {
+  def dbToEntity(dbDefinition: CatalogDatabase): AtlasEntityWithDependencies = {
     if (SparkUtils.isHiveEnabled()) {
-      external.hiveDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
+      external.hiveDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
     } else {
-      internal.sparkDbToEntities(dbDefinition, clusterName, SparkUtils.currUser())
+      internal.sparkDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
     }
   }
 
@@ -62,15 +62,15 @@ trait AtlasEntityUtils {
     }
   }
 
-  def storageFormatToEntities(
+  def storageFormatToEntity(
       storageFormat: CatalogStorageFormat,
       db: String,
       table: String,
-      isHiveTable: Boolean): Seq[AtlasEntity] = {
+      isHiveTable: Boolean): AtlasEntityWithDependencies = {
     if (isHiveTable) {
-      external.hiveStorageDescToEntities(storageFormat, clusterName, db, table)
+      external.hiveStorageDescToEntity(storageFormat, clusterName, db, table)
     } else {
-      internal.sparkStorageFormatToEntities(storageFormat, db, table)
+      internal.sparkStorageFormatToEntity(storageFormat, db, table)
     }
   }
 
@@ -93,23 +93,23 @@ trait AtlasEntityUtils {
   def isHiveTable(tableDefinition: CatalogTable): Boolean =
     tableDefinition.provider.contains("hive")
 
-  def tableToEntities(
+  def tableToEntity(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     if (isHiveTable(tableDefinition)) {
-      external.hiveTableToEntities(tableDefinition, clusterName, mockDbDefinition)
+      external.hiveTableToEntity(tableDefinition, clusterName, mockDbDefinition)
     } else {
-      internal.sparkTableToEntities(tableDefinition, clusterName, mockDbDefinition)
+      internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
     }
   }
 
-  def tableToEntitiesForAlterTable(
+  def tableToEntityForAlterTable(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     if (isHiveTable(tableDefinition)) {
       external.hiveTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
     } else {
-      internal.sparkTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
+      internal.sparkTableToEntityForAlterTable(tableDefinition, clusterName, mockDbDefinition)
     }
   }
 
@@ -133,17 +133,23 @@ trait AtlasEntityUtils {
       executionTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
-      query: Option[String] = None): AtlasEntity =
+      query: Option[String] = None): AtlasEntityWithDependencies =
     internal.sparkProcessToEntity(qe, executionId, executionTime, inputs, outputs, query)
 
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)
 
   // If there is cycle, return empty output entity list
-  def cleanOutput(inputs: Seq[AtlasEntity], outputs: Seq[AtlasEntity]): List[AtlasEntity] = {
-    val qualifiedNames = inputs.map(e => e.getAttribute("qualifiedName"))
-    val isCycle = outputs.exists(x => qualifiedNames.contains(x.getAttribute("qualifiedName")))
+  def cleanOutput(
+      inputs: Seq[AtlasEntityWithDependencies],
+      outputs: Seq[AtlasEntityWithDependencies]): List[AtlasEntityWithDependencies] = {
+    val qualifiedNames = inputs.map(e => e.entity.getAttribute("qualifiedName"))
+    val isCycle = outputs.exists { x =>
+      qualifiedNames.contains(x.entity.getAttribute("qualifiedName"))
+    }
     if (isCycle) {
+      logWarn("Detected cycle - same entity observed to both input and output. " +
+        "Discarding output entities as Atlas doesn't support cycle.")
       List.empty
     } else {
       outputs.toList
