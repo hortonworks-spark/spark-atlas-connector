@@ -28,4 +28,4 @@ notifications:
   email: false
 
 install:
-  - mvn -q clean checkstyle:check scalastyle:check package
+  - mvn -q clean checkstyle:check scalastyle:check package -DskipTests
