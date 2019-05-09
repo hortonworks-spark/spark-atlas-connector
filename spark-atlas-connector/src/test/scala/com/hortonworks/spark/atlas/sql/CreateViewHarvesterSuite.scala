@@ -17,18 +17,19 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import java.util
-
-import scala.collection.JavaConverters._
 import scala.util.Random
 import org.apache.atlas.AtlasClient
-import org.apache.atlas.model.instance.AtlasObjectId
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExecutedCommandExec}
 import org.scalatest.{FunSuite, Matchers}
 import com.hortonworks.spark.atlas.types.external
 import com.hortonworks.spark.atlas._
+import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
 
-class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSupport {
+class CreateViewHarvesterSuite
+  extends FunSuite
+  with Matchers
+  with WithHiveSupport
+  with ProcessEntityValidator {
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val destinationViewName = "destination_" + Random.nextInt(100000)
   private val destinationViewName2 = "destination_" + Random.nextInt(100000)
@@ -51,30 +52,20 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val cmd = node.cmd.asInstanceOf[CreateViewCommand]
 
     val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
-    val pEntity = entities.head.entity
-
-    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
-    inputs.size() should be (1)
-
-    val inputTbl = inputs.asScala.head
-    val inputEntity = TestUtils.findEntity(entities.head.dependencies, inputTbl).get
-
-    inputEntity.entity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    inputEntity.entity.getAttribute("name") should be (sourceTblName)
-    inputEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should be (
-      s"default.$sourceTblName@primary")
-
-    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
-    outputs.size() should be (1)
-
-    val outputView = outputs.asScala.head
-    val outputEntity = TestUtils.findEntity(entities.head.dependencies, outputView).get
-
-    outputEntity.entity.getAttribute("name") should be (destinationViewName)
-    outputEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
-      endWith (s"default.$destinationViewName")
+    validateProcessEntity(entities.head, _ => {}, inputs => {
+      inputs.size should be (1)
+      val inputEntity = inputs.head.entity
+      inputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
+      inputEntity.getAttribute("name") should be (sourceTblName)
+      inputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should be (
+        s"default.$sourceTblName@primary")
+    }, outputs => {
+      outputs.size should be (1)
+      val outputEntity = outputs.head.entity
+      outputEntity.getAttribute("name") should be (destinationViewName)
+      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
+        endWith (s"default.$destinationViewName")
+    })
   }
 
   test("CREATE VIEW without source") {
@@ -88,20 +79,14 @@ class CreateViewHarvesterSuite extends FunSuite with Matchers with WithHiveSuppo
     val cmd = node.cmd.asInstanceOf[CreateViewCommand]
 
     val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
-    val pEntity = entities.head.entity
-    assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
-    assert(pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]].size() == 0)
-
-    assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
-    val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
-    outputs.size() should be (1)
-
-    val outputView = outputs.asScala.head
-    val outputEntity = TestUtils.findEntity(entities.head.dependencies, outputView).get
-
-    outputView.getUniqueAttributes.get(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
-      endWith (s"default.$destinationViewName2")
-
-    outputEntity.entity.getAttribute("name") should be (destinationViewName2)
+    validateProcessEntity(entities.head, _ => {}, inputs => {
+      inputs.size should be (0)
+    }, outputs => {
+      outputs.size should be (1)
+      val outputEntity = outputs.head.entity
+      AtlasEntityReadHelper.getQualifiedName(outputEntity) should endWith (
+        s"default.$destinationViewName2")
+      outputEntity.getAttribute("name") should be (destinationViewName2)
+    })
   }
 }

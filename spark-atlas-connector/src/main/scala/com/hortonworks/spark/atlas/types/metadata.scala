@@ -17,14 +17,13 @@
 
 package com.hortonworks.spark.atlas.types
 
-import com.google.common.collect.{ImmutableMap, ImmutableSet}
+import com.google.common.collect.ImmutableSet
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.`type`.AtlasBuiltInTypes.{AtlasBooleanType, AtlasDateType, AtlasLongType, AtlasStringType}
 import org.apache.atlas.`type`.{AtlasArrayType, AtlasMapType, AtlasTypeUtil}
 import org.apache.atlas.model.typedef.AtlasRelationshipDef.{PropagateTags, RelationshipCategory}
 import org.apache.atlas.model.typedef.AtlasRelationshipEndDef
 import org.apache.atlas.model.typedef.AtlasStructDef.AtlasAttributeDef.Cardinality
-import org.apache.atlas.model.typedef.AtlasStructDef.AtlasConstraintDef
 
 object metadata {
   val METADATA_VERSION = "1.0"

@@ -17,8 +17,6 @@
 
 package com.hortonworks.spark.atlas.ml
 
-import org.apache.atlas.model.instance.AtlasEntity
-
 import org.apache.spark.ml._
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.Dataset
