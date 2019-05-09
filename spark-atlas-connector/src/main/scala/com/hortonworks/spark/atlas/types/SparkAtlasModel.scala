@@ -19,12 +19,10 @@ package com.hortonworks.spark.atlas.types
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import com.sun.jersey.core.util.MultivaluedMapImpl
-import org.apache.atlas.model.typedef.{AtlasClassificationDef, AtlasEntityDef, AtlasEnumDef, AtlasStructDef}
+import org.apache.atlas.model.typedef._
 import org.apache.atlas.`type`.AtlasTypeUtil
 import org.apache.atlas.model.SearchFilter
-
 import com.hortonworks.spark.atlas.{AtlasClient, AtlasClientConf, RestAtlasClient}
 import com.hortonworks.spark.atlas.utils.Logging
 
@@ -36,16 +34,22 @@ object SparkAtlasModel extends Logging {
       classificationDefsToUpdate: List[AtlasClassificationDef],
       classificationDefsToCreate: List[AtlasClassificationDef],
       entityDefsToUpdate: List[AtlasEntityDef],
-      entityDefsToCreate: List[AtlasEntityDef])
+      entityDefsToCreate: List[AtlasEntityDef],
+      relationshipDefsToUpdate: List[AtlasRelationshipDef],
+      relationshipDefsToCreate: List[AtlasRelationshipDef])
 
   val allTypes = Map(
     DB_TYPE_STRING -> DB_TYPE,
     STORAGEDESC_TYPE_STRING -> STORAGEDESC_TYPE,
     TABLE_TYPE_STRING -> TABLE_TYPE,
     PROCESS_TYPE_STRING -> PROCESS_TYPE,
+    TABLE_DB_RELATIONSHIP_TYPE_STRING -> TABLE_DB_RELATIONSHIP_TYPE,
+    TABLE_STORAGEDESC_RELATIONSHIP_TYPE_STRING -> TABLE_STORAGEDESC_RELATIONSHIP_TYPE,
     ML_DIRECTORY_TYPE_STRING -> ML_DIRECTORY_TYPE,
     ML_PIPELINE_TYPE_STRING -> ML_PIPELINE_TYPE,
     ML_MODEL_TYPE_STRING -> ML_MODEL_TYPE,
+    ML_PIPELINE_DIRECTORY_RELATIONSHIP_TYPE_STRING -> ML_PIPELINE_DIRECTORY_RELATIONSHIP_TYPE,
+    ML_MODEL_DIRECTORY_RELATIONSHIP_TYPE_STRING -> ML_MODEL_DIRECTORY_RELATIONSHIP_TYPE,
     DIMENSION_CLASSIFICATION -> DIMENSION_CLASSIFICATION_DEF,
     FACT_CLASSIFICATION -> FACT_CLASSIFICATION_DEF,
     FS_CLASSIFICATION -> FS_CLASSIFICATION_DEF,
@@ -88,6 +92,8 @@ object SparkAtlasModel extends Logging {
         groupedTypes.classificationDefsToUpdate.asJava,
         groupedTypes.entityDefsToUpdate.asJava)
 
+      typeDefs.setRelationshipDefs(groupedTypes.relationshipDefsToUpdate.asJava)
+
       logInfo(s"Update all the types def: $typeDefs")
       atlasClient.updateAtlasTypeDefs(typeDefs)
     }
@@ -98,6 +104,8 @@ object SparkAtlasModel extends Logging {
         List.empty[AtlasStructDef].asJava,
         groupedTypes.classificationDefsToCreate.asJava,
         groupedTypes.entityDefsToCreate.asJava)
+
+      typeDefs.setRelationshipDefs(groupedTypes.relationshipDefsToCreate.asJava)
 
       logInfo(s"Create all the types def: $typeDefs")
       atlasClient.createAtlasTypeDefs(typeDefs)
@@ -111,6 +119,8 @@ object SparkAtlasModel extends Logging {
     val classificationDefsToCreate = new ArrayBuffer[AtlasClassificationDef]
     val entityDefsToUpdate = new ArrayBuffer[AtlasEntityDef]
     val entityDefsToCreate = new ArrayBuffer[AtlasEntityDef]
+    val relationshipDefsToUpdate = new ArrayBuffer[AtlasRelationshipDef]
+    val relationshipDefsToCreate = new ArrayBuffer[AtlasRelationshipDef]
 
     allTypes.foreach { case (tpeName, tpeDef) =>
       searchParams.clear()
@@ -141,6 +151,19 @@ object SparkAtlasModel extends Logging {
               "defined one")
             entityDefsToUpdate.append(e)
           }
+
+        case e: AtlasRelationshipDef =>
+          val relationshipDefs = searchDefs.getRelationshipDefs.asScala
+            .filter(_.getName == tpeName)
+          if (relationshipDefs.isEmpty) {
+            logDebug(s"Relationship type: $tpeName is not found in Atlas database")
+            relationshipDefsToCreate.append(e)
+          } else if (relationshipDefs.forall(_.getTypeVersion.toDouble <
+            METADATA_VERSION.toDouble)) {
+            logDebug(s"Relationship type: $tpeName found in Atlas database is older than the " +
+              "defined one")
+            relationshipDefsToUpdate.append(e)
+          }
       }
     }
 
@@ -148,6 +171,8 @@ object SparkAtlasModel extends Logging {
       classificationDefsToUpdate.toList,
       classificationDefsToCreate.toList,
       entityDefsToUpdate.toList,
-      entityDefsToCreate.toList)
+      entityDefsToCreate.toList,
+      relationshipDefsToUpdate.toList,
+      relationshipDefsToCreate.toList)
   }
 }

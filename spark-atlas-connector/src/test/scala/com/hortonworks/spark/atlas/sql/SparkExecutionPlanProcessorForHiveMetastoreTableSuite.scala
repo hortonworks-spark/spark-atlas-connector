@@ -110,7 +110,7 @@ class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
     assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
 
     // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasObjectIdAttribute(tableEntity, "db")
+    val databaseEntityInTable = getAtlasObjectIdRelationshipAttribute(tableEntity, "db")
     assert(AtlasUtils.entityToReference(databaseEntity) === databaseEntityInTable)
 
     val databaseLocationString = getStringAttribute(databaseEntity, "location")
@@ -125,7 +125,7 @@ class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
     val storageQualifiedName = tableQualifiedName + "_storage"
     assert(getStringAttribute(sdEntity, "qualifiedName") === storageQualifiedName)
 
-    val storageEntityInTableAttribute = getAtlasObjectIdAttribute(tableEntity, "sd")
+    val storageEntityInTableAttribute = getAtlasObjectIdRelationshipAttribute(tableEntity, "sd")
     assert(AtlasUtils.entityToReference(sdEntity) === storageEntityInTableAttribute)
   }
 }

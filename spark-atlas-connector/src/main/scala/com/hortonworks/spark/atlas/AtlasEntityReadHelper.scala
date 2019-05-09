@@ -69,6 +69,12 @@ object AtlasEntityReadHelper {
     entity.getAttribute(attrName).asInstanceOf[AtlasObjectId]
   }
 
+  def getAtlasObjectIdRelationshipAttribute(
+      entity: AtlasEntity,
+      attrName: String): AtlasObjectId = {
+    entity.getRelationshipAttribute(attrName).asInstanceOf[AtlasObjectId]
+  }
+
   def getSeqAtlasEntityAttribute(
       entity: AtlasEntity,
       attrName: String): Seq[AtlasEntity] = {
@@ -79,5 +85,11 @@ object AtlasEntityReadHelper {
       entity: AtlasEntity,
       attrName: String): Seq[AtlasObjectId] = {
     entity.getAttribute(attrName).asInstanceOf[SeqWrapper[AtlasObjectId]].underlying
+  }
+
+  def getSeqAtlasObjectIdRelationshipAttribute(
+      entity: AtlasEntity,
+      attrName: String): Seq[AtlasObjectId] = {
+    entity.getRelationshipAttribute(attrName).asInstanceOf[SeqWrapper[AtlasObjectId]].underlying
   }
 }

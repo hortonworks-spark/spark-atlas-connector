@@ -72,6 +72,8 @@ abstract class BaseResourceIT extends FunSuite with BeforeAndAfterAll with Befor
       typesDef.getClassificationDefs.get(0)
     } else if (!typesDef.getEntityDefs.isEmpty) {
       typesDef.getEntityDefs.get(0)
+    } else if (!typesDef.getRelationshipDefs.isEmpty) {
+      typesDef.getRelationshipDefs.get(0)
     } else {
       null
     }

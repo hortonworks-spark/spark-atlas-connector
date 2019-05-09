@@ -104,10 +104,10 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     tableEntity.entity.getAttribute("owner") should be (SparkUtils.currUser())
     tableEntity.entity.getAttribute("ownerType") should be ("USER")
 
-    tableEntity.entity.getAttribute("db") should be (
+    tableEntity.entity.getRelationshipAttribute("db") should be (
       AtlasUtils.entityToReference(dbEntity, useGuid = false))
 
-    tableEntity.entity.getAttribute("sd") should be (
+    tableEntity.entity.getRelationshipAttribute("sd") should be (
       AtlasUtils.entityToReference(sdEntity, useGuid = false))
   }
 }

@@ -30,8 +30,7 @@ import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.types.StructType
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasEntityWithDependencies, AtlasUtils}
+import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 
 
@@ -329,8 +328,8 @@ object external {
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
 
-    tblEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity.entity))
-    tblEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity))
+    tblEntity.setRelationshipAttribute("db", AtlasUtils.entityToReference(dbEntity.entity))
+    tblEntity.setRelationshipAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity))
 
     new AtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
   }
@@ -346,8 +345,10 @@ object external {
     val sdEntity = deps.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
 
     // override attribute with reference - Atlas should already have these entities
-    tableEntity.entity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.entity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+    tableEntity.entity.setRelationshipAttribute("db",
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.entity.setRelationshipAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
     // drop all the dependencies since they're not necessary
     AtlasEntityWithDependencies(tableEntity.entity)

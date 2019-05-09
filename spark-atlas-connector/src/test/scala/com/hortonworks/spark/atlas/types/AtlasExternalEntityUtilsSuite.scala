@@ -88,9 +88,9 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
 
     tableEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
     tableEntity.getAttribute("name") should be ("tbl1")
-    tableEntity.getAttribute("db") should be (
+    tableEntity.getRelationshipAttribute("db") should be (
       AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.getAttribute("sd") should be (
+    tableEntity.getRelationshipAttribute("sd") should be (
       AtlasUtils.entityToReference(sdEntity, useGuid = false))
     tableEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       "db1.tbl1@primary")
@@ -141,7 +141,6 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     pathEntity.entity.getAttribute("name") should be ("testfile")
     pathEntity.entity.getAttribute("qualifiedName") should be (
       "s3://testbucket/testpseudodir/testfile")
-
 
     val deps = pathEntity.dependencies
     val dirEntity = deps.find(_.entity.getTypeName == external.S3_PSEUDO_DIR_TYPE_STRING)
