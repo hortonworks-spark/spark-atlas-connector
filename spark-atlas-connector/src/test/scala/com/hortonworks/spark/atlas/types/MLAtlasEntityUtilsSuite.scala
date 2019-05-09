@@ -85,7 +85,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
     pipelineEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
       pipeline.uid)
     pipelineEntity.entity.getAttribute("name") should be (pipeline.uid)
-    pipelineEntity.entity.getAttribute("directory") should be (
+    pipelineEntity.entity.getRelationshipAttribute("directory") should be (
       AtlasUtils.entityToReference(pipelineDirEntity.entity, useGuid = false))
     pipelineEntity.dependencies should be (Seq(pipelineDirEntity))
 
@@ -94,7 +94,7 @@ class MLAtlasEntityUtilsSuite extends FunSuite with Matchers with WithHiveSuppor
     modelEntity.entity.getTypeName should be (metadata.ML_MODEL_TYPE_STRING)
     modelEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (modelUid)
     modelEntity.entity.getAttribute("name") should be (modelUid)
-    modelEntity.entity.getAttribute("directory") should be (
+    modelEntity.entity.getRelationshipAttribute("directory") should be (
       AtlasUtils.entityToReference(modelDirEntity.entity, useGuid = false))
 
     modelEntity.dependencies should be (Seq(modelDirEntity))

@@ -110,8 +110,10 @@ object internal extends Logging {
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tblEntity.setAttribute("unsupportedFeatures", tableDefinition.unsupportedFeatures.asJava)
 
-    tblEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity.entity, useGuid = false))
-    tblEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity, useGuid = false))
+    tblEntity.setRelationshipAttribute("db",
+      AtlasUtils.entityToReference(dbEntity.entity, useGuid = false))
+    tblEntity.setRelationshipAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity.entity, useGuid = false))
 
     new AtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
   }
@@ -127,8 +129,10 @@ object internal extends Logging {
     val sdEntity = deps.filter(e => e.getTypeName.equals(metadata.STORAGEDESC_TYPE_STRING)).head
 
     // override attribute with reference - Atlas should already have these entities
-    tableEntity.entity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.entity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+    tableEntity.entity.setRelationshipAttribute("db",
+      AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.entity.setRelationshipAttribute("sd",
+      AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
     AtlasEntityWithDependencies(tableEntity.entity)
   }
@@ -181,7 +185,7 @@ object internal extends Logging {
 
     entity.setAttribute("qualifiedName", pipeline_uid)
     entity.setAttribute("name", pipeline_uid)
-    entity.setAttribute("directory",
+    entity.setRelationshipAttribute("directory",
       AtlasUtils.entityToReference(directory.entity, useGuid = false))
 
     new AtlasEntityWithDependencies(entity, Seq(directory))
@@ -195,7 +199,7 @@ object internal extends Logging {
     val uid = model_uid.replaceAll("pipeline", "model")
     entity.setAttribute("qualifiedName", uid)
     entity.setAttribute("name", uid)
-    entity.setAttribute("directory",
+    entity.setRelationshipAttribute("directory",
       AtlasUtils.entityToReference(directory.entity, useGuid = false))
 
     new AtlasEntityWithDependencies(entity, Seq(directory))

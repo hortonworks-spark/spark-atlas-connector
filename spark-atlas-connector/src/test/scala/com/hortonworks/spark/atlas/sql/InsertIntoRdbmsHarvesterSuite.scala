@@ -22,7 +22,7 @@ import java.sql.DriverManager
 
 import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
 import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
-import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
+import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor, ProcessEntityValidator}
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import org.apache.atlas.model.instance.AtlasEntity
 
@@ -30,7 +30,8 @@ class InsertIntoRdbmsHarvesterSuite
   extends FunSuite
   with Matchers
   with BeforeAndAfter
-  with WithHiveSupport {
+  with WithHiveSupport
+  with ProcessEntityValidator {
 
   val sinkTableName = "sink_table"
   val sourceTableName = "source_table"
@@ -86,6 +87,7 @@ class InsertIntoRdbmsHarvesterSuite
     assertTableEntity(outputEntity, sinkTableName)
 
     // check for 'spark_process'
+
     val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
 
     val inputs = getSeqAtlasObjectIdAttribute(processEntity, "inputs")
