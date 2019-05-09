@@ -15,10 +15,26 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql
+package com.hortonworks.spark.atlas
 
-import com.hortonworks.spark.atlas.AtlasEntityWithDependencies
+import org.apache.atlas.model.instance.AtlasEntity
 
-trait Harvester[T] {
-  def harvest(node: T, qd: QueryDetail): Seq[AtlasEntityWithDependencies]
+class AtlasEntityWithDependencies(
+    val entity: AtlasEntity,
+    val dependencies: Seq[AtlasEntityWithDependencies]) {
+
+  def dependenciesAdded(deps: Seq[AtlasEntityWithDependencies]): AtlasEntityWithDependencies = {
+    new AtlasEntityWithDependencies(entity, dependencies ++ deps)
+  }
+}
+
+object AtlasEntityWithDependencies {
+  def apply(entity: AtlasEntity): AtlasEntityWithDependencies = {
+    new AtlasEntityWithDependencies(entity, Seq.empty)
+  }
+
+  def apply(entity: AtlasEntity, dependencies: Seq[AtlasEntity]): AtlasEntityWithDependencies = {
+    new AtlasEntityWithDependencies(entity,
+      dependencies.map(dep => new AtlasEntityWithDependencies(dep, Seq.empty)))
+  }
 }

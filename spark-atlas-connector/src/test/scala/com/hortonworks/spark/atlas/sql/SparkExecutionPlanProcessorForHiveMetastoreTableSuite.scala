@@ -19,7 +19,7 @@ package com.hortonworks.spark.atlas.sql
 
 import java.nio.file.Files
 
-import com.hortonworks.spark.atlas.{AtlasClientConf, WithHiveSupport}
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
 import com.hortonworks.spark.atlas.types.metadata
 import org.apache.atlas.model.instance.AtlasEntity
@@ -28,7 +28,7 @@ import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
 
 class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
   extends FunSuite with Matchers with BeforeAndAfterEach with WithHiveSupport {
-  import com.hortonworks.spark.atlas.sql.testhelper.AtlasEntityReadHelper._
+  import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 
   val brokerProps: Map[String, Object] = Map[String, Object]()
   var kafkaTestUtils: KafkaTestUtils = _
@@ -101,8 +101,7 @@ class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
   private def assertDatabaseEntity(
       databaseEntity: AtlasEntity,
       tableEntity: AtlasEntity,
-      tableName: String)
-    : Unit = {
+      tableName: String): Unit = {
     val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
     // remove table name + '.' prior to table name
     val databaseQualifiedName = tableQualifiedName.substring(0,
@@ -111,21 +110,22 @@ class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
     assert(getStringAttribute(databaseEntity, "qualifiedName") === databaseQualifiedName)
 
     // database entity in table entity should be same as outer database entity
-    val databaseEntityInTable = getAtlasEntityAttribute(tableEntity, "db")
-    assert(databaseEntity === databaseEntityInTable)
+    val databaseEntityInTable = getAtlasObjectIdAttribute(tableEntity, "db")
+    assert(AtlasUtils.entityToReference(databaseEntity) === databaseEntityInTable)
 
     val databaseLocationString = getStringAttribute(databaseEntity, "location")
     assert(databaseLocationString != null && databaseLocationString.nonEmpty)
     assert(databaseLocationString.contains("sac-warehouse-"))
   }
 
-  private def assertStorageDefinitionEntity(sdEntity: AtlasEntity, tableEntity: AtlasEntity)
-    : Unit = {
+  private def assertStorageDefinitionEntity(
+      sdEntity: AtlasEntity,
+      tableEntity: AtlasEntity): Unit = {
     val tableQualifiedName = getStringAttribute(tableEntity, "qualifiedName")
     val storageQualifiedName = tableQualifiedName + "_storage"
     assert(getStringAttribute(sdEntity, "qualifiedName") === storageQualifiedName)
 
-    val storageEntityInTableAttribute = getAtlasEntityAttribute(tableEntity, "sd")
-    assert(sdEntity === storageEntityInTableAttribute)
+    val storageEntityInTableAttribute = getAtlasObjectIdAttribute(tableEntity, "sd")
+    assert(AtlasUtils.entityToReference(sdEntity) === storageEntityInTableAttribute)
   }
 }

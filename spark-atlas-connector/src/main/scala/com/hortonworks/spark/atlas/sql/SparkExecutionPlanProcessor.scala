@@ -20,8 +20,6 @@ package com.hortonworks.spark.atlas.sql
 import com.hortonworks.spark.atlas.sql.CommandsHarvester.WriteToDataSourceV2Harvester
 import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
 
-import scala.collection.convert.Wrappers.SeqWrapper
-import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
@@ -30,7 +28,6 @@ import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
 import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
-import com.hortonworks.spark.atlas.types.{external, metadata}
 import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -142,7 +139,7 @@ class SparkExecutionPlanProcessor(
         }
       }
 
-      atlasClient.createEntities(entities)
+      atlasClient.createEntitiesWithDependencies(entities)
       logDebug(s"Created entities without columns")
   }
 }

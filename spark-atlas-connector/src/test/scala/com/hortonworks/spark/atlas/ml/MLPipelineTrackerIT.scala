@@ -17,14 +17,12 @@
 
 package com.hortonworks.spark.atlas.ml
 
-import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.scalatest.Matchers
-
-import com.hortonworks.spark.atlas.{AtlasClientConf, BaseResourceIT, RestAtlasClient, WithHiveSupport}
+import com.hortonworks.spark.atlas._
 import com.hortonworks.spark.atlas.types._
 import com.hortonworks.spark.atlas.TestUtils._
 
@@ -33,20 +31,14 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
 
   def clusterName: String = atlasClientConf.get(AtlasClientConf.CLUSTER_NAME)
 
-  // Return table related entities as a Sequence.
-  // The first one is table entity, followed by
-  // db entity, storage entity and schema entities.
-  def getTableEntities(tableName: String): Seq[AtlasEntity] = {
+  def getTableEntity(tableName: String): AtlasEntityWithDependencies = {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
     val schema = new StructType()
       .add("user", StringType, false)
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", s"$tableName", schema, sd)
-    val tableEntities =
-      internal.sparkTableToEntities(tableDefinition, clusterName, Some(dbDefinition))
-
-    tableEntities
+    internal.sparkTableToEntity(tableDefinition, clusterName, Some(dbDefinition))
   }
 
   // Enable it to run integrated test.
@@ -60,7 +52,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
     val pipelineDirEntity = internal.mlDirectoryToEntity(uri, pipelineDir)
     val modelDirEntity = internal.mlDirectoryToEntity(uri, modelDir)
 
-    atlasClient.createEntities(Seq(pipelineDirEntity, modelDirEntity))
+    atlasClient.createEntitiesWithDependencies(Seq(pipelineDirEntity, modelDirEntity))
 
     val df = sparkSession.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
@@ -82,17 +74,17 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
 
     val pipelineEntity = internal.mlPipelineToEntity(pipeline.uid, pipelineDirEntity)
 
-    atlasClient.createEntities(Seq(pipelineDirEntity, pipelineEntity))
+    atlasClient.createEntitiesWithDependencies(Seq(pipelineDirEntity, pipelineEntity))
 
     val modelEntity = internal.mlModelToEntity(model.uid, modelDirEntity)
 
-    atlasClient.createEntities(Seq(modelDirEntity, modelEntity))
+    atlasClient.createEntitiesWithDependencies(Seq(modelDirEntity, modelEntity))
 
-    val tableEntities1 = getTableEntities("chris1")
-    val tableEntities2 = getTableEntities("chris2")
+    val tableEntities1 = getTableEntity("chris1")
+    val tableEntities2 = getTableEntity("chris2")
 
-    atlasClient.createEntities(tableEntities1)
-    atlasClient.createEntities(tableEntities2)
+    atlasClient.createEntitiesWithDependencies(tableEntities1)
+    atlasClient.createEntitiesWithDependencies(tableEntities2)
 
   }
 }

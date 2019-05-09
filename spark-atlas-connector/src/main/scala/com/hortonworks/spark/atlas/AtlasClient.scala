@@ -33,6 +33,29 @@ trait AtlasClient extends Logging {
 
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
+  final def createEntitiesWithDependencies(
+      entity: AtlasEntityWithDependencies): Unit = this.synchronized {
+    // handle dependencies first
+    if (entity.dependencies.nonEmpty) {
+      val depsHavingAnotherDeps = entity.dependencies.filter(_.dependencies.nonEmpty)
+      val depsHavingNoDeps = entity.dependencies.filterNot(_.dependencies.nonEmpty)
+
+      // we should handle them one by one if they're having additional dependencies
+      depsHavingAnotherDeps.foreach(createEntitiesWithDependencies)
+
+      // otherwise, we can handle them at once
+      createEntities(depsHavingNoDeps.map(_.entity))
+    }
+
+    // done with dependencies, process origin entity
+    createEntities(Seq(entity.entity))
+  }
+
+  final def createEntitiesWithDependencies(
+      entities: Seq[AtlasEntityWithDependencies]): Unit = this.synchronized {
+    entities.foreach(createEntitiesWithDependencies)
+  }
+
   final def createEntities(entities: Seq[AtlasEntity]): Unit = this.synchronized {
     if (entities.isEmpty) {
       return

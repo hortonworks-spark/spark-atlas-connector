@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.types.StructType
-import com.hortonworks.spark.atlas.{AtlasClient, AtlasUtils}
+import com.hortonworks.spark.atlas.{AtlasClient, AtlasEntityWithDependencies, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 
 
@@ -45,8 +45,9 @@ object external {
   val S3_PSEUDO_DIR_TYPE_STRING = "aws_s3_pseudo_dir"
   val S3_BUCKET_TYPE_STRING = "aws_s3_bucket"
 
-  private def entityToObjectId(entity: AtlasEntity,
-                               attributeNames: Seq[String] = Seq("qualifiedName")) = {
+  private def entityToObjectId(
+      entity: AtlasEntity,
+      attributeNames: Seq[String] = Seq("qualifiedName")): AtlasObjectId = {
     import scala.collection.JavaConverters._
 
     val objectId = new AtlasObjectId(entity.getGuid, entity.getTypeName)
@@ -61,7 +62,7 @@ object external {
 
   private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
 
-  private def extractS3Entities(uri: URI, fsPath: Path): Seq[AtlasEntity] = {
+  private def extractS3Entity(uri: URI, fsPath: Path): AtlasEntityWithDependencies = {
     val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
 
     val bucketName = uri.getAuthority
@@ -81,19 +82,24 @@ object external {
     dirEntity.setAttribute("name", dirName)
     dirEntity.setAttribute("qualifiedName", dirQualifiedName)
     dirEntity.setAttribute("objectPrefix", dirQualifiedName)
-    dirEntity.setAttribute("bucket", entityToObjectId(bucketEntity))
+    dirEntity.setAttribute("bucket", AtlasUtils.entityToReference(bucketEntity))
 
     // object
     val objectEntity = new AtlasEntity(S3_OBJECT_TYPE_STRING)
     objectEntity.setAttribute("name", objectName)
     objectEntity.setAttribute("path", path)
     objectEntity.setAttribute("qualifiedName", objectQualifiedName)
-    objectEntity.setAttribute("pseudoDirectory", entityToObjectId(dirEntity))
+    objectEntity.setAttribute("pseudoDirectory", AtlasUtils.entityToReference(dirEntity))
 
-    Seq(objectEntity, dirEntity, bucketEntity)
+    // dir entity depends on bucket entity
+    val dirEntityWithDeps = new AtlasEntityWithDependencies(dirEntity,
+      Seq(AtlasEntityWithDependencies(bucketEntity)))
+
+    // object entity depends on dir entity
+    new AtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
   }
 
-  def pathToEntities(path: String): Seq[AtlasEntity] = {
+  def pathToEntity(path: String): AtlasEntityWithDependencies = {
     val uri = resolveURI(path)
     val fsPath = new Path(uri)
     if (uri.getScheme == "hdfs") {
@@ -105,9 +111,9 @@ object external {
       entity.setAttribute("qualifiedName", uri.toString)
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
 
-      Seq(entity)
+      AtlasEntityWithDependencies(entity)
     } else if (isS3Schema(uri.getScheme)) {
-      extractS3Entities(uri, fsPath)
+      extractS3Entity(uri, fsPath)
     } else {
       val entity = new AtlasEntity(FS_PATH_TYPE_STRING)
       entity.setAttribute("name",
@@ -116,12 +122,11 @@ object external {
         Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
       entity.setAttribute("qualifiedName", uri.toString)
 
-      Seq(entity)
+      AtlasEntityWithDependencies(entity)
     }
-
   }
 
-  def resolveURI(path: String): URI = {
+  private def resolveURI(path: String): URI = {
     try {
       val uri = new URI(path)
       if (uri.getScheme() != null) {
@@ -147,15 +152,18 @@ object external {
   val HBASE_COLUMN_STRING = "hbase_column"
   val HBASE_TABLE_QUALIFIED_NAME_FORMAT = "%s:%s@%s"
 
-  def hbaseTableToEntity(cluster: String, tableName: String, nameSpace: String)
-      : Seq[AtlasEntity] = {
+  def hbaseTableToEntity(
+      cluster: String,
+      tableName: String,
+      nameSpace: String): AtlasEntityWithDependencies = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
     hbaseEntity.setAttribute("qualifiedName",
       getTableQualifiedName(cluster, nameSpace, tableName))
     hbaseEntity.setAttribute("name", tableName.toLowerCase)
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
-    Seq(hbaseEntity)
+
+    AtlasEntityWithDependencies(hbaseEntity)
   }
 
   private def getTableQualifiedName(
@@ -173,7 +181,7 @@ object external {
   // ================ Kafka entities =======================
   val KAFKA_TOPIC_STRING = "kafka_topic"
 
-  def kafkaToEntity(cluster: String, topic: KafkaTopicInformation): Seq[AtlasEntity] = {
+  def kafkaToEntity(cluster: String, topic: KafkaTopicInformation): AtlasEntityWithDependencies = {
     val topicName = topic.topicName.toLowerCase
     val clusterName = topic.clusterName match {
       case Some(customName) => customName
@@ -186,7 +194,8 @@ object external {
     kafkaEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, clusterName)
     kafkaEntity.setAttribute("uri", topicName)
     kafkaEntity.setAttribute("topic", topicName)
-    Seq(kafkaEntity)
+
+    AtlasEntityWithDependencies(kafkaEntity)
   }
 
   // ================== Spark's Hive Catalog entities =====================
@@ -201,9 +210,10 @@ object external {
 
   def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
 
-  def hiveDbToEntities(dbDefinition: CatalogDatabase,
-                       cluster: String,
-                       owner: String): Seq[AtlasEntity] = {
+  def hiveDbToEntity(
+      dbDefinition: CatalogDatabase,
+      cluster: String,
+      owner: String): AtlasEntityWithDependencies = {
     val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
     dbEntity.setAttribute("qualifiedName",
       hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
@@ -214,7 +224,8 @@ object external {
     dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
     dbEntity.setAttribute("owner", owner)
     dbEntity.setAttribute("ownerType", "USER")
-    Seq(dbEntity)
+
+    AtlasEntityWithDependencies(dbEntity)
   }
 
   // ================ RDBMS based entities ======================
@@ -227,13 +238,14 @@ object external {
    * @param tableName
    * @return
    */
-  def rdbmsTableToEntity(url: String, tableName: String) : Seq[AtlasEntity] = {
+  def rdbmsTableToEntity(url: String, tableName: String): AtlasEntityWithDependencies = {
     val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
 
     val databaseName = JdbcUtils.getDatabaseName(url)
     jdbcEntity.setAttribute("qualifiedName", getRdbmsQualifiedName(databaseName, tableName))
     jdbcEntity.setAttribute("name", tableName)
-    Seq(jdbcEntity)
+
+    AtlasEntityWithDependencies(jdbcEntity)
   }
 
   /**
@@ -254,12 +266,12 @@ object external {
     hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
   }
 
-  def hiveStorageDescToEntities(
+  def hiveStorageDescToEntity(
       storageFormat: CatalogStorageFormat,
       cluster: String,
       db: String,
       table: String,
-      isTempTable: Boolean = false): Seq[AtlasEntity] = {
+      isTempTable: Boolean = false): AtlasEntityWithDependencies = {
     val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
     sdEntity.setAttribute("qualifiedName",
       hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
@@ -269,7 +281,8 @@ object external {
     storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
     sdEntity.setAttribute("compressed", storageFormat.compressed)
     sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-    Seq(sdEntity)
+
+    AtlasEntityWithDependencies(sdEntity)
   }
 
   def hiveTableUniqueAttribute(
@@ -290,17 +303,17 @@ object external {
     s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
   }
 
-  def hiveTableToEntities(
+  def hiveTableToEntity(
       tblDefinition: CatalogTable,
       cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = tableDefinition.identifier.database.getOrElse("default")
     val table = tableDefinition.identifier.table
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
-    val dbEntities = hiveDbToEntities(dbDefinition, cluster, tableDefinition.owner)
-    val sdEntities = hiveStorageDescToEntities(
+    val dbEntity = hiveDbToEntity(dbDefinition, cluster, tableDefinition.owner)
+    val sdEntity = hiveStorageDescToEntity(
       tableDefinition.storage, cluster, db, table
       /* isTempTable = false  Spark doesn't support temp table */)
 
@@ -310,32 +323,34 @@ object external {
     tblEntity.setAttribute("name", table)
     tblEntity.setAttribute("owner", tableDefinition.owner)
     tblEntity.setAttribute("ownerType", "USER")
+    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
     tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
-    tblEntity.setAttribute("db", dbEntities.head)
-    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("sd", sdEntities.head)
 
-    Seq(tblEntity) ++ dbEntities ++ sdEntities
+    tblEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity.entity))
+    tblEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity))
+
+    new AtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
   }
 
   def hiveTableToEntitiesForAlterTable(
       tblDefinition: CatalogTable,
       cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): Seq[AtlasEntity] = {
-    val entities = hiveTableToEntities(tblDefinition, cluster, mockDbDefinition)
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
+    val tableEntity = hiveTableToEntity(tblDefinition, cluster, mockDbDefinition)
+    val deps = tableEntity.dependencies.map(_.entity)
 
-    val dbEntity = entities.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
-    val sdEntity = entities.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
-    val tableEntity = entities.filter(e => e.getTypeName.equals(HIVE_TABLE_TYPE_STRING)).head
+    val dbEntity = deps.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
+    val sdEntity = deps.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
 
     // override attribute with reference - Atlas should already have these entities
-    tableEntity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
+    tableEntity.entity.setAttribute("db", AtlasUtils.entityToReference(dbEntity, useGuid = false))
+    tableEntity.entity.setAttribute("sd", AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
-    Seq(tableEntity)
+    // drop all the dependencies since they're not necessary
+    AtlasEntityWithDependencies(tableEntity.entity)
   }
 
   // ================== Hive entities (Hive Warehouse Connector) =====================
@@ -350,10 +365,10 @@ object external {
     s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
   }
 
-  def hwcTableToEntities(
+  def hwcTableToEntity(
       db: String,
       table: String,
-      cluster: String): Seq[AtlasEntity] = {
+      cluster: String): AtlasEntityWithDependencies = {
 
     val dbEntity = new AtlasEntity(HWC_DB_TYPE_STRING)
     dbEntity.setAttribute("qualifiedName",
@@ -373,6 +388,6 @@ object external {
     tblEntity.setAttribute("sd",
       AtlasUtils.entityToReference(sdEntity, useGuid = false))
 
-    Seq(tblEntity)
+    AtlasEntityWithDependencies(tblEntity)
   }
 }

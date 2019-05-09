@@ -22,8 +22,8 @@ import java.net.URI
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.types.StructType
-
 import com.hortonworks.spark.atlas.utils.SparkUtils
+import org.apache.atlas.model.instance.AtlasObjectId
 
 object TestUtils {
   def createDB(name: String, location: String): CatalogDatabase = {
@@ -58,5 +58,21 @@ object TestUtils {
 
   def assertSubsetOf[T](set: Set[T], subset: Set[T]): Unit = {
     assert(subset.subsetOf(set), s"$subset is not a subset of $set")
+  }
+
+  def findEntity(
+      entities: Seq[AtlasEntityWithDependencies],
+      objId: AtlasObjectId): Option[AtlasEntityWithDependencies] = {
+    entities.find { p =>
+      AtlasUtils.entityToReference(p.entity) == objId
+    }
+  }
+
+  def findEntities(
+      entities: Seq[AtlasEntityWithDependencies],
+      objIds: Seq[AtlasObjectId]): Seq[AtlasEntityWithDependencies] = {
+    entities.filter { p =>
+      objIds.contains(AtlasUtils.entityToReference(p.entity))
+    }
   }
 }
