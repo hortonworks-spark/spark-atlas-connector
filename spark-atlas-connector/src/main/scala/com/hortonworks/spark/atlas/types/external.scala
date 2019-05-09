@@ -25,7 +25,7 @@ import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 
 import scala.collection.JavaConverters._
 import org.apache.atlas.AtlasConstants
-import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
+import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -43,21 +43,6 @@ object external {
   val S3_OBJECT_TYPE_STRING = "aws_s3_object"
   val S3_PSEUDO_DIR_TYPE_STRING = "aws_s3_pseudo_dir"
   val S3_BUCKET_TYPE_STRING = "aws_s3_bucket"
-
-  private def entityToObjectId(
-      entity: AtlasEntity,
-      attributeNames: Seq[String] = Seq("qualifiedName")): AtlasObjectId = {
-    import scala.collection.JavaConverters._
-
-    val objectId = new AtlasObjectId(entity.getGuid, entity.getTypeName)
-
-    val attributeValues = attributeNames.map(entity.getAttribute)
-    val uniqueAttributes = attributeNames zip attributeValues
-
-    objectId.setUniqueAttributes(uniqueAttributes.toMap.asJava)
-
-    objectId
-  }
 
   private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
 
