@@ -68,5 +68,5 @@ object AtlasClientConf {
 
   val CLUSTER_NAME = ConfigEntry("atlas.cluster.name", "primary")
 
-  val CHECK_MODEL_IN_START = ConfigEntry("atlas.client.checkModelInStart", "true")
+  val CHECK_MODEL_IN_START = ConfigEntry("atlas.client.checkModelInStart", "false")
 }
