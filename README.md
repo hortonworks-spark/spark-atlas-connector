@@ -54,10 +54,10 @@ If you're using cluster mode, please also ship this conf file to the remote Driv
 Spark Atlas Connector supports two types of Atlas clients, "kafka" and "rest". You can configure which type of client via setting `atlas.client.type` to whether `kafka` or `rest`.
 The default value is `kafka` which provides stable and secured way of publishing changes. Atlas has embedded Kafka instance so you can test it out in test environment, but it's encouraged to use external kafka cluster in production. If you don't have Kafka cluster in production, you may want to set client to `rest`.
 
-Pre-create Atlas models
-=======================
+Pre-create Atlas models (Recommended)
+=====================================
 
-Spark Atlas Connector checks and creates Atlas models when starting up to ensure all necessary models are created before pushing metadata changes. Since it is only needed for the first time, Spark Atlas Connector provides the way to pre-create Atlas models.
+You may need to create Atlas models to ensure all necessary models are created before running SAC and pushing metadata changes. Spark Atlas Connector provides the way to pre-create Atlas models, and it is only needed for the first time.
 
 Suppose Spark is installed in `<spark dist>` directory and `atlas-application.properties` is placed on `<spark dist>/conf` directory:
 
@@ -70,7 +70,10 @@ The tool will leverage REST client API to request to Atlas which requires authen
 
 Given the approach is insecure regardless of security mode of cluster, we strongly encourage you to pass `--interactive-auth` as parameter, which asks you to input username and password of Atlas interactively.
 
-After running above command, you can set `atlas.client.checkModelInStart=false` in `atlas-application.properties` to skip checking and creating models in Spark Atlas Connector's startup.
+If you would like to let SAC handles it instead, you can set you can set `atlas.client.checkModelInStart=true` in `atlas-application.properties` to let SAC check and create models in Spark Atlas Connector's each startup.
+Please note that it leverages REST API even you configure `atlas.client.type=kafka`, and it would require additional configuration for authentication. (`atlas.client.username` and `atlas.client.password`)
+
+In the meanwhile, we're also working on migrating models into Apache Atlas: once it's done, we no longer require this step and leverage the models Atlas registers for the startup.
 
 To Use it in Secure Environment
 ===
