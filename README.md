@@ -32,7 +32,7 @@ Pre-create Atlas models (Recommended)
 
 You may need to create Atlas models to ensure all necessary models are created before running SAC and pushing metadata changes. Spark Atlas Connector provides the way to pre-create Atlas models, and it is only needed for the first time.
 
-Suppose Spark is installed in `<spark dist>` directory and `atlas-application.properties` is placed on `<spark dist>/conf` directory:
+Suppose Spark is installed in `<SPARK_HOME>` directory and `atlas-application.properties` is placed on `<SPARK_HOME>/conf` directory:
 
 ```shell
 java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel --interactive-auth
