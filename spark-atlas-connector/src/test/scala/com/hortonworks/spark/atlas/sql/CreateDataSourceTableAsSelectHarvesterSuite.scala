@@ -76,5 +76,7 @@ class CreateDataSourceTableAsSelectHarvesterSuite
     assert(maybeEntity.isDefined, s"Output entity for table [$destTblName] was not found.")
     assert(maybeEntity.get.getAttribute("name") == destTblName)
     assert(maybeEntity.get.getAttribute("owner") == SparkUtils.currUser())
+    assert(maybeEntity.get.getAttribute("schemaDesc") == "struct<name:string,age:int>")
+    assert(maybeEntity.get.getAttribute("provider") == "parquet")
   }
 }

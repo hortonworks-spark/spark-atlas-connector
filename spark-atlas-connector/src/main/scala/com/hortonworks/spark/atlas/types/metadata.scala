@@ -81,7 +81,9 @@ object metadata {
     AtlasTypeUtil.createUniqueRequiredAttrDef(
       "qualifiedName", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("tableType", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("schemaDesc", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("provider", new AtlasStringType),
+    AtlasTypeUtil.createOptionalAttrDef("partitionProvider", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef(
       "partitionColumnNames", new AtlasArrayType(new AtlasStringType)),
     AtlasTypeUtil.createOptionalAttrDef(

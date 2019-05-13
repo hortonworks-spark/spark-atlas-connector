@@ -310,6 +310,12 @@ object external {
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
     tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
+    tblEntity.setAttribute("schemaDesc", tableDefinition.schema.simpleString)
+    tblEntity.setAttribute("provider", tableDefinition.provider.getOrElse(""))
+    if (tableDefinition.tracksPartitionsInCatalog) {
+      tblEntity.setAttribute("partitionProvider", "Catalog")
+    }
+    tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
     tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
 

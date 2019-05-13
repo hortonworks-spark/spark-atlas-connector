@@ -99,7 +99,11 @@ object internal extends Logging {
       sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
     tblEntity.setAttribute("name", tableDefinition.identifier.table)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tableDefinition.provider.foreach(tblEntity.setAttribute("provider", _))
+    tblEntity.setAttribute("schemaDesc", tableDefinition.schema.simpleString)
+    tblEntity.setAttribute("provider", tableDefinition.provider.getOrElse(""))
+    if (tableDefinition.tracksPartitionsInCatalog) {
+      tblEntity.setAttribute("partitionProvider", "Catalog")
+    }
     tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
     tableDefinition.bucketSpec.foreach(
       b => tblEntity.setAttribute("bucketSpec", b.toLinkedHashMap.asJava))
