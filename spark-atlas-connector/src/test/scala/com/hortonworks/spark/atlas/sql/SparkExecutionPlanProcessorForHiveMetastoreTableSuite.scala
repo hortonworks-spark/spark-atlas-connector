@@ -21,7 +21,7 @@ import java.nio.file.Files
 
 import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor}
-import com.hortonworks.spark.atlas.types.metadata
+import com.hortonworks.spark.atlas.types.{external, metadata}
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.scalatest.{BeforeAndAfterEach, FunSuite, Matchers}
@@ -72,15 +72,15 @@ class SparkExecutionPlanProcessorForHiveMetastoreTableSuite
     planProcessor.process(queryDetail)
     val entities = atlasClient.createdEntities
 
-    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.TABLE_TYPE_STRING)
+    val tableEntity: AtlasEntity = getOnlyOneEntity(entities, external.HIVE_TABLE_TYPE_STRING)
     assertTableEntity(tableEntity, outputTableName)
 
     // database
-    val databaseEntity: AtlasEntity = getOnlyOneEntity(entities, metadata.DB_TYPE_STRING)
+    val databaseEntity: AtlasEntity = getOnlyOneEntity(entities, external.HIVE_DB_TYPE_STRING)
     assertDatabaseEntity(databaseEntity, tableEntity, outputTableName)
 
     // storage description
-    val storageEntity = getOnlyOneEntity(entities, metadata.STORAGEDESC_TYPE_STRING)
+    val storageEntity = getOnlyOneEntity(entities, external.HIVE_STORAGEDESC_TYPE_STRING)
     assertStorageDefinitionEntity(storageEntity, tableEntity)
 
     val databaseLocationString = getStringAttribute(databaseEntity, "location")

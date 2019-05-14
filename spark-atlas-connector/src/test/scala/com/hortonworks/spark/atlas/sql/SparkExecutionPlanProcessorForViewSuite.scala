@@ -23,7 +23,7 @@ import org.apache.atlas.model.instance.AtlasEntity
 import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, WithHiveSupport}
 import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, CreateEntitiesTrackingAtlasClient, DirectProcessSparkExecutionPlanProcessor, ProcessEntityValidator}
-import com.hortonworks.spark.atlas.types.metadata
+import com.hortonworks.spark.atlas.types.{external, metadata}
 
 class SparkExecutionPlanProcessorForViewSuite
   extends FunSuite
@@ -75,11 +75,14 @@ class SparkExecutionPlanProcessorForViewSuite
     // we're expecting two table entities:
     // one from the source table and another from the sink table, the temporary view is ignored
     assert(entities.nonEmpty)
-    val tableEntities = listAtlasEntitiesAsType(entities, metadata.TABLE_TYPE_STRING)
-    assert(tableEntities.size === 2)
+    val sparkTableEntities = listAtlasEntitiesAsType(entities, metadata.TABLE_TYPE_STRING)
+    assert(sparkTableEntities.size === 1)
 
-    val inputEntity = getOnlyOneEntityOnAttribute(tableEntities, "name", sourceTblName)
-    val outputEntity = getOnlyOneEntityOnAttribute(tableEntities, "name", destinationTableName)
+    val hiveTableEntities = listAtlasEntitiesAsType(entities, external.HIVE_TABLE_TYPE_STRING)
+    assert(hiveTableEntities.size === 1)
+
+    val inputEntity = getOnlyOneEntityOnAttribute(hiveTableEntities, "name", sourceTblName)
+    val outputEntity = getOnlyOneEntityOnAttribute(sparkTableEntities, "name", destinationTableName)
     assertTableEntity(inputEntity, sourceTblName)
     assertTableEntity(outputEntity, destinationTableName)
 
