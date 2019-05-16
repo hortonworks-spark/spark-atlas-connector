@@ -30,6 +30,25 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 
 object SparkUtils extends Logging {
+  private var _hiveConf: Configuration = _
+
+  private[atlas] def resetHiveConf: Unit = synchronized {
+    _hiveConf = null
+  }
+
+  def hiveConf: Configuration = synchronized {
+    if (_hiveConf == null) {
+      _hiveConf = try {
+        new HiveConf(sparkSession.sparkContext.hadoopConfiguration, classOf[HiveConf])
+      } catch {
+        case NonFatal(e) =>
+          logWarn(s"Fail to create Hive Configuration", e)
+          sparkSession.sparkContext.hadoopConfiguration
+      }
+    }
+
+    _hiveConf
+  }
 
   def sparkSession: SparkSession = {
     val session = SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession)
@@ -41,18 +60,13 @@ object SparkUtils extends Logging {
     session.get
   }
 
-  lazy val hiveConf: Configuration = {
-    try {
-      new HiveConf(sparkSession.sparkContext.hadoopConfiguration, classOf[HiveConf])
-    } catch {
-      case NonFatal(e) =>
-        logWarn(s"Fail to create Hive Configuration", e)
-        sparkSession.sparkContext.hadoopConfiguration
-    }
-  }
-
   def isHiveEnabled(): Boolean = {
     sparkSession.sparkContext.getConf.get("spark.sql.catalogImplementation", "in-memory") == "hive"
+  }
+
+  def usingRemoteMetastoreService(mockHiveConf: Option[Configuration] = None): Boolean = {
+    val conf = mockHiveConf.getOrElse(hiveConf)
+    isHiveEnabled() && conf.getTrimmed("hive.metastore.uris", "").nonEmpty
   }
 
   /**

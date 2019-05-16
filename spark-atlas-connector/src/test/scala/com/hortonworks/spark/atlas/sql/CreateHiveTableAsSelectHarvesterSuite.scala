@@ -19,40 +19,40 @@ package com.hortonworks.spark.atlas.sql
 
 import java.io.File
 
-import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
+import com.hortonworks.spark.atlas.sql.testhelper.{BaseHarvesterSuite, FsEntityValidator, ProcessEntityValidator, TableEntityValidator}
 
 import scala.util.Random
 import org.apache.atlas.AtlasClient
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.CreateHiveTableAsSelectCommand
-import org.scalatest.{FunSuite, Matchers}
-import com.hortonworks.spark.atlas.types.{external, metadata}
-import com.hortonworks.spark.atlas.WithHiveSupport
-import com.hortonworks.spark.atlas.utils.SparkUtils
+import com.hortonworks.spark.atlas.types.metadata
+import com.hortonworks.spark.atlas.{WithHiveSupport, WithRemoteHiveMetastoreServiceSupport}
+import org.apache.spark.sql.SparkSession
 
-
-class CreateHiveTableAsSelectHarvesterSuite
-  extends FunSuite
-  with Matchers
-  with WithHiveSupport
-  with ProcessEntityValidator {
+abstract class BaseCreateHiveTableAsSelectHarvesterSuite
+  extends BaseHarvesterSuite
+  with FsEntityValidator {
 
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val sourceTbl1Name = "source1_" + Random.nextInt(100000)
 
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
+  override protected def initializeTestEnvironment(): Unit = {
+    prepareDatabase()
 
-    sparkSession.sql(s"CREATE TABLE $sourceTblName (name string, age int)")
-    sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('jerry', 20), ('tom', 15)")
-    sparkSession.sql(s"CREATE TABLE $sourceTbl1Name (name string, salary int)")
-    sparkSession.sql(s"INSERT INTO TABLE $sourceTbl1Name VALUES ('jerry', 10), ('tom', 20)")
+    _spark.sql(s"CREATE TABLE $sourceTblName (name string, age int)")
+    _spark.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('jerry', 20), ('tom', 15)")
+    _spark.sql(s"CREATE TABLE $sourceTbl1Name (name string, salary int)")
+    _spark.sql(s"INSERT INTO TABLE $sourceTbl1Name VALUES ('jerry', 10), ('tom', 20)")
+  }
+
+  override protected def cleanupTestEnvironment(): Unit = {
+    cleanupDatabase()
   }
 
   test("CREATE TABLE dest AS SELECT [] FROM source") {
     val destTblName = "dest1_" + Random.nextInt(100000)
-    val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT name FROM $sourceTblName")
+    val qe = _spark.sql(s"CREATE TABLE $destTblName AS SELECT name FROM $sourceTblName")
       .queryExecution
     val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
@@ -67,30 +67,20 @@ class CreateHiveTableAsSelectHarvesterSuite
 
     validateProcessEntity(entities.head, pEntity => {
       pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        sparkSession.sparkContext.applicationId)
+        _spark.sparkContext.applicationId)
       pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
     }, inputs => {
       inputs.size should be (1)
-      val inputEntity = inputs.head.entity
-      inputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      inputEntity.getAttribute("name") should be (sourceTblName)
-      inputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$sourceTblName@primary")
+      assertTable(inputs.head, sourceTblName)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      outputEntity.getAttribute("name") should be (destTblName)
-      outputEntity.getAttribute("owner") should be (SparkUtils.currUser())
-      outputEntity.getAttribute("ownerType") should be ("USER")
-      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$destTblName@primary")
+      assertTable(outputs.head, destTblName)
     })
   }
 
   test(s"CREATE TABLE dest AS SELECT [] FROM source, source1 WHERE...") {
     val destTblName = "dest2_" + Random.nextInt(100000)
-    val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS " +
+    val qe = _spark.sql(s"CREATE TABLE $destTblName AS " +
       s"SELECT a.age FROM $sourceTblName a, $sourceTbl1Name b WHERE a.name = b.name")
       .queryExecution
     val qd = QueryDetail(qe, 0L)
@@ -106,30 +96,30 @@ class CreateHiveTableAsSelectHarvesterSuite
 
     validateProcessEntity(entities.head, pEntity => {
       pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        sparkSession.sparkContext.applicationId )
+        _spark.sparkContext.applicationId )
       pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
     }, inputs => {
       inputs.size should be (2)
-      inputs.map(_.entity.getAttribute("name")).toSet should be (
-        Set(sourceTblName, sourceTbl1Name))
+
+      val mayBeSourceTbl = inputs.find(_.qualifiedName.contains(sourceTblName))
+      val mayBeSourceTbl1 = inputs.find(_.qualifiedName.contains(sourceTbl1Name))
+      assert(mayBeSourceTbl.isDefined)
+      assert(mayBeSourceTbl1.isDefined)
+
+      assertTable(mayBeSourceTbl.get, sourceTblName)
+      assertTable(mayBeSourceTbl1.get, sourceTbl1Name)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      outputEntity.getAttribute("name") should be (destTblName)
-      outputEntity.getAttribute("owner") should be (SparkUtils.currUser())
-      outputEntity.getAttribute("ownerType") should be ("USER")
-      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$destTblName@primary")
+      assertTable(outputs.head, destTblName)
     })
   }
 
   test("CREATE TABLE dest AS SELECT [] FROM view") {
     val viewName = "view3_" + Random.nextInt(100000)
-    sparkSession.sql(s"CREATE VIEW $viewName AS SELECT name FROM $sourceTblName")
+    _spark.sql(s"CREATE VIEW $viewName AS SELECT name FROM $sourceTblName")
 
     val destTblName = "dest3_" + Random.nextInt(100000)
-    val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT * FROM $viewName")
+    val qe = _spark.sql(s"CREATE TABLE $destTblName AS SELECT * FROM $viewName")
       .queryExecution
     val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
@@ -143,20 +133,14 @@ class CreateHiveTableAsSelectHarvesterSuite
       execNode.cmd.asInstanceOf[CreateHiveTableAsSelectCommand], qd)
     validateProcessEntity(entities.head, pEntity => {
       pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        sparkSession.sparkContext.applicationId)
+        _spark.sparkContext.applicationId)
       pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
     }, inputs => {
       inputs.size should be (1)
-      inputs.map(_.entity.getAttribute("name")).toSet should be (Set(sourceTblName))
+      assertTable(inputs.head, sourceTblName)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      outputEntity.getAttribute("name") should be (destTblName)
-      outputEntity.getAttribute("owner") should be (SparkUtils.currUser())
-      outputEntity.getAttribute("ownerType") should be ("USER")
-      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$destTblName@primary")
+      assertTable(outputs.head, destTblName)
     })
   }
 
@@ -165,7 +149,7 @@ class CreateHiveTableAsSelectHarvesterSuite
     val path =
       new File(this.getClass.getClassLoader.getResource("users.parquet").toURI).getAbsolutePath
 
-    val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT * " +
+    val qe = _spark.sql(s"CREATE TABLE $destTblName AS SELECT * " +
       s"FROM parquet.`$path`").queryExecution
     val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
@@ -180,14 +164,53 @@ class CreateHiveTableAsSelectHarvesterSuite
 
     validateProcessEntity(entities.head, pEntity => {
       pEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        sparkSession.sparkContext.applicationId)
+        _spark.sparkContext.applicationId)
       pEntity.getTypeName should be (metadata.PROCESS_TYPE_STRING)
     }, inputs => {
       inputs.size should be (1)
-      val inputEntity = inputs.head.entity
-      inputEntity.getTypeName should be (external.FS_PATH_TYPE_STRING)
-      inputEntity.getAttribute("name") should be (path.toLowerCase)
+      assertFsEntity(inputs.head, path)
     }, _ => {})
   }
 }
 
+class CreateHiveTableAsSelectHarvesterSuite
+  extends BaseCreateHiveTableAsSelectHarvesterSuite
+  with WithHiveSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override def getSparkSession: SparkSession = sparkSession
+
+  override def getDbName: String = "sac"
+
+  override def expectSparkTableModels: Boolean = true
+}
+
+class CreateHiveTableAsSelectHarvesterWithRemoteHMSSuite
+  extends BaseCreateHiveTableAsSelectHarvesterSuite
+  with WithRemoteHiveMetastoreServiceSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override def getSparkSession: SparkSession = sparkSession
+
+  override def expectSparkTableModels: Boolean = false
+
+  override def getDbName: String = dbName
+}

@@ -17,13 +17,41 @@
 
 package com.hortonworks.spark.atlas
 
-import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 
-class AtlasEntityWithDependencies(
-    val entity: AtlasEntity,
-    val dependencies: Seq[AtlasEntityWithDependencies]) {
+trait AtlasReferenceable {
+  def typeName: String
+  def qualifiedName: String
+  def asObjectId: AtlasObjectId
+}
 
-  def dependenciesAdded(deps: Seq[AtlasEntityWithDependencies]): AtlasEntityWithDependencies = {
+case class AtlasEntityReference(ref: AtlasObjectId) extends AtlasReferenceable {
+  require(typeName != null && !typeName.isEmpty)
+  require(qualifiedName != null && !qualifiedName.isEmpty)
+
+  override def typeName: String = ref.getTypeName
+
+  override def qualifiedName: String = ref.getUniqueAttributes.get(
+    org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString
+
+  override def asObjectId: AtlasObjectId = ref
+}
+
+case class AtlasEntityWithDependencies(
+    entity: AtlasEntity,
+    dependencies: Seq[AtlasReferenceable]) extends AtlasReferenceable {
+
+  require(typeName != null && !typeName.isEmpty)
+  require(qualifiedName != null && !qualifiedName.isEmpty)
+
+  override def typeName: String = entity.getTypeName
+
+  override def qualifiedName: String = entity.getAttribute(
+    org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString
+
+  override def asObjectId: AtlasObjectId = AtlasUtils.entityToReference(entity, useGuid = false)
+
+  def dependenciesAdded(deps: Seq[AtlasReferenceable]): AtlasEntityWithDependencies = {
     new AtlasEntityWithDependencies(entity, dependencies ++ deps)
   }
 }
@@ -31,10 +59,5 @@ class AtlasEntityWithDependencies(
 object AtlasEntityWithDependencies {
   def apply(entity: AtlasEntity): AtlasEntityWithDependencies = {
     new AtlasEntityWithDependencies(entity, Seq.empty)
-  }
-
-  def apply(entity: AtlasEntity, dependencies: Seq[AtlasEntity]): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity,
-      dependencies.map(dep => new AtlasEntityWithDependencies(dep, Seq.empty)))
   }
 }

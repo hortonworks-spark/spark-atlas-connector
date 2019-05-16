@@ -34,9 +34,10 @@ import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies}
+import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies, AtlasReferenceable}
 import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
+import com.hortonworks.spark.atlas.utils.SparkUtils.sparkSession
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.streaming.SinkProgress
@@ -47,7 +48,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object InsertIntoHiveTableHarvester extends Harvester[InsertIntoHiveTable] {
     override def harvest(
         node: InsertIntoHiveTable,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // source tables entities
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
@@ -61,7 +62,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object InsertIntoHadoopFsRelationHarvester extends Harvester[InsertIntoHadoopFsRelationCommand] {
     override def harvest(
         node: InsertIntoHadoopFsRelationCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // source tables/files entities
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
@@ -76,7 +77,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object CreateHiveTableAsSelectHarvester extends Harvester[CreateHiveTableAsSelectCommand] {
     override def harvest(
         node: CreateHiveTableAsSelectCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // source tables entities
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
@@ -90,7 +91,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object CreateTableHarvester extends Harvester[CreateTableCommand] {
     override def harvest(
         node: CreateTableCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       Seq(tableToEntity(node.table))
     }
   }
@@ -99,7 +100,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     extends Harvester[CreateDataSourceTableAsSelectCommand] {
     override def harvest(
         node: CreateDataSourceTableAsSelectCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = Seq(tableToEntity(node.table))
 
@@ -110,7 +111,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object LoadDataHarvester extends Harvester[LoadDataCommand] {
     override def harvest(
         node: LoadDataCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       val inputEntities = Seq(external.pathToEntity(node.path))
       val outputEntities = Seq(prepareEntity(node.table))
 
@@ -121,7 +122,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object InsertIntoHiveDirHarvester extends Harvester[InsertIntoHiveDirCommand] {
     override def harvest(
         node: InsertIntoHiveDirCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       if (node.storage.locationUri.isEmpty) {
         throw new IllegalStateException("Location URI is illegally empty")
       }
@@ -136,7 +137,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object CreateViewHarvester extends Harvester[CreateViewCommand] {
     override def harvest(
         node: CreateViewCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // from table entities
       val child = node.child.asInstanceOf[Project].child
       val inputEntities = child match {
@@ -158,7 +159,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object CreateDataSourceTableHarvester extends Harvester[CreateDataSourceTableCommand] {
     override def harvest(
         node: CreateDataSourceTableCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // only have table entities
       Seq(tableToEntity(node.table))
     }
@@ -167,7 +168,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
     override def harvest(
         node: SaveIntoDataSourceCommand,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // source table entity
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
       val outputEntities = node match {
@@ -186,7 +187,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object WriteToDataSourceV2Harvester extends Harvester[WriteToDataSourceV2Exec] {
     override def harvest(
         node: WriteToDataSourceV2Exec,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       val inputEntities = discoverInputsEntities(node.query, qd.qe.executedPlan)
 
       val outputEntities = node.writer match {
@@ -200,7 +201,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  def prepareEntity(tableIdentifier: TableIdentifier): AtlasEntityWithDependencies = {
+  def prepareEntity(tableIdentifier: TableIdentifier): AtlasReferenceable = {
     val tableName = SparkUtils.getTableName(tableIdentifier)
     val dbName = SparkUtils.getDatabaseName(tableIdentifier)
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
@@ -215,9 +216,9 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   private def makeProcessEntities(
-      inputsEntities: Seq[AtlasEntityWithDependencies],
-      outputEntities: Seq[AtlasEntityWithDependencies],
-      qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+      inputsEntities: Seq[AtlasReferenceable],
+      outputEntities: Seq[AtlasReferenceable],
+      qd: QueryDetail): Seq[AtlasReferenceable] = {
     val logMap = getPlanInfo(qd)
 
     val cleanedOutput = cleanOutput(inputsEntities, outputEntities)
@@ -233,7 +234,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   private def discoverInputsEntities(
       plan: LogicalPlan,
-      executedPlan: SparkPlan): Seq[AtlasEntityWithDependencies] = {
+      executedPlan: SparkPlan): Seq[AtlasReferenceable] = {
     val tChildren = plan.collectLeaves()
     tChildren.flatMap {
       case r: HiveTableRelation => Seq(tableToEntity(r.tableMeta))
@@ -253,7 +254,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
 
   private def discoverInputsEntities(
       sparkPlan: SparkPlan,
-      executedPlan: SparkPlan): Seq[AtlasEntityWithDependencies] = {
+      executedPlan: SparkPlan): Seq[AtlasReferenceable] = {
     sparkPlan.collectLeaves().flatMap {
       case h if h.getClass.getName == "org.apache.spark.sql.hive.execution.HiveTableScanExec" =>
         Try {
@@ -276,7 +277,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def discoverOutputEntities(sink: SinkProgress): Seq[AtlasEntityWithDependencies] = {
+  private def discoverOutputEntities(sink: SinkProgress): Seq[AtlasReferenceable] = {
     if (sink.description.contains("FileSink")) {
       val begin = sink.description.indexOf('[')
       val end = sink.description.indexOf(']')
@@ -291,7 +292,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
-  private def discoverOutputEntities(writer: DataSourceWriter): Seq[AtlasEntityWithDependencies] = {
+  private def discoverOutputEntities(writer: DataSourceWriter): Seq[AtlasReferenceable] = {
     writer match {
       case HWCEntities(hwcEntities) => Seq(hwcEntities)
       case KafkaEntities(kafkaEntities) => Seq(kafkaEntities)
@@ -304,7 +305,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   object HWCHarvester extends Harvester[WriteToDataSourceV2Exec] {
     override def harvest(
         node: WriteToDataSourceV2Exec,
-        qd: QueryDetail): Seq[AtlasEntityWithDependencies] = {
+        qd: QueryDetail): Seq[AtlasReferenceable] = {
       // Source table entity
       val inputsEntities = discoverInputsEntities(qd.qe.sparkPlan, qd.qe.executedPlan)
 
@@ -362,7 +363,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         "com.hortonworks.spark.sql.hive.llap.streaming.HiveStreamingDataSourceWriter"
 
       def extractFromWriter(
-          writer: DataSourceWriter): Option[AtlasEntityWithDependencies] = writer match {
+          writer: DataSourceWriter): Option[AtlasReferenceable] = writer match {
         case w: DataSourceWriter
           if w.getClass.getCanonicalName.endsWith(BATCH_WRITE) => getHWCEntity(w)
 
@@ -382,25 +383,25 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       }
     }
 
-    def unapply(plan: LogicalPlan): Option[AtlasEntityWithDependencies] = plan match {
+    def unapply(plan: LogicalPlan): Option[AtlasReferenceable] = plan match {
       case ds: DataSourceV2Relation
           if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
         getHWCEntity(ds.options)
       case _ => None
     }
 
-    def unapply(plan: SparkPlan): Option[AtlasEntityWithDependencies] = plan match {
+    def unapply(plan: SparkPlan): Option[AtlasReferenceable] = plan match {
       case ds: DataSourceV2ScanExec
           if ds.source.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_READ_SOURCE) =>
         getHWCEntity(ds.options)
       case _ => None
     }
 
-    def unapply(writer: DataSourceWriter): Option[AtlasEntityWithDependencies] = {
+    def unapply(writer: DataSourceWriter): Option[AtlasReferenceable] = {
       HWCSupport.extractFromWriter(writer)
     }
 
-    def getHWCEntity(options: Map[String, String]): Option[AtlasEntityWithDependencies] = {
+    def getHWCEntity(options: Map[String, String]): Option[AtlasReferenceable] = {
       if (options.contains("query")) {
         val sql = options("query")
         // HACK ALERT! Currently SAC and HWC only know the query that has to be pushed down
@@ -413,7 +414,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
             val db = r.tableIdentifier.database.getOrElse(
               options.getOrElse("default.db", "default"))
             val tableName = r.tableIdentifier.table
-            Seq(external.hwcTableToEntity(db, tableName, clusterName))
+            Seq(external.hiveTableToReference(db, tableName, clusterName))
           case _: OneRowRelation => Seq.empty
           case n =>
             logWarn(s"Unknown leaf node: $n")
@@ -422,18 +423,18 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
       } else {
         val (db, tableName) = getDbTableNames(
           options.getOrElse("default.db", "default"), options.getOrElse("table", ""))
-        Some(external.hwcTableToEntity(db, tableName, clusterName))
+        Some(external.hiveTableToReference(db, tableName, clusterName))
       }
     }
 
-    def getHWCEntity(r: DataSourceWriter): Option[AtlasEntityWithDependencies] = r match {
+    def getHWCEntity(r: DataSourceWriter): Option[AtlasReferenceable] = r match {
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_WRITE) =>
         val f = r.getClass.getDeclaredField("options")
         f.setAccessible(true)
         val options = f.get(r).asInstanceOf[java.util.Map[String, String]]
         val (db, tableName) = getDbTableNames(
           options.getOrDefault("default.db", "default"), options.getOrDefault("table", ""))
-        Some(external.hwcTableToEntity(db, tableName, clusterName))
+        Some(external.hiveTableToReference(db, tableName, clusterName))
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.BATCH_STREAM_WRITE) =>
         val dbField = r.getClass.getDeclaredField("db")
@@ -444,7 +445,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         tableField.setAccessible(true)
         val table = tableField.get(r).asInstanceOf[String]
 
-        Some(external.hwcTableToEntity(db, table, clusterName))
+        Some(external.hiveTableToReference(db, table, clusterName))
 
       case _ if r.getClass.getCanonicalName.endsWith(HWCSupport.STREAM_WRITE) =>
         val dbField = r.getClass.getDeclaredField("db")
@@ -455,7 +456,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         tableField.setAccessible(true)
         val table = tableField.get(r).asInstanceOf[String]
 
-        Some(external.hwcTableToEntity(db, table, clusterName))
+        Some(external.hiveTableToReference(db, table, clusterName))
 
       case w: MicroBatchWriter
           if w.getClass.getMethod("writer").invoke(w)

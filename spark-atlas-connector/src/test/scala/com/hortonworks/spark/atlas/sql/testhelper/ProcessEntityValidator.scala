@@ -23,17 +23,18 @@ import com.hortonworks.spark.atlas.AtlasEntityReadHelper.getOnlyOneEntity
 import com.hortonworks.spark.atlas.types.metadata
 
 import scala.collection.JavaConverters._
-import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasUtils, TestUtils}
+import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasReferenceable, AtlasUtils, TestUtils}
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.scalatest.FunSuite
 
 trait ProcessEntityValidator extends FunSuite {
   def validateProcessEntity(
-      process: AtlasEntityWithDependencies,
+      process: AtlasReferenceable,
       validateFnForProcess: AtlasEntity => Unit,
-      validateFnForInputs: Seq[AtlasEntityWithDependencies] => Unit,
-      validateFnForOutputs: Seq[AtlasEntityWithDependencies] => Unit): Unit = {
-    val pEntity = process.entity
+      validateFnForInputs: Seq[AtlasReferenceable] => Unit,
+      validateFnForOutputs: Seq[AtlasReferenceable] => Unit): Unit = {
+    require(process.isInstanceOf[AtlasEntityWithDependencies])
+    val pEntity = process.asInstanceOf[AtlasEntityWithDependencies].entity
     validateFnForProcess(pEntity)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
@@ -41,7 +42,7 @@ trait ProcessEntityValidator extends FunSuite {
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
 
-    val pDeps = process.dependencies
+    val pDeps = process.asInstanceOf[AtlasEntityWithDependencies].dependencies
     val inputEntities = TestUtils.findEntities(pDeps, inputs.asScala.toSeq)
     val outputEntities = TestUtils.findEntities(pDeps, outputs.asScala.toSeq)
 
@@ -55,8 +56,8 @@ trait ProcessEntityValidator extends FunSuite {
   def validateProcessEntityWithAtlasEntities(
       entities: Seq[AtlasEntity],
       validateFnForProcess: AtlasEntity => Unit,
-      expectedInputEntities: Seq[AtlasEntity],
-      expectedOutputEntities: Seq[AtlasEntity]): Unit = {
+      expectedInputObjectIds: Set[AtlasObjectId],
+      expectedOutputObjectIds: Set[AtlasObjectId]): Unit = {
     val pEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
     validateFnForProcess(pEntity)
 
@@ -64,13 +65,6 @@ trait ProcessEntityValidator extends FunSuite {
     assert(pEntity.getAttribute("outputs").isInstanceOf[util.Collection[_]])
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
-
-    val expectedInputObjectIds = expectedInputEntities.map { entity =>
-      AtlasUtils.entityToReference(entity, useGuid = false)
-    }.toSet
-    val expectedOutputObjectIds = expectedOutputEntities.map { entity =>
-      AtlasUtils.entityToReference(entity, useGuid = false)
-    }.toSet
 
     assert(inputs.asScala.toSet === expectedInputObjectIds)
     assert(outputs.asScala.toSet === expectedOutputObjectIds)

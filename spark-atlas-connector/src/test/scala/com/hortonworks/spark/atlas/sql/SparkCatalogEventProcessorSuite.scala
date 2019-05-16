@@ -63,7 +63,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     super.afterAll()
   }
 
-  test("correctly handle DB related events") {
+  test("correctly handle spark DB related events") {
     val processor =
       new SparkCatalogEventProcessor(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
     processor.startThread()
@@ -81,7 +81,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     processor.pushEvent(CreateDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.createEntityCall.size > 0)
-      assert(atlasClient.createEntityCall(processor.dbType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkDbType) == 1)
     }
 
     // SAC-97: Spark delete the table before SAC receives the message.
@@ -90,11 +90,11 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     processor.pushEvent(DropDatabaseEvent("db1"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       assert(atlasClient.deleteEntityCall.size > 0)
-      assert(atlasClient.deleteEntityCall(processor.dbType) == 1)
+      assert(atlasClient.deleteEntityCall(processor.sparkDbType) == 1)
     }
   }
 
-  test("correctly handle table related events") {
+  test("correctly handle spark table related events") {
     val processor =
       new SparkCatalogEventProcessor(new FirehoseAtlasClient(atlasClientConf), atlasClientConf)
     processor.startThread()
@@ -111,21 +111,20 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
 
     val tableDefinition =
       createTable("db1", "tbl1", new StructType().add("ID", LongType), CatalogStorageFormat.empty)
-    val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateTableEvent("db1", "tbl1"))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.createEntityCall(processor.dbType) == 1)
-      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkDbType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkTableType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkStorageFormatType) == 1)
     }
 
     SparkUtils.getExternalCatalog().renameTable("db1", "tbl1", "tbl2")
     processor.pushEvent(RenameTableEvent("db1", "tbl1", "tbl2"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      assert(atlasClient.updateEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-      assert(atlasClient.updateEntityCall(processor.tableType(isHiveTbl)) == 1)
+      assert(atlasClient.updateEntityCall(processor.sparkStorageFormatType) == 1)
+      assert(atlasClient.updateEntityCall(processor.sparkTableType) == 1)
     }
 
     val renamedTableDef = SparkUtils.getExternalCatalog().getTable("db1", "tbl2")
@@ -136,17 +135,17 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     processor.pushEvent(AlterTableEvent("db1", "tbl2", "table"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       // no creation on db type and storage format entities
-      assert(atlasClient.createEntityCall(processor.dbType) == 1)
-      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
+      assert(atlasClient.createEntityCall(processor.sparkDbType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkStorageFormatType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkTableType) == 2)
     }
 
     processor.pushEvent(AlterTableEvent("db1", "tbl2", "dataSchema"))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       // no creation on db type and storage format entities
-      assert(atlasClient.createEntityCall(processor.dbType) == 1)
-      assert(atlasClient.createEntityCall(processor.storageFormatType(isHiveTbl)) == 1)
-      assert(atlasClient.createEntityCall(processor.tableType(isHiveTbl)) == 2)
+      assert(atlasClient.createEntityCall(processor.sparkDbType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkStorageFormatType) == 1)
+      assert(atlasClient.createEntityCall(processor.sparkTableType) == 2)
     }
 
     processor.pushEvent(DropTablePreEvent("db1", "tbl2"))
@@ -154,11 +153,10 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     // sleeping 2 secs - we have to do this to ensure there's no call on deletion, unfortunately...
     Thread.sleep(2 * 1000)
     // deletion request should not be added from this event
-    assert(atlasClient.deleteEntityCall.getOrElse(processor.tableType(isHiveTbl), 0) == 0)
+    assert(atlasClient.deleteEntityCall.getOrElse(processor.sparkTableType, 0) == 0)
 
     val tableDefinition2 =
       createTable("db1", "tbl3", new StructType().add("ID", LongType), CatalogStorageFormat.empty)
-    val isHiveTbl2 = processor.isHiveTable(tableDefinition2)
     SparkUtils.getExternalCatalog().createTable(tableDefinition2, ignoreIfExists = true)
     processor.pushEvent(CreateTableEvent("db1", "tbl3"))
 
@@ -172,7 +170,7 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
     // sleeping 2 secs - we have to do this to ensure there's no call on deletion, unfortunately...
     Thread.sleep(2 * 1000)
     // deletion request should not be added from this event
-    assert(atlasClient.deleteEntityCall.getOrElse(processor.tableType(isHiveTbl), 0) == 0)
+    assert(atlasClient.deleteEntityCall.getOrElse(processor.sparkTableType, 0) == 0)
   }
 }
 

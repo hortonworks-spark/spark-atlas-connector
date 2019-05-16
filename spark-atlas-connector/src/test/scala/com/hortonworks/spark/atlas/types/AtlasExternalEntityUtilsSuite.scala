@@ -19,13 +19,15 @@ package com.hortonworks.spark.atlas.types
 
 import java.nio.file.Files
 
-import scala.collection.JavaConverters._
 import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.types._
 import org.scalatest.{FunSuite, Matchers}
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasUtils, TestUtils, WithHiveSupport}
+import com.hortonworks.spark.atlas._
 
-class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHiveSupport {
+class AtlasExternalEntityUtilsSuite
+  extends FunSuite
+  with Matchers
+  with WithRemoteHiveMetastoreServiceSupport {
   import TestUtils._
 
   private var hiveAtlasEntityUtils: AtlasEntityUtils = _
@@ -42,36 +44,7 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
     super.afterAll()
   }
 
-  test("convert catalog db to hive entity") {
-    val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
-    val dbEntity = hiveAtlasEntityUtils.dbToEntity(dbDefinition)
-
-    dbEntity.entity.getTypeName should be (external.HIVE_DB_TYPE_STRING)
-    dbEntity.entity.getAttribute("name") should be ("db1")
-    dbEntity.entity.getAttribute("location") should be (dbDefinition.locationUri.toString)
-    dbEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be ("db1@primary")
-
-    dbEntity.dependencies.length should be (0)
-  }
-
-  test("convert catalog storage format to hive entity") {
-    val storageFormat = createStorageFormat()
-    val sdEntity =
-      hiveAtlasEntityUtils.storageFormatToEntity(storageFormat, "db1", "tbl1", true)
-
-    sdEntity.entity.getTypeName should be (external.HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.entity.getAttribute("location") should be (null)
-    sdEntity.entity.getAttribute("inputFormat") should be (null)
-    sdEntity.entity.getAttribute("outputFormat") should be (null)
-    sdEntity.entity.getAttribute("name") should be (null)
-    sdEntity.entity.getAttribute("compressed") should be (java.lang.Boolean.FALSE)
-    sdEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      "db1.tbl1@primary_storage")
-
-    sdEntity.dependencies.size should be (0)
-  }
-
-  test("convert table to hive entity") {
+  test("convert table to hive reference when remote HMS is set") {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
     val schema = new StructType()
@@ -79,21 +52,10 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
       .add("age", IntegerType, true)
     val tableDefinition = createTable("db1", "tbl1", schema, sd, true)
 
-    val tableEntities = hiveAtlasEntityUtils.tableToEntity(tableDefinition, Some(dbDefinition))
-    val tableEntity = tableEntities.entity
-    val deps = tableEntities.dependencies.map(_.entity)
-
-    val dbEntity = deps.find(_.getTypeName == external.HIVE_DB_TYPE_STRING).get
-    val sdEntity = deps.find(_.getTypeName == external.HIVE_STORAGEDESC_TYPE_STRING).get
-
-    tableEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-    tableEntity.getAttribute("name") should be ("tbl1")
-    tableEntity.getRelationshipAttribute("db") should be (
-      AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.getRelationshipAttribute("sd") should be (
-      AtlasUtils.entityToReference(sdEntity, useGuid = false))
-    tableEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-      "db1.tbl1@primary")
+    val tableEntity = hiveAtlasEntityUtils.tableToEntity(tableDefinition, Some(dbDefinition))
+    assert(tableEntity.isInstanceOf[AtlasEntityReference])
+    tableEntity.typeName should be (external.HIVE_TABLE_TYPE_STRING)
+    tableEntity.qualifiedName should be (s"db1.tbl1@${hiveAtlasEntityUtils.clusterName}")
   }
 
   test("convert path to entity") {
@@ -143,29 +105,31 @@ class AtlasExternalEntityUtilsSuite extends FunSuite with Matchers with WithHive
       "s3://testbucket/testpseudodir/testfile")
 
     val deps = pathEntity.dependencies
-    val dirEntity = deps.find(_.entity.getTypeName == external.S3_PSEUDO_DIR_TYPE_STRING)
+    val dirReference = deps.find(_.typeName == external.S3_PSEUDO_DIR_TYPE_STRING)
+    assert(dirReference.isDefined)
+    assert(dirReference.get.isInstanceOf[AtlasEntityWithDependencies])
 
-    dirEntity.get.entity.getTypeName should be (external.S3_PSEUDO_DIR_TYPE_STRING)
-    dirEntity.get.entity.getAttribute("name") should be ("/testpseudodir/")
-    dirEntity.get.entity.getAttribute("qualifiedName") should be (
+    val dirEntity = dirReference.get.asInstanceOf[AtlasEntityWithDependencies]
+    dirEntity.entity.getTypeName should be (external.S3_PSEUDO_DIR_TYPE_STRING)
+    dirEntity.entity.getAttribute("name") should be ("/testpseudodir/")
+    dirEntity.entity.getAttribute("qualifiedName") should be (
       "s3://testbucket/testpseudodir/")
 
-    pathEntity.entity.getAttribute("pseudoDirectory") should be (
-      AtlasUtils.entityToReference(dirEntity.get.entity))
+    pathEntity.entity.getAttribute("pseudoDirectory") should be (dirReference.get.asObjectId)
 
-    val bucketEntity = dirEntity.get.dependencies.find { e =>
-      e.entity.getTypeName == external.S3_BUCKET_TYPE_STRING
-    }
+    val bucketReference = dirEntity.dependencies.find(_.typeName == external.S3_BUCKET_TYPE_STRING)
+    assert(bucketReference.isDefined)
+    assert(bucketReference.get.isInstanceOf[AtlasEntityWithDependencies])
 
-    bucketEntity.get.entity.getTypeName should be (external.S3_BUCKET_TYPE_STRING)
-    bucketEntity.get.entity.getAttribute("name") should be ("testbucket")
-    bucketEntity.get.entity.getAttribute("qualifiedName") should be (
+    val bucketEntity = bucketReference.get.asInstanceOf[AtlasEntityWithDependencies]
+    bucketEntity.entity.getTypeName should be (external.S3_BUCKET_TYPE_STRING)
+    bucketEntity.entity.getAttribute("name") should be ("testbucket")
+    bucketEntity.entity.getAttribute("qualifiedName") should be (
       "s3://testbucket")
 
-    dirEntity.get.entity.getAttribute("bucket") should be (
-      AtlasUtils.entityToReference(bucketEntity.get.entity))
+    dirEntity.entity.getAttribute("bucket") should be (bucketReference.get.asObjectId)
 
-    bucketEntity.get.dependencies.length should be (0)
+    bucketEntity.dependencies.length should be (0)
   }
 
 }

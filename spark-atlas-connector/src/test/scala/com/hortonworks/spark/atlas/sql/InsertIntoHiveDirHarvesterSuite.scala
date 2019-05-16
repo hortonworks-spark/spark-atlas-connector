@@ -20,32 +20,31 @@ package com.hortonworks.spark.atlas.sql
 import java.io.File
 
 import scala.util.Random
-import org.apache.atlas.AtlasClient
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveDirCommand
-import org.scalatest.{FunSuite, Matchers}
-import com.hortonworks.spark.atlas.types.external
-import com.hortonworks.spark.atlas.WithHiveSupport
-import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
+import com.hortonworks.spark.atlas.{WithHiveSupport, WithRemoteHiveMetastoreServiceSupport}
+import com.hortonworks.spark.atlas.sql.testhelper.{BaseHarvesterSuite, FsEntityValidator}
+import org.apache.spark.sql.SparkSession
 
-
-class InsertIntoHiveDirHarvesterSuite
-  extends FunSuite
-  with Matchers
-  with WithHiveSupport
-  with ProcessEntityValidator {
+abstract class BaseInsertIntoHiveDirHarvesterSuite
+  extends BaseHarvesterSuite
+  with FsEntityValidator {
 
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
+  protected override def initializeTestEnvironment(): Unit = {
+    prepareDatabase()
 
-    sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
-    sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('a'), ('b'), ('c')")
+    _spark.sql(s"CREATE TABLE $sourceTblName (name string)")
+    _spark.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('a'), ('b'), ('c')")
+  }
+
+  override protected def cleanupTestEnvironment(): Unit = {
+    cleanupDatabase()
   }
 
   test("INSERT OVERWRITE DIRECTORY path...") {
-    val qe = sparkSession.sql(s"INSERT OVERWRITE DIRECTORY 'target/dir1' " +
+    val qe = _spark.sql(s"INSERT OVERWRITE DIRECTORY 'target/dir1' " +
       s"SELECT * FROM $sourceTblName").queryExecution
     val qd = QueryDetail(qe, 0L)
 
@@ -57,17 +56,53 @@ class InsertIntoHiveDirHarvesterSuite
     val entities = CommandsHarvester.InsertIntoHiveDirHarvester.harvest(cmd, qd)
     validateProcessEntity(entities.head, _ => {}, inputs => {
       inputs.size should be (1)
-      val inputTbl = inputs.head.entity
-      inputTbl.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      inputTbl.getAttribute("name") should be (sourceTblName)
-      inputTbl.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$sourceTblName@primary")
+      assertTable(inputs.head, _dbName, sourceTblName, _clusterName, _useSparkTable)
     }, outputs => {
       outputs.size should be (1)
-      val outputPath = outputs.head.entity
-      outputPath.getTypeName should be (external.FS_PATH_TYPE_STRING)
       val dir = new File("target/dir1").getAbsolutePath
-      outputPath.getAttribute("name") should be (dir.toLowerCase)
+      assertFsEntity(outputs.head, dir)
     })
   }
+}
+
+class InsertIntoHiveDirHarvesterSuite
+  extends BaseInsertIntoHiveDirHarvesterSuite
+  with WithHiveSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override protected def getSparkSession: SparkSession = sparkSession
+
+  override protected def getDbName: String = "sac"
+
+  override protected def expectSparkTableModels: Boolean = true
+}
+
+class InsertIntoHiveDirHarvesterWithRemoteHMSSuite
+  extends BaseInsertIntoHiveDirHarvesterSuite
+  with WithRemoteHiveMetastoreServiceSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override protected def getSparkSession: SparkSession = sparkSession
+
+  override protected def getDbName: String = dbName
+
+  override protected def expectSparkTableModels: Boolean = false
 }

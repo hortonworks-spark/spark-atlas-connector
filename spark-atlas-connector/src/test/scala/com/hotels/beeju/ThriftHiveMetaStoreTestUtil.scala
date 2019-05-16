@@ -15,10 +15,15 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas.sql
+package com.hotels.beeju
 
-import com.hortonworks.spark.atlas.AtlasReferenceable
+class ThriftHiveMetaStoreTestUtil(dbName: String)
+  extends ThriftHiveMetaStoreJUnitRule(dbName) {
+  override def before(): Unit = {
+    super.before()
+  }
 
-trait Harvester[T] {
-  def harvest(node: T, qd: QueryDetail): Seq[AtlasReferenceable]
+  override def after(): Unit = {
+    super.after()
+  }
 }

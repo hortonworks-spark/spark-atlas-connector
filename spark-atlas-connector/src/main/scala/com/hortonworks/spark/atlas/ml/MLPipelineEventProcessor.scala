@@ -139,7 +139,7 @@ class MLPipelineEventProcessor(
 
     val logicalPlan = trainData.queryExecution.analyzed
     var isFiles = false
-    val tableEntities: Seq[AtlasEntityWithDependencies] = logicalPlan.collectLeaves().flatMap {
+    val tableEntities: Seq[AtlasReferenceable] = logicalPlan.collectLeaves().flatMap {
       case r: HiveTableRelation => Seq(tableToEntity(r.tableMeta))
       case v: View => Seq(tableToEntity(v.desc))
       case l: LogicalRelation if l.catalogTable.isDefined =>

@@ -19,18 +19,16 @@ package com.hortonworks.spark.atlas.types
 
 import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.util.Date
 
 import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
 
-import scala.collection.JavaConverters._
 import org.apache.atlas.AtlasConstants
-import org.apache.atlas.model.instance.AtlasEntity
+import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
+import com.hortonworks.spark.atlas.{AtlasEntityReference, AtlasEntityWithDependencies, AtlasReferenceable, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 
 
@@ -182,36 +180,6 @@ object external {
     AtlasEntityWithDependencies(kafkaEntity)
   }
 
-  // ================== Spark's Hive Catalog entities =====================
-
-  // Note: given that we use Spark model types for Hive catalog entities (except HWC),
-  // Hive catalog entities should follow Spark model definitions.
-  // In Atlas, the attributes which are not in definition are ignored with WARN messages.
-
-  val HIVE_DB_TYPE_STRING = metadata.DB_TYPE_STRING
-  val HIVE_STORAGEDESC_TYPE_STRING = metadata.STORAGEDESC_TYPE_STRING
-  val HIVE_TABLE_TYPE_STRING = metadata.TABLE_TYPE_STRING
-
-  def hiveDbUniqueAttribute(cluster: String, db: String): String = s"${db.toLowerCase}@$cluster"
-
-  def hiveDbToEntity(
-      dbDefinition: CatalogDatabase,
-      cluster: String,
-      owner: String): AtlasEntityWithDependencies = {
-    val dbEntity = new AtlasEntity(HIVE_DB_TYPE_STRING)
-    dbEntity.setAttribute("qualifiedName",
-      hiveDbUniqueAttribute(cluster, dbDefinition.name.toLowerCase))
-    dbEntity.setAttribute("name", dbDefinition.name.toLowerCase)
-    dbEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
-    dbEntity.setAttribute("description", dbDefinition.description)
-    dbEntity.setAttribute("location", dbDefinition.locationUri.toString)
-    dbEntity.setAttribute("parameters", dbDefinition.properties.asJava)
-    dbEntity.setAttribute("owner", owner)
-    dbEntity.setAttribute("ownerType", "USER")
-
-    AtlasEntityWithDependencies(dbEntity)
-  }
-
   // ================ RDBMS based entities ======================
   val RDBMS_TABLE = "rdbms_table"
 
@@ -242,33 +210,15 @@ object external {
   private def getRdbmsQualifiedName(databaseName: String, tableName: String): String =
     s"${databaseName.toLowerCase}.${tableName.toLowerCase}"
 
-  def hiveStorageDescUniqueAttribute(
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): String = {
-    hiveTableUniqueAttribute(cluster, db, table, isTempTable) + "_storage"
-  }
+  // ================== Hive Catalog entities =====================
+  val HIVE_TABLE_TYPE_STRING = "hive_table"
 
-  def hiveStorageDescToEntity(
-      storageFormat: CatalogStorageFormat,
-      cluster: String,
-      db: String,
-      table: String,
-      isTempTable: Boolean = false): AtlasEntityWithDependencies = {
-    val sdEntity = new AtlasEntity(HIVE_STORAGEDESC_TYPE_STRING)
-    sdEntity.setAttribute("qualifiedName",
-      hiveStorageDescUniqueAttribute(cluster, db, table, isTempTable))
-    storageFormat.locationUri.foreach { u => sdEntity.setAttribute("location", u.toString) }
-    storageFormat.inputFormat.foreach(sdEntity.setAttribute("inputFormat", _))
-    storageFormat.outputFormat.foreach(sdEntity.setAttribute("outputFormat", _))
-    storageFormat.serde.foreach(sdEntity.setAttribute("serde", _))
-    sdEntity.setAttribute("compressed", storageFormat.compressed)
-    sdEntity.setAttribute("parameters", storageFormat.properties.asJava)
-
-    AtlasEntityWithDependencies(sdEntity)
-  }
-
+  // scalastyle:off
+  /**
+   * This is based on the logic how Hive Hook defines qualifiedName for Hive DB (borrowed from Apache Atlas v1.1).
+   * https://github.com/apache/atlas/blob/release-1.1.0-rc2/addons/hive-bridge/src/main/java/org/apache/atlas/hive/bridge/HiveMetaStoreBridge.java#L833-L841
+   */
+  // scalastyle:on
   def hiveTableUniqueAttribute(
       cluster: String,
       db: String,
@@ -287,99 +237,22 @@ object external {
     s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
   }
 
-  def hiveTableToEntity(
+  def hiveTableToReference(
       tblDefinition: CatalogTable,
       cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
+      mockDbDefinition: Option[CatalogDatabase] = None): AtlasReferenceable = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = SparkUtils.getDatabaseName(tableDefinition)
     val table = SparkUtils.getTableName(tableDefinition)
-    val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
-
-    val dbEntity = hiveDbToEntity(dbDefinition, cluster, tableDefinition.owner)
-    val sdEntity = hiveStorageDescToEntity(
-      tableDefinition.storage, cluster, db, table
-      /* isTempTable = false  Spark doesn't support temp table */)
-
-    val tblEntity = new AtlasEntity(HIVE_TABLE_TYPE_STRING)
-    tblEntity.setAttribute("qualifiedName",
-      hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */))
-    tblEntity.setAttribute("name", table)
-    tblEntity.setAttribute("owner", tableDefinition.owner)
-    tblEntity.setAttribute("ownerType", "USER")
-    tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
-    tblEntity.setAttribute("createTime", new Date(tableDefinition.createTime))
-    tblEntity.setAttribute("parameters", tableDefinition.properties.asJava)
-    tblEntity.setAttribute("schemaDesc", tableDefinition.schema.simpleString)
-    tblEntity.setAttribute("provider", tableDefinition.provider.getOrElse(""))
-    if (tableDefinition.tracksPartitionsInCatalog) {
-      tblEntity.setAttribute("partitionProvider", "Catalog")
-    }
-    tblEntity.setAttribute("partitionColumnNames", tableDefinition.partitionColumnNames.asJava)
-    tableDefinition.comment.foreach(tblEntity.setAttribute("comment", _))
-    tableDefinition.viewText.foreach(tblEntity.setAttribute("viewOriginalText", _))
-
-    tblEntity.setRelationshipAttribute("db", AtlasUtils.entityToReference(dbEntity.entity))
-    tblEntity.setRelationshipAttribute("sd", AtlasUtils.entityToReference(sdEntity.entity))
-
-    new AtlasEntityWithDependencies(tblEntity, Seq(dbEntity, sdEntity))
+    hiveTableToReference(db, table, cluster)
   }
 
-  def hiveTableToEntitiesForAlterTable(
-      tblDefinition: CatalogTable,
-      cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
-    val tableEntity = hiveTableToEntity(tblDefinition, cluster, mockDbDefinition)
-    val deps = tableEntity.dependencies.map(_.entity)
-
-    val dbEntity = deps.filter(e => e.getTypeName.equals(HIVE_DB_TYPE_STRING)).head
-    val sdEntity = deps.filter(e => e.getTypeName.equals(HIVE_STORAGEDESC_TYPE_STRING)).head
-
-    // override attribute with reference - Atlas should already have these entities
-    tableEntity.entity.setRelationshipAttribute("db",
-      AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tableEntity.entity.setRelationshipAttribute("sd",
-      AtlasUtils.entityToReference(sdEntity, useGuid = false))
-
-    // drop all the dependencies since they're not necessary
-    AtlasEntityWithDependencies(tableEntity.entity)
-  }
-
-  // ================== Hive entities (Hive Warehouse Connector) =====================
-  val HWC_TABLE_TYPE_STRING = "hive_table"
-  val HWC_DB_TYPE_STRING = "hive_db"
-  val HWC_STORAGEDESC_TYPE_STRING = "hive_storagedesc"
-
-  def hwcTableUniqueAttribute(
-      cluster: String,
-      db: String,
-      tableName: String): String = {
-    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
-  }
-
-  def hwcTableToEntity(
+  def hiveTableToReference(
       db: String,
       table: String,
-      cluster: String): AtlasEntityWithDependencies = {
-
-    val dbEntity = new AtlasEntity(HWC_DB_TYPE_STRING)
-    dbEntity.setAttribute("qualifiedName",
-      hiveDbUniqueAttribute(cluster, db.toLowerCase))
-    dbEntity.setAttribute("name", db.toLowerCase)
-
-    val sdEntity = new AtlasEntity(HWC_STORAGEDESC_TYPE_STRING)
-    sdEntity.setAttribute("qualifiedName",
-      hiveStorageDescUniqueAttribute(cluster, db, table))
-
-    val tblEntity = new AtlasEntity(HWC_TABLE_TYPE_STRING)
-    tblEntity.setAttribute("qualifiedName",
-      hiveTableUniqueAttribute(cluster, db, table))
-    tblEntity.setAttribute("name", table)
-    tblEntity.setAttribute("db",
-      AtlasUtils.entityToReference(dbEntity, useGuid = false))
-    tblEntity.setAttribute("sd",
-      AtlasUtils.entityToReference(sdEntity, useGuid = false))
-
-    AtlasEntityWithDependencies(tblEntity)
+      cluster: String): AtlasReferenceable = {
+    val qualifiedName = hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */)
+    AtlasEntityReference(
+      new AtlasObjectId(HIVE_TABLE_TYPE_STRING, "qualifiedName", qualifiedName))
   }
 }
