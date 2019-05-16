@@ -89,6 +89,12 @@ object SparkUtils extends Logging {
     catalog
   }
 
+  def getCurrentDatabase: String = {
+    val database = sparkSession.sessionState.catalog.getCurrentDatabase
+    require(database != null, "current database is null")
+    database
+  }
+
   /**
    * Get the catalog table of current external catalog if exists; otherwise, it returns
    * the input catalog table as is.
