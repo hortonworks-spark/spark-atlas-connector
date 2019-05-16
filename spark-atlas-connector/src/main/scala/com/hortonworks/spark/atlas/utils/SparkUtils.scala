@@ -102,7 +102,7 @@ object SparkUtils extends Logging {
   def getCatalogTableIfExistent(tableDefinition: CatalogTable): CatalogTable = {
     try {
       SparkUtils.getExternalCatalog().getTable(
-        tableDefinition.identifier.database.getOrElse("default"),
+        tableDefinition.identifier.database.getOrElse(SparkUtils.getCurrentDatabase),
         tableDefinition.identifier.table)
     } catch {
       case e: Throwable =>

@@ -85,7 +85,7 @@ object internal extends Logging {
       clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
-    val db = tableDefinition.identifier.database.getOrElse("default")
+    val db = tableDefinition.identifier.database.getOrElse(SparkUtils.getCurrentDatabase)
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
