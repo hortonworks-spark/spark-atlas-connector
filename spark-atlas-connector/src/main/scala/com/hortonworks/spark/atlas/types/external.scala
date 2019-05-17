@@ -292,8 +292,8 @@ object external {
       cluster: String,
       mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
-    val db = tableDefinition.identifier.database.getOrElse(SparkUtils.getCurrentDatabase)
-    val table = tableDefinition.identifier.table
+    val db = SparkUtils.getDatabaseName(tableDefinition)
+    val table = SparkUtils.getTableName(tableDefinition)
     val dbDefinition = mockDbDefinition.getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
     val dbEntity = hiveDbToEntity(dbDefinition, cluster, tableDefinition.owner)
