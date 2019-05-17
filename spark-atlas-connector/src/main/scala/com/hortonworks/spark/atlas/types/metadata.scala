@@ -130,7 +130,7 @@ object metadata {
     AtlasTypeUtil.createOptionalAttrDef("executionId", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("currUser", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("remoteUser", new AtlasStringType),
-    AtlasTypeUtil.createOptionalAttrDef("executionTime", new AtlasLongType),
+    AtlasTypeUtil.createOptionalAttrDef("durationMs", new AtlasLongType),
     AtlasTypeUtil.createOptionalAttrDef("details", new AtlasStringType),
     AtlasTypeUtil.createOptionalAttrDef("sparkPlanDescription", new AtlasStringType))
 

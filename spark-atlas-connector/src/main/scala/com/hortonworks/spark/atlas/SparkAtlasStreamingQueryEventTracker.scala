@@ -55,14 +55,12 @@ class SparkAtlasStreamingQueryEventTracker(
       if (query != null) {
         query match {
           case query: StreamingQueryWrapper =>
-            val qd = QueryDetail(query.streamingQuery.lastExecution,
-              AtlasUtils.issueExecutionId(), -1, None, Some(event.progress.sink))
+            val qd = QueryDetail.fromStreamingQueryListener(query.streamingQuery, event)
             executionPlanTracker.pushEvent(qd)
             streamQueryHashset.add(event.progress.runId)
 
           case query: StreamExecution =>
-            val qd = QueryDetail(query.lastExecution, AtlasUtils.issueExecutionId(),
-              -1, None, Some(event.progress.sink))
+            val qd = QueryDetail.fromStreamingQueryListener(query, event)
             executionPlanTracker.pushEvent(qd)
             streamQueryHashset.add(event.progress.runId)
 

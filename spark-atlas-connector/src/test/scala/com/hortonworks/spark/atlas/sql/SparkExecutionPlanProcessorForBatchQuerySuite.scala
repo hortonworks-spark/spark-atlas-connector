@@ -418,7 +418,7 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
     val expectedMap = Map(
       "executionId" -> queryDetail.executionId.toString,
       "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-      "executionTime" -> queryDetail.executionTime.toString,
+      "durationMs" -> queryDetail.durationMs.toString,
       "details" -> queryDetail.qe.toString()
     )
 

@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import com.hortonworks.spark.atlas.AtlasUtils
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -32,7 +31,7 @@ class AtlasQueryExecutionListener extends QueryExecutionListener {
       // streaming query will be tracked via SparkAtlasStreamingQueryEventTracker
       return
     }
-    queryDetails += QueryDetail(qe, AtlasUtils.issueExecutionId(), durationNs)
+    queryDetails += QueryDetail.fromQueryExecutionListener(qe, durationNs)
   }
 
   override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {

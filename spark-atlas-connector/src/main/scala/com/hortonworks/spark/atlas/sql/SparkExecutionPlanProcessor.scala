@@ -17,9 +17,10 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import java.util.concurrent.TimeUnit
+
 import com.hortonworks.spark.atlas.sql.CommandsHarvester.WriteToDataSourceV2Harvester
 import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourceWriter
-
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, SaveIntoDataSourceCommand}
@@ -27,15 +28,33 @@ import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Exec
 import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
-import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf}
+import com.hortonworks.spark.atlas.{AbstractEventProcessor, AtlasClient, AtlasClientConf, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.SinkProgress
+import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 
 
-case class QueryDetail(qe: QueryExecution, executionId: Long,
-  executionTime: Long, query: Option[String] = None, sink: Option[SinkProgress] = None)
+case class QueryDetail(
+    qe: QueryExecution,
+    executionId: Long,
+    durationMs: Long,
+    query: Option[String] = None,
+    sink: Option[SinkProgress] = None)
+
+object QueryDetail {
+  def fromQueryExecutionListener(qe: QueryExecution, durationNs: Long): QueryDetail = {
+    val durationMs = TimeUnit.MILLISECONDS.convert(durationNs, TimeUnit.NANOSECONDS)
+    QueryDetail(qe, AtlasUtils.issueExecutionId(), durationMs, Option(SQLQuery.get()))
+  }
+
+  def fromStreamingQueryListener(qe: StreamExecution, event: QueryProgressEvent): QueryDetail = {
+    QueryDetail(qe.lastExecution, AtlasUtils.issueExecutionId(), -1, None,
+      Some(event.progress.sink))
+  }
+}
 
 class SparkExecutionPlanProcessor(
     private[atlas] val atlasClient: AtlasClient,

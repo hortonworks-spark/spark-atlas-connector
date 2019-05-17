@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import com.hortonworks.spark.atlas.AtlasUtils
 import com.hortonworks.spark.atlas.sql.QueryDetail
 import com.hortonworks.spark.atlas.utils.Logging
 import org.apache.spark.sql.SparkSession
@@ -39,13 +38,11 @@ class AtlasStreamingQueryProgressListener extends StreamingQueryListener with Lo
     if (query != null) {
       query match {
         case query: StreamingQueryWrapper =>
-          val qd = QueryDetail(query.streamingQuery.lastExecution,
-            AtlasUtils.issueExecutionId(), -1, sink = Some(event.progress.sink))
+          val qd = QueryDetail.fromStreamingQueryListener(query.streamingQuery, event)
           queryDetails += qd
 
         case query: StreamExecution =>
-          val qd = QueryDetail(query.lastExecution, AtlasUtils.issueExecutionId(), -1,
-            sink = Some(event.progress.sink))
+          val qd = QueryDetail.fromStreamingQueryListener(query, event)
           queryDetails += qd
 
         case _ => logWarn(s"Unexpected type of streaming query: ${query.getClass}")
