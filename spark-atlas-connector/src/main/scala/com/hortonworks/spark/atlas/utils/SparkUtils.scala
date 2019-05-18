@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
@@ -124,7 +125,7 @@ object SparkUtils extends Logging {
    */
   // scalastyle:on
   def getDatabaseName(tableDefinition: CatalogTable): String = {
-    formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    getDatabaseName(tableDefinition.identifier)
   }
 
   // scalastyle:off
@@ -134,7 +135,27 @@ object SparkUtils extends Logging {
    */
   // scalastyle:on
   def getTableName(tableDefinition: CatalogTable): String = {
-    formatTableName(tableDefinition.identifier.table)
+    getTableName(tableDefinition.identifier)
+  }
+
+  // scalastyle:off
+  /**
+   * This is based on the logic how Spark handles database name (borrowed from Apache Spark v2.4.0).
+   * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
+   */
+  // scalastyle:on
+  def getDatabaseName(identifier: TableIdentifier): String = {
+    formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
+  }
+
+  // scalastyle:off
+  /**
+   * This is based on the logic how Spark handles database name (borrowed from Apache Spark v2.4.0).
+   * https://github.com/apache/spark/blob/0a4c03f7d084f1d2aa48673b99f3b9496893ce8d/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/catalog/SessionCatalog.scala#L294-L295
+   */
+  // scalastyle:on
+  def getTableName(identifier: TableIdentifier): String = {
+    formatTableName(identifier.table)
   }
 
   /**

@@ -201,8 +201,8 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
   }
 
   def prepareEntity(tableIdentifier: TableIdentifier): AtlasEntityWithDependencies = {
-    val tableName = tableIdentifier.table
-    val dbName = tableIdentifier.database.getOrElse(SparkUtils.getCurrentDatabase)
+    val tableName = SparkUtils.getTableName(tableIdentifier)
+    val dbName = SparkUtils.getDatabaseName(tableIdentifier)
     val tableDef = SparkUtils.getExternalCatalog().getTable(dbName, tableName)
     tableToEntity(tableDef)
   }
