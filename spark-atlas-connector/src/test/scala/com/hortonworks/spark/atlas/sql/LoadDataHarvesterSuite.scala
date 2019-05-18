@@ -40,12 +40,20 @@ class LoadDataHarvesterSuite
   with WithHiveSupport
   with ProcessEntityValidator {
 
+  private val dbName = "tmpdb"
   private val sourceTblName = "source_" + Random.nextInt(100000)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
 
+    sparkSession.sql(s"DROP DATABASE IF EXISTS $dbName Cascade")
+    sparkSession.sql(s"CREATE DATABASE $dbName")
+    sparkSession.sql(s"USE $dbName")
     sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
+  }
+
+  override protected def afterAll(): Unit = {
+    sparkSession.sql(s"DROP DATABASE IF EXISTS $dbName Cascade")
   }
 
   test("LOAD DATA [LOCAL] INPATH path source") {
@@ -74,7 +82,7 @@ class LoadDataHarvesterSuite
       outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
       outputEntity.getAttribute("name") should be (sourceTblName)
       outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"default.$sourceTblName@primary")
+        s"$dbName.$sourceTblName@primary")
     })
   }
 }

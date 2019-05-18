@@ -85,19 +85,20 @@ object internal extends Logging {
       clusterName: String,
       mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
-    val db = tableDefinition.identifier.database.getOrElse("default")
+    val db = SparkUtils.getDatabaseName(tableDefinition)
+    val table = SparkUtils.getTableName(tableDefinition)
     val dbDefinition = mockDbDefinition
       .getOrElse(SparkUtils.getExternalCatalog().getDatabase(db))
 
     val dbEntity = sparkDbToEntity(dbDefinition, clusterName, tableDefinition.owner)
     val sdEntity =
-      sparkStorageFormatToEntity(tableDefinition.storage, db, tableDefinition.identifier.table)
+      sparkStorageFormatToEntity(tableDefinition.storage, db, table)
 
     val tblEntity = new AtlasEntity(metadata.TABLE_TYPE_STRING)
 
     tblEntity.setAttribute("qualifiedName",
-      sparkTableUniqueAttribute(db, tableDefinition.identifier.table))
-    tblEntity.setAttribute("name", tableDefinition.identifier.table)
+      sparkTableUniqueAttribute(db, table))
+    tblEntity.setAttribute("name", table)
     tblEntity.setAttribute("tableType", tableDefinition.tableType.name)
     tblEntity.setAttribute("schemaDesc", tableDefinition.schema.simpleString)
     tblEntity.setAttribute("provider", tableDefinition.provider.getOrElse(""))
