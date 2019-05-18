@@ -88,7 +88,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO HIVE TABLE FROM HIVE TABLE") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
       s"SELECT * FROM $sourceHiveTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -116,7 +116,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO HIVE TABLE FROM HIVE TABLE (Cyclic)") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
       s"SELECT * FROM $destinationHiveTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -139,7 +139,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO HIVE TABLE FROM SPARK TABLE") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationHiveTblName " +
       s"SELECT * FROM $sourceSparkTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -167,7 +167,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO SPARK TABLE FROM HIVE TABLE") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
       s"SELECT * FROM $sourceHiveTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -195,7 +195,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO SPARK TABLE FROM SPARK TABLE") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
       s"SELECT * FROM $sourceSparkTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -223,7 +223,7 @@ class InsertIntoHarvesterSuite
   test("INSERT INTO SPARK TABLE FROM SPARK TABLE (Cyclic)") {
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
       s"SELECT * FROM $destinationSparkTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -247,7 +247,7 @@ class InsertIntoHarvesterSuite
     val qe = sparkSession.sql(s"INSERT INTO $bigTable " +
       s"SELECT * FROM $inputTable1, $inputTable2, $inputTable3 " +
       s"where $inputTable1.a = $inputTable2.b AND $inputTable1.a = $inputTable3.c").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -278,7 +278,7 @@ class InsertIntoHarvesterSuite
       s"INSERT INTO TABLE $outputTable1 SELECT $bigTable.a " +
       s"INSERT INTO TABLE $outputTable2 SELECT $bigTable.b " +
       s"INSERT into TABLE $outputTable3 SELECT $bigTable.c").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[UnionExec])
     qe.sparkPlan.asInstanceOf[UnionExec]
@@ -314,7 +314,7 @@ class InsertIntoHarvesterSuite
       s"FROM view1 INSERT INTO TABLE $outputTable1 SELECT view1.a " +
       s"INSERT INTO TABLE $outputTable2 SELECT view1.b " +
       s"INSERT into TABLE $outputTable3 SELECT view1.c").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[UnionExec])
     qe.sparkPlan.asInstanceOf[UnionExec]

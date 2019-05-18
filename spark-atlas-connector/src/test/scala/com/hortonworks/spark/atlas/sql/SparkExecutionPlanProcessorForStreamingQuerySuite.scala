@@ -636,7 +636,6 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
       val expectedMap = Map(
         "executionId" -> queryDetail.executionId.toString,
         "remoteUser" -> SparkUtils.currSessionUser(queryDetail.qe),
-        "durationMs" -> queryDetail.durationMs.toString,
         "details" -> queryDetail.qe.toString()
       )
 

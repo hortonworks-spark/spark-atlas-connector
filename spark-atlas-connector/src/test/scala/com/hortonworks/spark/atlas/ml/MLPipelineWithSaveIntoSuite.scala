@@ -82,7 +82,7 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
       s"SELECT text FROM $sourceSparkTblName").queryExecution
 
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -133,7 +133,7 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val qe = sparkSession.sql(s"INSERT INTO TABLE $destinationSparkTblName " +
       s"SELECT text FROM $sourceSparkTblName").queryExecution
 
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]
@@ -194,7 +194,7 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     assert(node2.cmd.isInstanceOf[InsertIntoHadoopFsRelationCommand])
     val cmd2 = node2.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
 
-    val qd2 = QueryDetail(qe, 0L, 0L)
+    val qd2 = QueryDetail(qe, 0L)
     val entities2 = CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(cmd2, qd2)
     val pEntity2 = entities2.head.entity
 

@@ -40,18 +40,16 @@ import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 case class QueryDetail(
     qe: QueryExecution,
     executionId: Long,
-    durationMs: Long,
     query: Option[String] = None,
     sink: Option[SinkProgress] = None)
 
 object QueryDetail {
   def fromQueryExecutionListener(qe: QueryExecution, durationNs: Long): QueryDetail = {
-    val durationMs = TimeUnit.MILLISECONDS.convert(durationNs, TimeUnit.NANOSECONDS)
-    QueryDetail(qe, AtlasUtils.issueExecutionId(), durationMs, Option(SQLQuery.get()))
+    QueryDetail(qe, AtlasUtils.issueExecutionId(), Option(SQLQuery.get()))
   }
 
   def fromStreamingQueryListener(qe: StreamExecution, event: QueryProgressEvent): QueryDetail = {
-    QueryDetail(qe.lastExecution, AtlasUtils.issueExecutionId(), -1, None,
+    QueryDetail(qe.lastExecution, AtlasUtils.issueExecutionId(), None,
       Some(event.progress.sink))
   }
 }
