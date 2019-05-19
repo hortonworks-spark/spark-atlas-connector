@@ -54,7 +54,7 @@ class CreateHiveTableAsSelectHarvesterSuite
     val destTblName = "dest1_" + Random.nextInt(100000)
     val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT name FROM $sourceTblName")
       .queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
       case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
@@ -93,7 +93,7 @@ class CreateHiveTableAsSelectHarvesterSuite
     val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS " +
       s"SELECT a.age FROM $sourceTblName a, $sourceTbl1Name b WHERE a.name = b.name")
       .queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
       case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
@@ -131,7 +131,7 @@ class CreateHiveTableAsSelectHarvesterSuite
     val destTblName = "dest3_" + Random.nextInt(100000)
     val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT * FROM $viewName")
       .queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
       case p: DataWritingCommandExec => p
       case p: LeafExecNode => p
@@ -167,7 +167,7 @@ class CreateHiveTableAsSelectHarvesterSuite
 
     val qe = sparkSession.sql(s"CREATE TABLE $destTblName AS SELECT * " +
       s"FROM parquet.`$path`").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
     val ctasNode = qe.sparkPlan.collect {
       case p: DataWritingCommandExec => p
       case p: LeafExecNode => p

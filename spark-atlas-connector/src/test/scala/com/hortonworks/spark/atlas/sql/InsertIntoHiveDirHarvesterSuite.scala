@@ -47,7 +47,7 @@ class InsertIntoHiveDirHarvesterSuite
   test("INSERT OVERWRITE DIRECTORY path...") {
     val qe = sparkSession.sql(s"INSERT OVERWRITE DIRECTORY 'target/dir1' " +
       s"SELECT * FROM $sourceTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[DataWritingCommandExec])
     val node = qe.sparkPlan.asInstanceOf[DataWritingCommandExec]

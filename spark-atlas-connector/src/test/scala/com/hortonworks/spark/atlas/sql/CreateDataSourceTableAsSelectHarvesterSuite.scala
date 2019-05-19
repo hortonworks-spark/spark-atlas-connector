@@ -78,7 +78,7 @@ class CreateDataSourceTableAsSelectHarvesterSuite
     sparkSession.sessionState.catalog.createTable(
       newTable, ignoreIfExists = false, validateLocation = false)
 
-    val qd = QueryDetail(df.queryExecution, 0L, 0L)
+    val qd = QueryDetail(df.queryExecution, 0L)
     val entities = CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(cmd, qd)
     val processDeps = entities.head.dependencies
     val maybeEntity = processDeps.find(e => e.entity.getTypeName == "spark_table").map(_.entity)

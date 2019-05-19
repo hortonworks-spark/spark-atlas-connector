@@ -86,7 +86,7 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
       return
     }
 
-    val qd = QueryDetail(qe, AtlasUtils.issueExecutionId(), durationNs, Option(SQLQuery.get()))
+    val qd = QueryDetail.fromQueryExecutionListener(qe, durationNs)
     executionPlanTracker.pushEvent(qd)
   }
 

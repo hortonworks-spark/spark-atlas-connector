@@ -149,7 +149,6 @@ object internal extends Logging {
   def sparkProcessToEntity(
       qe: QueryExecution,
       executionId: Long,
-      executionTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
       query: Option[String] = None): AtlasEntityWithDependencies = {
@@ -164,7 +163,6 @@ object internal extends Logging {
     entity.setAttribute("remoteUser", SparkUtils.currSessionUser(qe))
     entity.setAttribute("inputs", inputs.asJava)
     entity.setAttribute("outputs", outputs.asJava)
-    entity.setAttribute("executionTime", executionTime)
     entity.setAttribute("details", qe.toString())
     entity.setAttribute("sparkPlanDescription", qe.sparkPlan.toString())
 

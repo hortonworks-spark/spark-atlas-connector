@@ -130,11 +130,10 @@ trait AtlasEntityUtils extends Logging {
   def processToEntity(
       qe: QueryExecution,
       executionId: Long,
-      executionTime: Long,
       inputs: List[AtlasEntity],
       outputs: List[AtlasEntity],
       query: Option[String] = None): AtlasEntityWithDependencies =
-    internal.sparkProcessToEntity(qe, executionId, executionTime, inputs, outputs, query)
+    internal.sparkProcessToEntity(qe, executionId, inputs, outputs, query)
 
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)

@@ -44,7 +44,7 @@ class CreateViewHarvesterSuite
   test("CREATE VIEW FROM TABLE") {
     val qe = sparkSession.sql(s"CREATE VIEW $destinationViewName " +
       s"AS SELECT * FROM $sourceTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[ExecutedCommandExec])
     val node = qe.sparkPlan.asInstanceOf[ExecutedCommandExec]
@@ -71,7 +71,7 @@ class CreateViewHarvesterSuite
   test("CREATE VIEW without source") {
     val qe = sparkSession.sql(s"CREATE VIEW $destinationViewName2 " +
       s"AS SELECT 1").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
 
     assert(qe.sparkPlan.isInstanceOf[ExecutedCommandExec])
     val node = qe.sparkPlan.asInstanceOf[ExecutedCommandExec]

@@ -64,7 +64,7 @@ class LoadDataHarvesterSuite
 
     val qe = sparkSession.sql(s"LOAD DATA LOCAL INPATH '${file.getAbsolutePath}' " +
       s"OVERWRITE INTO  TABLE $sourceTblName").queryExecution
-    val qd = QueryDetail(qe, 0L, 0L)
+    val qd = QueryDetail(qe, 0L)
     val node = qe.sparkPlan.collect { case p: LeafExecNode => p }
     assert(node.size == 1)
     val execNode = node.head.asInstanceOf[ExecutedCommandExec]
