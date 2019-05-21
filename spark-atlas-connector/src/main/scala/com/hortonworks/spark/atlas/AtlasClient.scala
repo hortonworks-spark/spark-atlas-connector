@@ -34,13 +34,13 @@ trait AtlasClient extends Logging {
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
   final def createEntitiesWithDependencies(
-      entity: AtlasReferenceable): Unit = this.synchronized {
+      entity: SACAtlasReferenceable): Unit = this.synchronized {
     entity match {
-      case e: AtlasEntityWithDependencies =>
+      case e: SACAtlasEntityWithDependencies =>
         // handle dependencies first
         if (e.dependencies.nonEmpty) {
-          val deps = e.dependencies.filter(_.isInstanceOf[AtlasEntityWithDependencies])
-            .map(_.asInstanceOf[AtlasEntityWithDependencies])
+          val deps = e.dependencies.filter(_.isInstanceOf[SACAtlasEntityWithDependencies])
+            .map(_.asInstanceOf[SACAtlasEntityWithDependencies])
 
           val depsHavingAnotherDeps = deps.filter(_.dependencies.nonEmpty)
           val depsHavingNoDeps = deps.filterNot(_.dependencies.nonEmpty)
@@ -60,7 +60,7 @@ trait AtlasClient extends Logging {
   }
 
   final def createEntitiesWithDependencies(
-      entities: Seq[AtlasReferenceable]): Unit = this.synchronized {
+      entities: Seq[SACAtlasReferenceable]): Unit = this.synchronized {
     entities.foreach(createEntitiesWithDependencies)
   }
 

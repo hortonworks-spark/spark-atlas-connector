@@ -17,7 +17,7 @@
 
 package com.hortonworks.spark.atlas.sql.testhelper
 
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasReferenceable}
+import com.hortonworks.spark.atlas.{AtlasClientConf, SACAtlasReferenceable}
 import org.apache.spark.sql.SparkSession
 import org.scalatest.{FunSuite, Matchers}
 
@@ -54,13 +54,13 @@ abstract class BaseHarvesterSuite
     _spark.sql(s"DROP DATABASE IF EXISTS ${_dbName} Cascade")
   }
 
-  protected def assertTable(ref: AtlasReferenceable, tableName: String): Unit = {
+  protected def assertTable(ref: SACAtlasReferenceable, tableName: String): Unit = {
     assertTable(ref, _dbName, tableName, _clusterName, _useSparkTable)
   }
 
   protected def assertTableWithNamePrefix(
-      ref: AtlasReferenceable,
-      tblNamePrefix: String): Unit = {
+                                           ref: SACAtlasReferenceable,
+                                           tblNamePrefix: String): Unit = {
     assertTableWithNamePrefix(ref, _dbName, tblNamePrefix, _clusterName, _useSparkTable)
   }
 }

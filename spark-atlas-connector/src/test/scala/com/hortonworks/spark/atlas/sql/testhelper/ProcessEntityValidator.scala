@@ -23,18 +23,18 @@ import com.hortonworks.spark.atlas.AtlasEntityReadHelper.getOnlyOneEntity
 import com.hortonworks.spark.atlas.types.metadata
 
 import scala.collection.JavaConverters._
-import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasReferenceable, AtlasUtils, TestUtils}
+import com.hortonworks.spark.atlas.{SACAtlasEntityWithDependencies, SACAtlasReferenceable, AtlasUtils, TestUtils}
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.scalatest.FunSuite
 
 trait ProcessEntityValidator extends FunSuite {
   def validateProcessEntity(
-      process: AtlasReferenceable,
-      validateFnForProcess: AtlasEntity => Unit,
-      validateFnForInputs: Seq[AtlasReferenceable] => Unit,
-      validateFnForOutputs: Seq[AtlasReferenceable] => Unit): Unit = {
-    require(process.isInstanceOf[AtlasEntityWithDependencies])
-    val pEntity = process.asInstanceOf[AtlasEntityWithDependencies].entity
+                             process: SACAtlasReferenceable,
+                             validateFnForProcess: AtlasEntity => Unit,
+                             validateFnForInputs: Seq[SACAtlasReferenceable] => Unit,
+                             validateFnForOutputs: Seq[SACAtlasReferenceable] => Unit): Unit = {
+    require(process.isInstanceOf[SACAtlasEntityWithDependencies])
+    val pEntity = process.asInstanceOf[SACAtlasEntityWithDependencies].entity
     validateFnForProcess(pEntity)
 
     assert(pEntity.getAttribute("inputs").isInstanceOf[util.Collection[_]])
@@ -42,7 +42,7 @@ trait ProcessEntityValidator extends FunSuite {
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     val outputs = pEntity.getAttribute("outputs").asInstanceOf[util.Collection[AtlasObjectId]]
 
-    val pDeps = process.asInstanceOf[AtlasEntityWithDependencies].dependencies
+    val pDeps = process.asInstanceOf[SACAtlasEntityWithDependencies].dependencies
     val inputEntities = TestUtils.findEntities(pDeps, inputs.asScala.toSeq)
     val outputEntities = TestUtils.findEntities(pDeps, outputs.asScala.toSeq)
 

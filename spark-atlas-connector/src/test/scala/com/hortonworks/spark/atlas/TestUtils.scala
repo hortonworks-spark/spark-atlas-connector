@@ -61,14 +61,14 @@ object TestUtils {
   }
 
   def findEntity(
-      entities: Seq[AtlasReferenceable],
-      objId: AtlasObjectId): Option[AtlasReferenceable] = {
+                  entities: Seq[SACAtlasReferenceable],
+                  objId: AtlasObjectId): Option[SACAtlasReferenceable] = {
     entities.find(p => p.asObjectId == objId)
   }
 
   def findEntities(
-      entities: Seq[AtlasReferenceable],
-      objIds: Seq[AtlasObjectId]): Seq[AtlasReferenceable] = {
+                    entities: Seq[SACAtlasReferenceable],
+                    objIds: Seq[AtlasObjectId]): Seq[SACAtlasReferenceable] = {
     entities.filter(p => objIds.contains(p.asObjectId))
   }
 }

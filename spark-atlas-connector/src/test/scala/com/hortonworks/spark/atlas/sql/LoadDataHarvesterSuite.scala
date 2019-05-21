@@ -60,7 +60,7 @@ abstract class BaseLoadDataHarvesterSuite
       execNode.cmd.asInstanceOf[LoadDataCommand], qd)
     validateProcessEntity(entities.head, _ => {}, inputs => {
       inputs.size should be (1)
-      val inputEntity = inputs.head.asInstanceOf[AtlasEntityWithDependencies].entity
+      val inputEntity = inputs.head.asInstanceOf[SACAtlasEntityWithDependencies].entity
       inputEntity.getTypeName should be (external.FS_PATH_TYPE_STRING)
       inputEntity.getAttribute("name") should be (file.getAbsolutePath.toLowerCase)
     }, outputs => {

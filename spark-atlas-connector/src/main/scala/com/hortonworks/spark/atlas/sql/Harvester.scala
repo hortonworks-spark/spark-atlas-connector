@@ -17,8 +17,8 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import com.hortonworks.spark.atlas.AtlasReferenceable
+import com.hortonworks.spark.atlas.SACAtlasReferenceable
 
 trait Harvester[T] {
-  def harvest(node: T, qd: QueryDetail): Seq[AtlasReferenceable]
+  def harvest(node: T, qd: QueryDetail): Seq[SACAtlasReferenceable]
 }

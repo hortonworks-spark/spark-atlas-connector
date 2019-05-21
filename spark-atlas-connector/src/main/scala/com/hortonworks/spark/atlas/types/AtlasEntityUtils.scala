@@ -18,7 +18,7 @@
 package com.hortonworks.spark.atlas.types
 
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies, AtlasReferenceable}
+import com.hortonworks.spark.atlas.{AtlasClientConf, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 import org.apache.spark.ml.Pipeline
 
@@ -30,7 +30,7 @@ trait AtlasEntityUtils extends Logging {
 
   def sparkDbType: String = metadata.DB_TYPE_STRING
 
-  def sparkDbToEntity(dbDefinition: CatalogDatabase): AtlasEntityWithDependencies = {
+  def sparkDbToEntity(dbDefinition: CatalogDatabase): SACAtlasEntityWithDependencies = {
     internal.sparkDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
   }
 
@@ -43,7 +43,7 @@ trait AtlasEntityUtils extends Logging {
   def sparkStorageFormatToEntity(
       storageFormat: CatalogStorageFormat,
       db: String,
-      table: String): AtlasEntityWithDependencies = {
+      table: String): SACAtlasEntityWithDependencies = {
     internal.sparkStorageFormatToEntity(storageFormat, db, table)
   }
 
@@ -55,7 +55,7 @@ trait AtlasEntityUtils extends Logging {
 
   def tableToEntity(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasReferenceable = {
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
     if (SparkUtils.usingRemoteMetastoreService()) {
       external.hiveTableToReference(tableDefinition, clusterName, mockDbDefinition)
     } else {
@@ -65,13 +65,13 @@ trait AtlasEntityUtils extends Logging {
 
   def sparkTableToEntity(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasReferenceable = {
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
     internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
   }
 
   def sparkTableToEntityForAlterTable(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasReferenceable = {
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
     internal.sparkTableToEntityForAlterTable(tableDefinition, clusterName, mockDbDefinition)
   }
 
@@ -90,8 +90,8 @@ trait AtlasEntityUtils extends Logging {
 
   // If there is cycle, return empty output entity list
   def cleanOutput(
-      inputs: Seq[AtlasReferenceable],
-      outputs: Seq[AtlasReferenceable]): List[AtlasReferenceable] = {
+                   inputs: Seq[SACAtlasReferenceable],
+                   outputs: Seq[SACAtlasReferenceable]): List[SACAtlasReferenceable] = {
     val qualifiedNames = inputs.map(_.qualifiedName)
     val isCycle = outputs.exists(x => qualifiedNames.contains(x.qualifiedName))
     if (isCycle) {

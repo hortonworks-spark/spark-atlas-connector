@@ -53,7 +53,7 @@ class AtlasExternalEntityUtilsSuite
     val tableDefinition = createTable("db1", "tbl1", schema, sd, true)
 
     val tableEntity = hiveAtlasEntityUtils.tableToEntity(tableDefinition, Some(dbDefinition))
-    assert(tableEntity.isInstanceOf[AtlasEntityReference])
+    assert(tableEntity.isInstanceOf[SACAtlasEntityReference])
     tableEntity.typeName should be (external.HIVE_TABLE_TYPE_STRING)
     tableEntity.qualifiedName should be (s"db1.tbl1@${hiveAtlasEntityUtils.clusterName}")
   }
@@ -107,9 +107,9 @@ class AtlasExternalEntityUtilsSuite
     val deps = pathEntity.dependencies
     val dirReference = deps.find(_.typeName == external.S3_PSEUDO_DIR_TYPE_STRING)
     assert(dirReference.isDefined)
-    assert(dirReference.get.isInstanceOf[AtlasEntityWithDependencies])
+    assert(dirReference.get.isInstanceOf[SACAtlasEntityWithDependencies])
 
-    val dirEntity = dirReference.get.asInstanceOf[AtlasEntityWithDependencies]
+    val dirEntity = dirReference.get.asInstanceOf[SACAtlasEntityWithDependencies]
     dirEntity.entity.getTypeName should be (external.S3_PSEUDO_DIR_TYPE_STRING)
     dirEntity.entity.getAttribute("name") should be ("/testpseudodir/")
     dirEntity.entity.getAttribute("qualifiedName") should be (
@@ -119,9 +119,9 @@ class AtlasExternalEntityUtilsSuite
 
     val bucketReference = dirEntity.dependencies.find(_.typeName == external.S3_BUCKET_TYPE_STRING)
     assert(bucketReference.isDefined)
-    assert(bucketReference.get.isInstanceOf[AtlasEntityWithDependencies])
+    assert(bucketReference.get.isInstanceOf[SACAtlasEntityWithDependencies])
 
-    val bucketEntity = bucketReference.get.asInstanceOf[AtlasEntityWithDependencies]
+    val bucketEntity = bucketReference.get.asInstanceOf[SACAtlasEntityWithDependencies]
     bucketEntity.entity.getTypeName should be (external.S3_BUCKET_TYPE_STRING)
     bucketEntity.entity.getAttribute("name") should be ("testbucket")
     bucketEntity.entity.getAttribute("qualifiedName") should be (

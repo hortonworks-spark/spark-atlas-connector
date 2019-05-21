@@ -19,13 +19,13 @@ package com.hortonworks.spark.atlas
 
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 
-trait AtlasReferenceable {
+trait SACAtlasReferenceable {
   def typeName: String
   def qualifiedName: String
   def asObjectId: AtlasObjectId
 }
 
-case class AtlasEntityReference(ref: AtlasObjectId) extends AtlasReferenceable {
+case class SACAtlasEntityReference(ref: AtlasObjectId) extends SACAtlasReferenceable {
   require(typeName != null && !typeName.isEmpty)
   require(qualifiedName != null && !qualifiedName.isEmpty)
 
@@ -37,9 +37,9 @@ case class AtlasEntityReference(ref: AtlasObjectId) extends AtlasReferenceable {
   override def asObjectId: AtlasObjectId = ref
 }
 
-case class AtlasEntityWithDependencies(
+case class SACAtlasEntityWithDependencies(
     entity: AtlasEntity,
-    dependencies: Seq[AtlasReferenceable]) extends AtlasReferenceable {
+    dependencies: Seq[SACAtlasReferenceable]) extends SACAtlasReferenceable {
 
   require(typeName != null && !typeName.isEmpty)
   require(qualifiedName != null && !qualifiedName.isEmpty)
@@ -51,13 +51,13 @@ case class AtlasEntityWithDependencies(
 
   override def asObjectId: AtlasObjectId = AtlasUtils.entityToReference(entity, useGuid = false)
 
-  def dependenciesAdded(deps: Seq[AtlasReferenceable]): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity, dependencies ++ deps)
+  def dependenciesAdded(deps: Seq[SACAtlasReferenceable]): SACAtlasEntityWithDependencies = {
+    new SACAtlasEntityWithDependencies(entity, dependencies ++ deps)
   }
 }
 
-object AtlasEntityWithDependencies {
-  def apply(entity: AtlasEntity): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity, Seq.empty)
+object SACAtlasEntityWithDependencies {
+  def apply(entity: AtlasEntity): SACAtlasEntityWithDependencies = {
+    new SACAtlasEntityWithDependencies(entity, Seq.empty)
   }
 }

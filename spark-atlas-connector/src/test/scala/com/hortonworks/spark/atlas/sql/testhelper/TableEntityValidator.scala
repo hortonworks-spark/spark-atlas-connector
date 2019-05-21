@@ -18,17 +18,17 @@
 package com.hortonworks.spark.atlas.sql.testhelper
 
 import com.hortonworks.spark.atlas.types.{external, metadata}
-import com.hortonworks.spark.atlas.{AtlasEntityReference, AtlasEntityWithDependencies, AtlasReferenceable}
+import com.hortonworks.spark.atlas.{SACAtlasEntityReference, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 import org.apache.atlas.AtlasClient
 import org.scalatest.FunSuite
 
 trait TableEntityValidator extends FunSuite {
   def assertTable(
-      ref: AtlasReferenceable,
-      dbName: String,
-      tblName: String,
-      clusterName: String,
-      useSparkTable: Boolean): Unit = {
+                   ref: SACAtlasReferenceable,
+                   dbName: String,
+                   tblName: String,
+                   clusterName: String,
+                   useSparkTable: Boolean): Unit = {
     if (useSparkTable) {
       assertSparkTable(ref, dbName, tblName)
     } else {
@@ -37,11 +37,11 @@ trait TableEntityValidator extends FunSuite {
   }
 
   def assertTableWithNamePrefix(
-      ref: AtlasReferenceable,
-      dbName: String,
-      tblNamePrefix: String,
-      clusterName: String,
-      useSparkTable: Boolean): Unit = {
+                                 ref: SACAtlasReferenceable,
+                                 dbName: String,
+                                 tblNamePrefix: String,
+                                 clusterName: String,
+                                 useSparkTable: Boolean): Unit = {
     if (useSparkTable) {
       assertSparkTableWithNamePrefix(ref, dbName, tblNamePrefix)
     } else {
@@ -49,9 +49,9 @@ trait TableEntityValidator extends FunSuite {
     }
   }
 
-  def assertSparkTable(ref: AtlasReferenceable, dbName: String, tblName: String): Unit = {
-    assert(ref.isInstanceOf[AtlasEntityWithDependencies])
-    val entity = ref.asInstanceOf[AtlasEntityWithDependencies].entity
+  def assertSparkTable(ref: SACAtlasReferenceable, dbName: String, tblName: String): Unit = {
+    assert(ref.isInstanceOf[SACAtlasEntityWithDependencies])
+    val entity = ref.asInstanceOf[SACAtlasEntityWithDependencies].entity
     assert(entity.getTypeName === metadata.TABLE_TYPE_STRING)
     assert(entity.getAttribute("name") === tblName)
     assert(entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString
@@ -59,11 +59,11 @@ trait TableEntityValidator extends FunSuite {
   }
 
   def assertSparkTableWithNamePrefix(
-      ref: AtlasReferenceable,
-      dbName: String,
-      tblNamePrefix: String): Unit = {
-    assert(ref.isInstanceOf[AtlasEntityWithDependencies])
-    val entity = ref.asInstanceOf[AtlasEntityWithDependencies].entity
+                                      ref: SACAtlasReferenceable,
+                                      dbName: String,
+                                      tblNamePrefix: String): Unit = {
+    assert(ref.isInstanceOf[SACAtlasEntityWithDependencies])
+    val entity = ref.asInstanceOf[SACAtlasEntityWithDependencies].entity
     assert(entity.getTypeName === metadata.TABLE_TYPE_STRING)
     assert(entity.getAttribute("name").toString.startsWith(tblNamePrefix))
     assert(entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString
@@ -71,23 +71,23 @@ trait TableEntityValidator extends FunSuite {
   }
 
   def assertHiveTable(
-      ref: AtlasReferenceable,
-      dbName: String,
-      tblName: String,
-      clusterName: String): Unit = {
-    assert(ref.isInstanceOf[AtlasEntityReference])
-    val outputRef = ref.asInstanceOf[AtlasEntityReference]
+                       ref: SACAtlasReferenceable,
+                       dbName: String,
+                       tblName: String,
+                       clusterName: String): Unit = {
+    assert(ref.isInstanceOf[SACAtlasEntityReference])
+    val outputRef = ref.asInstanceOf[SACAtlasEntityReference]
     assert(outputRef.typeName === external.HIVE_TABLE_TYPE_STRING)
     assert(outputRef.qualifiedName === s"$dbName.$tblName@$clusterName")
   }
 
   def assertHiveTableWithNamePrefix(
-      ref: AtlasReferenceable,
-      dbName: String,
-      tblNamePrefix: String,
-      clusterName: String): Unit = {
-    assert(ref.isInstanceOf[AtlasEntityReference])
-    val outputRef = ref.asInstanceOf[AtlasEntityReference]
+                                     ref: SACAtlasReferenceable,
+                                     dbName: String,
+                                     tblNamePrefix: String,
+                                     clusterName: String): Unit = {
+    assert(ref.isInstanceOf[SACAtlasEntityReference])
+    val outputRef = ref.asInstanceOf[SACAtlasEntityReference]
     assert(outputRef.typeName === external.HIVE_TABLE_TYPE_STRING)
     assert(outputRef.qualifiedName.startsWith(s"$dbName.$tblNamePrefix"))
     assert(outputRef.qualifiedName.endsWith(s"@$clusterName"))

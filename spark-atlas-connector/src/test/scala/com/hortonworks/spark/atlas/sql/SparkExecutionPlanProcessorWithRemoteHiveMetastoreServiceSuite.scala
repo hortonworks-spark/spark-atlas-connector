@@ -114,7 +114,7 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
     val entities = atlasClient.createdEntities
 
     val input = getOnlyOneEntity(entities, external.FS_PATH_TYPE_STRING)
-    val expectedInputs = AtlasUtils.entitiesToReferencesAsSet(Seq(input), useGuid = false)
+    val expectedInputs = AtlasUtils.entitiesToReferences(Seq(input), useGuid = false)
 
     val expectedOutputs = Set(
       new AtlasObjectId(external.HIVE_TABLE_TYPE_STRING,
@@ -143,7 +143,7 @@ class SparkExecutionPlanProcessorWithRemoteHiveMetastoreServiceSuite
     val output = getOnlyOneEntity(entities, external.FS_PATH_TYPE_STRING)
     val dir = new File("target/dir1").getAbsolutePath
     assertFsEntity(output, dir)
-    val expectedOutputs = AtlasUtils.entitiesToReferencesAsSet(Seq(output), useGuid = false)
+    val expectedOutputs = AtlasUtils.entitiesToReferences(Seq(output), useGuid = false)
 
     validateProcessEntityWithAtlasEntities(entities, _ => {}, expectedInputs, expectedOutputs)
   }

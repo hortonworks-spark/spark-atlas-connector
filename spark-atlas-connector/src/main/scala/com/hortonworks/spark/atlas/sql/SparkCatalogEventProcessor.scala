@@ -34,7 +34,9 @@ class SparkCatalogEventProcessor(
 
   override protected def process(e: ExternalCatalogEvent): Unit = {
     if (SparkUtils.usingRemoteMetastoreService()) {
-      // no-op when remote HMS is used
+      // SAC will not handle any DDL events when remote HMS is used:
+      // Hive hook will take care of all DDL events in Hive Metastore Service.
+      // No-op here.
     } else {
       e match {
         case CreateDatabasePreEvent(_) => // No-op

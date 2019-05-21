@@ -21,7 +21,7 @@ import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies, AtlasUtils, TestUtils}
+import com.hortonworks.spark.atlas.{AtlasClientConf, SACAtlasEntityWithDependencies, AtlasUtils, TestUtils}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 
 class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAfterAll {
@@ -93,8 +93,8 @@ class SparkAtlasEntityUtilsSuite extends FunSuite with Matchers with BeforeAndAf
     val tableDefinition = createTable("db1", "tbl1", schema, sd)
 
     val tableEnt = sparkAtlasEntityUtils.sparkTableToEntity(tableDefinition, Some(dbDefinition))
-    assert(tableEnt.isInstanceOf[AtlasEntityWithDependencies])
-    val tableEntity = tableEnt.asInstanceOf[AtlasEntityWithDependencies]
+    assert(tableEnt.isInstanceOf[SACAtlasEntityWithDependencies])
+    val tableEntity = tableEnt.asInstanceOf[SACAtlasEntityWithDependencies]
 
     val tableDeps = tableEntity.dependencies
 

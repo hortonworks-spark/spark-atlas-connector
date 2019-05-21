@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Locale
 
 import com.hortonworks.spark.atlas.AtlasEntityReadHelper.{getStringAttribute, listAtlasEntitiesAsType}
-import com.hortonworks.spark.atlas.{AtlasEntityWithDependencies, AtlasReferenceable}
+import com.hortonworks.spark.atlas.{SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 import com.hortonworks.spark.atlas.types.external
 import org.apache.atlas.model.instance.AtlasEntity
 import org.scalatest.FunSuite
@@ -50,8 +50,8 @@ trait FsEntityValidator extends FunSuite {
     }
   }
 
-  def assertFsEntity(ref: AtlasReferenceable, path: String): Unit = {
-    val inputEntity = ref.asInstanceOf[AtlasEntityWithDependencies].entity
+  def assertFsEntity(ref: SACAtlasReferenceable, path: String): Unit = {
+    val inputEntity = ref.asInstanceOf[SACAtlasEntityWithDependencies].entity
     assertFsEntity(inputEntity, path)
   }
 

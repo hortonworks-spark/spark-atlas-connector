@@ -28,7 +28,7 @@ import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import com.hortonworks.spark.atlas.{AtlasEntityReference, AtlasEntityWithDependencies, AtlasReferenceable, AtlasUtils}
+import com.hortonworks.spark.atlas.{SACAtlasEntityReference, SACAtlasEntityWithDependencies, SACAtlasReferenceable, AtlasUtils}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
 
 
@@ -44,7 +44,7 @@ object external {
 
   private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
 
-  private def extractS3Entity(uri: URI, fsPath: Path): AtlasEntityWithDependencies = {
+  private def extractS3Entity(uri: URI, fsPath: Path): SACAtlasEntityWithDependencies = {
     val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
 
     val bucketName = uri.getAuthority
@@ -74,14 +74,14 @@ object external {
     objectEntity.setAttribute("pseudoDirectory", AtlasUtils.entityToReference(dirEntity))
 
     // dir entity depends on bucket entity
-    val dirEntityWithDeps = new AtlasEntityWithDependencies(dirEntity,
-      Seq(AtlasEntityWithDependencies(bucketEntity)))
+    val dirEntityWithDeps = new SACAtlasEntityWithDependencies(dirEntity,
+      Seq(SACAtlasEntityWithDependencies(bucketEntity)))
 
     // object entity depends on dir entity
-    new AtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
+    new SACAtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
   }
 
-  def pathToEntity(path: String): AtlasEntityWithDependencies = {
+  def pathToEntity(path: String): SACAtlasEntityWithDependencies = {
     val uri = resolveURI(path)
     val fsPath = new Path(uri)
     if (uri.getScheme == "hdfs") {
@@ -93,7 +93,7 @@ object external {
       entity.setAttribute("qualifiedName", uri.toString)
       entity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, uri.getAuthority)
 
-      AtlasEntityWithDependencies(entity)
+      SACAtlasEntityWithDependencies(entity)
     } else if (isS3Schema(uri.getScheme)) {
       extractS3Entity(uri, fsPath)
     } else {
@@ -104,7 +104,7 @@ object external {
         Path.getPathWithoutSchemeAndAuthority(fsPath).toString.toLowerCase)
       entity.setAttribute("qualifiedName", uri.toString)
 
-      AtlasEntityWithDependencies(entity)
+      SACAtlasEntityWithDependencies(entity)
     }
   }
 
@@ -137,7 +137,7 @@ object external {
   def hbaseTableToEntity(
       cluster: String,
       tableName: String,
-      nameSpace: String): AtlasEntityWithDependencies = {
+      nameSpace: String): SACAtlasEntityWithDependencies = {
     val hbaseEntity = new AtlasEntity(HBASE_TABLE_STRING)
     hbaseEntity.setAttribute("qualifiedName",
       getTableQualifiedName(cluster, nameSpace, tableName))
@@ -145,7 +145,7 @@ object external {
     hbaseEntity.setAttribute(AtlasConstants.CLUSTER_NAME_ATTRIBUTE, cluster)
     hbaseEntity.setAttribute("uri", nameSpace.toLowerCase + ":" + tableName.toLowerCase)
 
-    AtlasEntityWithDependencies(hbaseEntity)
+    SACAtlasEntityWithDependencies(hbaseEntity)
   }
 
   private def getTableQualifiedName(
@@ -163,7 +163,9 @@ object external {
   // ================ Kafka entities =======================
   val KAFKA_TOPIC_STRING = "kafka_topic"
 
-  def kafkaToEntity(cluster: String, topic: KafkaTopicInformation): AtlasEntityWithDependencies = {
+  def kafkaToEntity(
+      cluster: String,
+      topic: KafkaTopicInformation): SACAtlasEntityWithDependencies = {
     val topicName = topic.topicName.toLowerCase
     val clusterName = topic.clusterName match {
       case Some(customName) => customName
@@ -177,7 +179,7 @@ object external {
     kafkaEntity.setAttribute("uri", topicName)
     kafkaEntity.setAttribute("topic", topicName)
 
-    AtlasEntityWithDependencies(kafkaEntity)
+    SACAtlasEntityWithDependencies(kafkaEntity)
   }
 
   // ================ RDBMS based entities ======================
@@ -190,14 +192,14 @@ object external {
    * @param tableName
    * @return
    */
-  def rdbmsTableToEntity(url: String, tableName: String): AtlasEntityWithDependencies = {
+  def rdbmsTableToEntity(url: String, tableName: String): SACAtlasEntityWithDependencies = {
     val jdbcEntity = new AtlasEntity(RDBMS_TABLE)
 
     val databaseName = JdbcUtils.getDatabaseName(url)
     jdbcEntity.setAttribute("qualifiedName", getRdbmsQualifiedName(databaseName, tableName))
     jdbcEntity.setAttribute("name", tableName)
 
-    AtlasEntityWithDependencies(jdbcEntity)
+    SACAtlasEntityWithDependencies(jdbcEntity)
   }
 
   /**
@@ -217,30 +219,22 @@ object external {
   /**
    * This is based on the logic how Hive Hook defines qualifiedName for Hive DB (borrowed from Apache Atlas v1.1).
    * https://github.com/apache/atlas/blob/release-1.1.0-rc2/addons/hive-bridge/src/main/java/org/apache/atlas/hive/bridge/HiveMetaStoreBridge.java#L833-L841
+   *
+   * As we cannot guarantee same qualifiedName for temporary table, we just don't support
+   * temporary table in SAC.
    */
   // scalastyle:on
   def hiveTableUniqueAttribute(
       cluster: String,
       db: String,
-      table: String,
-      isTemporary: Boolean = false): String = {
-    val tableName = if (isTemporary) {
-      if (SessionState.get() != null && SessionState.get().getSessionId != null) {
-        s"${table}_temp-${SessionState.get().getSessionId}"
-      } else {
-        s"${table}_temp-${RandomStringUtils.random(10)}"
-      }
-    } else {
-      table
-    }
-
-    s"${db.toLowerCase}.${tableName.toLowerCase}@$cluster"
+      table: String): String = {
+    s"${db.toLowerCase}.${table.toLowerCase}@$cluster"
   }
 
   def hiveTableToReference(
       tblDefinition: CatalogTable,
       cluster: String,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasReferenceable = {
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
     val tableDefinition = SparkUtils.getCatalogTableIfExistent(tblDefinition)
     val db = SparkUtils.getDatabaseName(tableDefinition)
     val table = SparkUtils.getTableName(tableDefinition)
@@ -250,9 +244,9 @@ object external {
   def hiveTableToReference(
       db: String,
       table: String,
-      cluster: String): AtlasReferenceable = {
-    val qualifiedName = hiveTableUniqueAttribute(cluster, db, table /* , isTemporary = false */)
-    AtlasEntityReference(
+      cluster: String): SACAtlasReferenceable = {
+    val qualifiedName = hiveTableUniqueAttribute(cluster, db, table)
+    SACAtlasEntityReference(
       new AtlasObjectId(HIVE_TABLE_TYPE_STRING, "qualifiedName", qualifiedName))
   }
 }

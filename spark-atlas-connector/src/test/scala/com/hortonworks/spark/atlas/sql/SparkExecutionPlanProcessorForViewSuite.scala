@@ -85,8 +85,8 @@ class SparkExecutionPlanProcessorForViewSuite
 
     // check for 'spark_process'
     validateProcessEntityWithAtlasEntities(entities, _ => {},
-      AtlasUtils.entitiesToReferencesAsSet(Seq(inputEntity)),
-      AtlasUtils.entitiesToReferencesAsSet(Seq(outputEntity)))
+      AtlasUtils.entitiesToReferences(Seq(inputEntity)),
+      AtlasUtils.entitiesToReferences(Seq(outputEntity)))
   }
 
   private def assertTableEntity(entity: AtlasEntity, tableName: String): Unit = {
