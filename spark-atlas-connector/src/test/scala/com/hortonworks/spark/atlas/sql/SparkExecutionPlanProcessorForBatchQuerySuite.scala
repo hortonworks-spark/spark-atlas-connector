@@ -114,7 +114,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     // check for 'spark_process'
     validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      Seq(inputFsEntity), Seq(tableEntity))
+      AtlasUtils.entitiesToReferences(Seq(inputFsEntity)),
+      AtlasUtils.entitiesToReferences(Seq(tableEntity)))
   }
 
   test("Create external table against JSON files") {
@@ -196,7 +197,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     // check for 'spark_process'
     validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      Seq(tableEntity), Seq(outputKafkaEntity))
+      AtlasUtils.entitiesToReferences(Seq(tableEntity)),
+      AtlasUtils.entitiesToReferences(Seq(outputKafkaEntity)))
   }
 
   test("Read Kafka topics with various options of subscription " +
@@ -269,7 +271,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     // check for 'spark_process'
     validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      inputKafkaEntities, Seq(tableEntity))
+      AtlasUtils.entitiesToReferences(inputKafkaEntities),
+      AtlasUtils.entitiesToReferences(Seq(tableEntity)))
   }
 
   test("Read Kafka topics and save to Kafka via df.save()") {
@@ -320,7 +323,8 @@ class SparkExecutionPlanProcessorForBatchQuerySuite
 
     // check for 'spark_process'
     validateProcessEntityWithAtlasEntities(entities, assertProcessEntity(_, queryDetail),
-      inputKafkaEntities, outputEntities)
+      AtlasUtils.entitiesToReferences(inputKafkaEntities),
+      AtlasUtils.entitiesToReferences(outputEntities))
   }
 
   private def writeCSVtextToTempFile(csvContent: String) = {

@@ -31,7 +31,7 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
 
   def clusterName: String = atlasClientConf.get(AtlasClientConf.CLUSTER_NAME)
 
-  def getTableEntity(tableName: String): AtlasEntityWithDependencies = {
+  def getTableEntity(tableName: String): SACAtlasEntityWithDependencies = {
     val dbDefinition = createDB("db1", "hdfs:///test/db/db1")
     val sd = createStorageFormat()
     val schema = new StructType()

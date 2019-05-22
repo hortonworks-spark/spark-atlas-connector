@@ -33,27 +33,35 @@ class SparkCatalogEventProcessor(
   private val cachedObject = new mutable.WeakHashMap[String, Object]
 
   override protected def process(e: ExternalCatalogEvent): Unit = {
+    if (SparkUtils.usingRemoteMetastoreService()) {
+      // SAC will not handle any DDL events when remote HMS is used:
+      // Hive hook will take care of all DDL events in Hive Metastore Service.
+      // No-op here.
+      return
+    }
+
     e match {
       case CreateDatabasePreEvent(_) => // No-op
 
       case CreateDatabaseEvent(db) =>
         val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
-        val entity = dbToEntity(dbDefinition)
+        val entity = sparkDbToEntity(dbDefinition)
         atlasClient.createEntitiesWithDependencies(entity)
         logDebug(s"Created db entity $db")
 
       case DropDatabasePreEvent(db) =>
         try {
-          cachedObject.put(dbUniqueAttribute(db), SparkUtils.getExternalCatalog().getDatabase(db))
+          cachedObject.put(sparkDbUniqueAttribute(db),
+            SparkUtils.getExternalCatalog().getDatabase(db))
         } catch {
           case _: NoSuchDatabaseException =>
             logDebug(s"Spark already deleted the database: $db")
         }
 
       case DropDatabaseEvent(db) =>
-        atlasClient.deleteEntityWithUniqueAttr(dbType, dbUniqueAttribute(db))
+        atlasClient.deleteEntityWithUniqueAttr(sparkDbType, sparkDbUniqueAttribute(db))
 
-        cachedObject.remove(dbUniqueAttribute(db)).foreach { o =>
+        cachedObject.remove(sparkDbUniqueAttribute(db)).foreach { o =>
           val dbDef = o.asInstanceOf[CatalogDatabase]
           val path = dbDef.locationUri.toString
           val pathEntity = external.pathToEntity(path)
@@ -69,7 +77,7 @@ class SparkCatalogEventProcessor(
       // TODO. We should also not create/alter view table in Atlas
       case CreateTableEvent(db, table) =>
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
-        val tableEntity = tableToEntity(tableDefinition)
+        val tableEntity = sparkTableToEntity(tableDefinition)
         atlasClient.createEntitiesWithDependencies(tableEntity)
         logDebug(s"Created table entity $table without columns")
 
@@ -80,33 +88,30 @@ class SparkCatalogEventProcessor(
           s"table $table in db $db. Can't delete table entity and corresponding entities.")
 
       case RenameTableEvent(db, name, newName) =>
-        val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, newName)
-        val isHiveTbl = isHiveTable(tableDefinition)
-
         // Update storageFormat's unique attribute
-        val sdEntity = new AtlasEntity(storageFormatType(isHiveTbl))
+        val sdEntity = new AtlasEntity(sparkStorageFormatType)
         sdEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-          storageFormatUniqueAttribute(db, newName, isHiveTbl))
+          sparkStorageFormatUniqueAttribute(db, newName))
         atlasClient.updateEntityWithUniqueAttr(
-          storageFormatType(isHiveTbl),
-          storageFormatUniqueAttribute(db, name, isHiveTbl),
+          sparkStorageFormatType,
+          sparkStorageFormatUniqueAttribute(db, name),
           sdEntity)
 
         // Update Table name and Table's unique attribute
-        val tableEntity = new AtlasEntity(tableType(isHiveTbl))
+        val tableEntity = new AtlasEntity(sparkTableType)
         tableEntity.setAttribute(org.apache.atlas.AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME,
-          tableUniqueAttribute(db, newName, isHiveTbl))
+          sparkTableUniqueAttribute(db, newName))
         tableEntity.setAttribute("name", newName)
         atlasClient.updateEntityWithUniqueAttr(
-          tableType(isHiveTbl),
-          tableUniqueAttribute(db, name, isHiveTbl),
+          sparkTableType,
+          sparkTableUniqueAttribute(db, name),
           tableEntity)
 
         logDebug(s"Rename table entity $name to $newName")
 
       case AlterDatabaseEvent(db) =>
         val dbDefinition = SparkUtils.getExternalCatalog().getDatabase(db)
-        val dbEntity = dbToEntity(dbDefinition)
+        val dbEntity = sparkDbToEntity(dbDefinition)
         atlasClient.createEntitiesWithDependencies(dbEntity)
         logDebug(s"Updated DB properties")
 
@@ -114,7 +119,7 @@ class SparkCatalogEventProcessor(
         val tableDefinition = SparkUtils.getExternalCatalog().getTable(db, table)
         kind match {
           case "table" =>
-            val tableEntity = tableToEntityForAlterTable(tableDefinition)
+            val tableEntity = sparkTableToEntityForAlterTable(tableDefinition)
             atlasClient.createEntitiesWithDependencies(tableEntity)
             logDebug(s"Updated table entity $table without columns")
 

@@ -15,26 +15,15 @@
  * limitations under the License.
  */
 
-package com.hortonworks.spark.atlas
+package com.hotels.beeju
 
-import org.apache.atlas.model.instance.AtlasEntity
-
-class AtlasEntityWithDependencies(
-    val entity: AtlasEntity,
-    val dependencies: Seq[AtlasEntityWithDependencies]) {
-
-  def dependenciesAdded(deps: Seq[AtlasEntityWithDependencies]): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity, dependencies ++ deps)
-  }
-}
-
-object AtlasEntityWithDependencies {
-  def apply(entity: AtlasEntity): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity, Seq.empty)
+class ThriftHiveMetaStoreTestUtil(dbName: String)
+  extends ThriftHiveMetaStoreJUnitRule(dbName) {
+  override def before(): Unit = {
+    super.before()
   }
 
-  def apply(entity: AtlasEntity, dependencies: Seq[AtlasEntity]): AtlasEntityWithDependencies = {
-    new AtlasEntityWithDependencies(entity,
-      dependencies.map(dep => new AtlasEntityWithDependencies(dep, Seq.empty)))
+  override def after(): Unit = {
+    super.after()
   }
 }

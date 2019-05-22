@@ -17,10 +17,8 @@
 
 package com.hortonworks.spark.atlas.types
 
-import org.apache.atlas.model.instance.AtlasEntity
-import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable}
-import com.hortonworks.spark.atlas.{AtlasClientConf, AtlasEntityWithDependencies}
+import com.hortonworks.spark.atlas.{AtlasClientConf, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
 import org.apache.spark.ml.Pipeline
 
@@ -30,95 +28,55 @@ trait AtlasEntityUtils extends Logging {
 
   def clusterName: String = conf.get(AtlasClientConf.CLUSTER_NAME)
 
-  def dbType: String = {
-    if (SparkUtils.isHiveEnabled()) {
-      external.HIVE_DB_TYPE_STRING
-    } else {
-      metadata.DB_TYPE_STRING
-    }
+  def sparkDbType: String = metadata.DB_TYPE_STRING
+
+  def sparkDbToEntity(dbDefinition: CatalogDatabase): SACAtlasEntityWithDependencies = {
+    internal.sparkDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
   }
 
-  def dbToEntity(dbDefinition: CatalogDatabase): AtlasEntityWithDependencies = {
-    if (SparkUtils.isHiveEnabled()) {
-      external.hiveDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
-    } else {
-      internal.sparkDbToEntity(dbDefinition, clusterName, SparkUtils.currUser())
-    }
+  def sparkDbUniqueAttribute(db: String): String = {
+    internal.sparkDbUniqueAttribute(db)
   }
 
-  def dbUniqueAttribute(db: String): String = {
-    if (SparkUtils.isHiveEnabled()) {
-      external.hiveDbUniqueAttribute(clusterName, db)
-    } else {
-      internal.sparkDbUniqueAttribute(db)
-    }
-  }
+  def sparkStorageFormatType: String = metadata.STORAGEDESC_TYPE_STRING
 
-  def storageFormatType(isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.HIVE_STORAGEDESC_TYPE_STRING
-    } else {
-      metadata.STORAGEDESC_TYPE_STRING
-    }
-  }
-
-  def storageFormatToEntity(
+  def sparkStorageFormatToEntity(
       storageFormat: CatalogStorageFormat,
       db: String,
-      table: String,
-      isHiveTable: Boolean): AtlasEntityWithDependencies = {
-    if (isHiveTable) {
-      external.hiveStorageDescToEntity(storageFormat, clusterName, db, table)
-    } else {
-      internal.sparkStorageFormatToEntity(storageFormat, db, table)
-    }
+      table: String): SACAtlasEntityWithDependencies = {
+    internal.sparkStorageFormatToEntity(storageFormat, db, table)
   }
 
-  def storageFormatUniqueAttribute(db: String, table: String, isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.hiveStorageDescUniqueAttribute(clusterName, db, table)
-    } else {
-      internal.sparkStorageFormatUniqueAttribute(db, table)
-    }
+  def sparkStorageFormatUniqueAttribute(db: String, table: String): String = {
+    internal.sparkStorageFormatUniqueAttribute(db, table)
   }
 
-  def tableType(isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.HIVE_TABLE_TYPE_STRING
-    } else {
-      metadata.TABLE_TYPE_STRING
-    }
-  }
-
-  def isHiveTable(tableDefinition: CatalogTable): Boolean =
-    tableDefinition.provider.contains("hive")
+  def sparkTableType: String = metadata.TABLE_TYPE_STRING
 
   def tableToEntity(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
-    if (isHiveTable(tableDefinition)) {
-      external.hiveTableToEntity(tableDefinition, clusterName, mockDbDefinition)
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
+    if (SparkUtils.usingRemoteMetastoreService()) {
+      external.hiveTableToReference(tableDefinition, clusterName, mockDbDefinition)
     } else {
       internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
     }
   }
 
-  def tableToEntityForAlterTable(
+  def sparkTableToEntity(
       tableDefinition: CatalogTable,
-      mockDbDefinition: Option[CatalogDatabase] = None): AtlasEntityWithDependencies = {
-    if (isHiveTable(tableDefinition)) {
-      external.hiveTableToEntitiesForAlterTable(tableDefinition, clusterName, mockDbDefinition)
-    } else {
-      internal.sparkTableToEntityForAlterTable(tableDefinition, clusterName, mockDbDefinition)
-    }
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
+    internal.sparkTableToEntity(tableDefinition, clusterName, mockDbDefinition)
   }
 
-  def tableUniqueAttribute(db: String, table: String, isHiveTable: Boolean): String = {
-    if (isHiveTable) {
-      external.hiveTableUniqueAttribute(clusterName, db, table)
-    } else {
-      internal.sparkTableUniqueAttribute(db, table)
-    }
+  def sparkTableToEntityForAlterTable(
+      tableDefinition: CatalogTable,
+      mockDbDefinition: Option[CatalogDatabase] = None): SACAtlasReferenceable = {
+    internal.sparkTableToEntityForAlterTable(tableDefinition, clusterName, mockDbDefinition)
+  }
+
+  def sparkTableUniqueAttribute(db: String, table: String): String = {
+    internal.sparkTableUniqueAttribute(db, table)
   }
 
   def pipelineUniqueAttribute(pipeline: Pipeline): String = {
@@ -127,25 +85,15 @@ trait AtlasEntityUtils extends Logging {
 
   def processType: String = metadata.PROCESS_TYPE_STRING
 
-  def processToEntity(
-      qe: QueryExecution,
-      executionId: Long,
-      inputs: List[AtlasEntity],
-      outputs: List[AtlasEntity],
-      query: Option[String] = None): AtlasEntityWithDependencies =
-    internal.sparkProcessToEntity(qe, executionId, inputs, outputs, query)
-
   def processUniqueAttribute(executionId: Long): String =
     internal.sparkProcessUniqueAttribute(executionId)
 
   // If there is cycle, return empty output entity list
   def cleanOutput(
-      inputs: Seq[AtlasEntityWithDependencies],
-      outputs: Seq[AtlasEntityWithDependencies]): List[AtlasEntityWithDependencies] = {
-    val qualifiedNames = inputs.map(e => e.entity.getAttribute("qualifiedName"))
-    val isCycle = outputs.exists { x =>
-      qualifiedNames.contains(x.entity.getAttribute("qualifiedName"))
-    }
+                   inputs: Seq[SACAtlasReferenceable],
+                   outputs: Seq[SACAtlasReferenceable]): List[SACAtlasReferenceable] = {
+    val qualifiedNames = inputs.map(_.qualifiedName)
+    val isCycle = outputs.exists(x => qualifiedNames.contains(x.qualifiedName))
     if (isCycle) {
       logWarn("Detected cycle - same entity observed to both input and output. " +
         "Discarding output entities as Atlas doesn't support cycle.")

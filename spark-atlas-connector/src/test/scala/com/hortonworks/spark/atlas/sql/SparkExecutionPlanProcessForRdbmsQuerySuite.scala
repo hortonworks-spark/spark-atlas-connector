@@ -26,7 +26,7 @@ import com.hortonworks.spark.atlas.sql.testhelper.{AtlasQueryExecutionListener, 
 import com.hortonworks.spark.atlas.types.{external, metadata}
 import org.apache.atlas.model.instance.AtlasEntity
 
-class InsertIntoRdbmsHarvesterSuite
+class SparkExecutionPlanProcessForRdbmsQuerySuite
   extends FunSuite
   with Matchers
   with BeforeAndAfter
@@ -87,17 +87,9 @@ class InsertIntoRdbmsHarvesterSuite
     assertTableEntity(outputEntity, sinkTableName)
 
     // check for 'spark_process'
-
-    val processEntity = getOnlyOneEntity(entities, metadata.PROCESS_TYPE_STRING)
-
-    val inputs = getSeqAtlasObjectIdAttribute(processEntity, "inputs")
-    val outputs = getSeqAtlasObjectIdAttribute(processEntity, "outputs")
-    assert(inputs.size === 1)
-    assert(outputs.size === 1)
-
-    // input/output in 'spark_process' should be same as outer entities
-    assert(AtlasUtils.entityToReference(inputEntity) === inputs.head)
-    assert(AtlasUtils.entityToReference(outputEntity) === outputs.head)
+    validateProcessEntityWithAtlasEntities(entities, _ => {},
+      AtlasUtils.entitiesToReferences(Seq(inputEntity)),
+      AtlasUtils.entitiesToReferences(Seq(outputEntity)))
   }
 
   private def assertTableEntity(entity: AtlasEntity, tableName: String): Unit = {

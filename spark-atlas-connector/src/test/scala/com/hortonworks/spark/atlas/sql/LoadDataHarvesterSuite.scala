@@ -17,43 +17,30 @@
 
 package com.hortonworks.spark.atlas.sql
 
-import java.io.{File, FileOutputStream, PrintWriter}
+import java.io.{FileOutputStream, PrintWriter}
 import java.nio.file.Files
-import java.util
-
-import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
 
 import scala.util.Random
-import scala.collection.JavaConverters._
-import org.apache.atlas.AtlasClient
-import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.command.{ExecutedCommandExec, LoadDataCommand}
-import org.scalatest.{FunSuite, Matchers}
 import com.hortonworks.spark.atlas.types.external
-import com.hortonworks.spark.atlas.{TestUtils, WithHiveSupport}
+import com.hortonworks.spark.atlas._
+import com.hortonworks.spark.atlas.sql.testhelper.BaseHarvesterSuite
+import org.apache.spark.sql.SparkSession
 
+abstract class BaseLoadDataHarvesterSuite
+  extends BaseHarvesterSuite {
 
-class LoadDataHarvesterSuite
-  extends FunSuite
-  with Matchers
-  with WithHiveSupport
-  with ProcessEntityValidator {
+  protected val sourceTblName = "source_" + Random.nextInt(100000)
 
-  private val dbName = "tmpdb"
-  private val sourceTblName = "source_" + Random.nextInt(100000)
+  protected override def initializeTestEnvironment(): Unit = {
+    prepareDatabase()
 
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-
-    sparkSession.sql(s"DROP DATABASE IF EXISTS $dbName Cascade")
-    sparkSession.sql(s"CREATE DATABASE $dbName")
-    sparkSession.sql(s"USE $dbName")
-    sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
+    _spark.sql(s"CREATE TABLE $sourceTblName (name string)")
   }
 
-  override protected def afterAll(): Unit = {
-    sparkSession.sql(s"DROP DATABASE IF EXISTS $dbName Cascade")
+  override protected def cleanupTestEnvironment(): Unit = {
+    cleanupDatabase()
   }
 
   test("LOAD DATA [LOCAL] INPATH path source") {
@@ -62,7 +49,7 @@ class LoadDataHarvesterSuite
     out.write("a\nb\nc\nd\n")
     out.close()
 
-    val qe = sparkSession.sql(s"LOAD DATA LOCAL INPATH '${file.getAbsolutePath}' " +
+    val qe = _spark.sql(s"LOAD DATA LOCAL INPATH '${file.getAbsolutePath}' " +
       s"OVERWRITE INTO  TABLE $sourceTblName").queryExecution
     val qd = QueryDetail(qe, 0L)
     val node = qe.sparkPlan.collect { case p: LeafExecNode => p }
@@ -73,16 +60,54 @@ class LoadDataHarvesterSuite
       execNode.cmd.asInstanceOf[LoadDataCommand], qd)
     validateProcessEntity(entities.head, _ => {}, inputs => {
       inputs.size should be (1)
-      val inputEntity = inputs.head.entity
+      val inputEntity = inputs.head.asInstanceOf[SACAtlasEntityWithDependencies].entity
       inputEntity.getTypeName should be (external.FS_PATH_TYPE_STRING)
       inputEntity.getAttribute("name") should be (file.getAbsolutePath.toLowerCase)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      outputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      outputEntity.getAttribute("name") should be (sourceTblName)
-      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
-        s"$dbName.$sourceTblName@primary")
+      assertTable(outputs.head, _dbName, sourceTblName, _clusterName, _useSparkTable)
     })
   }
+}
+
+class LoadDataHarvesterSuite
+  extends BaseLoadDataHarvesterSuite
+  with WithHiveSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override def getSparkSession: SparkSession = sparkSession
+
+  override def getDbName: String = "sac"
+
+  override def expectSparkTableModels: Boolean = true
+}
+
+class LoadDataHarvesterWithRemoteHMSSuite
+  extends BaseLoadDataHarvesterSuite
+  with WithRemoteHiveMetastoreServiceSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override def getSparkSession: SparkSession = sparkSession
+
+  override def expectSparkTableModels: Boolean = false
+
+  override def getDbName: String = dbName
 }

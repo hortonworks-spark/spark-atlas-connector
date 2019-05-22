@@ -32,5 +32,11 @@ object AtlasUtils {
     }
   }
 
+  def entitiesToReferences(
+      entities: Seq[AtlasEntity],
+      useGuid: Boolean = false): Set[AtlasObjectId] = {
+    entities.map(entityToReference(_, useGuid)).toSet
+  }
+
   def issueExecutionId(): Long = executionId.getAndIncrement()
 }

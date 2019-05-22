@@ -56,7 +56,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     super.afterAll()
   }
 
-  it("catalog db event to Atlas entities") {
+  it("catalog spark db event to Atlas entities") {
     val dbName = uniqueName("db1")
 
     // Create db entity in Atlas and make sure we get it from Atlas
@@ -65,7 +65,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateDatabaseEvent(dbName))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val entity = getEntity(processor.dbType, processor.dbUniqueAttribute(dbName))
+      val entity = getEntity(processor.sparkDbType, processor.sparkDbUniqueAttribute(dbName))
       entity should not be (null)
       entity.getAttribute("name") should be (dbName)
       entity.getAttribute("owner") should be (SparkUtils.currUser())
@@ -77,11 +77,11 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     processor.pushEvent(DropDatabaseEvent(dbName))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
       intercept[AtlasServiceException](
-        getEntity(processor.dbType, processor.dbUniqueAttribute(dbName)))
+        getEntity(processor.sparkDbType, processor.sparkDbUniqueAttribute(dbName)))
     }
   }
 
-  it("catalog table event to Atlas entities") {
+  it("catalog spark table event to Atlas entities") {
     val dbName = uniqueName("db2")
     val tbl1Name = uniqueName("tbl1")
     val tbl2Name = uniqueName("tbl2")
@@ -91,7 +91,7 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     SparkUtils.getExternalCatalog().createDatabase(dbDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateDatabaseEvent(dbName))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val entity = getEntity(processor.dbType, processor.dbUniqueAttribute(dbName))
+      val entity = getEntity(processor.sparkDbType, processor.sparkDbUniqueAttribute(dbName))
       entity should not be (null)
       entity.getAttribute("name") should be (dbName)
     }
@@ -102,17 +102,16 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
       .add("age", IntegerType)
     val sd = CatalogStorageFormat.empty
     val tableDefinition = createTable(dbName, tbl1Name, schema, sd)
-    val isHiveTbl = processor.isHiveTable(tableDefinition)
     SparkUtils.getExternalCatalog().createTable(tableDefinition, ignoreIfExists = true)
     processor.pushEvent(CreateTableEvent(dbName, tbl1Name))
 
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val sdEntity = getEntity(processor.storageFormatType(isHiveTbl),
-        processor.storageFormatUniqueAttribute(dbName, tbl1Name, isHiveTbl))
+      val sdEntity = getEntity(processor.sparkStorageFormatType,
+        processor.sparkStorageFormatUniqueAttribute(dbName, tbl1Name))
       sdEntity should not be (null)
 
-      val tblEntity = getEntity(processor.tableType(isHiveTbl),
-        processor.tableUniqueAttribute(dbName, tbl1Name, isHiveTbl))
+      val tblEntity = getEntity(processor.sparkTableType,
+        processor.sparkTableUniqueAttribute(dbName, tbl1Name))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be (tbl1Name)
     }
@@ -121,27 +120,26 @@ class CatalogEventToAtlasIT extends BaseResourceIT with Matchers {
     SparkUtils.getExternalCatalog().renameTable(dbName, tbl1Name, tbl2Name)
     processor.pushEvent(RenameTableEvent(dbName, tbl1Name, tbl2Name))
     eventually(timeout(30 seconds), interval(100 milliseconds)) {
-      val tblEntity = getEntity(processor.tableType(isHiveTbl),
-        processor.tableUniqueAttribute(dbName, tbl2Name, isHiveTbl))
+      val tblEntity = getEntity(processor.sparkTableType,
+        processor.sparkTableUniqueAttribute(dbName, tbl2Name))
       tblEntity should not be (null)
       tblEntity.getAttribute("name") should be (tbl2Name)
 
-      val sdEntity = getEntity(processor.storageFormatType(isHiveTbl),
-        processor.storageFormatUniqueAttribute(dbName, tbl2Name, isHiveTbl))
+      val sdEntity = getEntity(processor.sparkStorageFormatType,
+        processor.sparkStorageFormatUniqueAttribute(dbName, tbl2Name))
       sdEntity should not be (null)
     }
 
     // Drop table
     val tblDef2 = SparkUtils.getExternalCatalog().getTable(dbName, tbl2Name)
-    val isHiveTbl2 = processor.isHiveTable(tblDef2)
     processor.pushEvent(DropTablePreEvent(dbName, tbl2Name))
     processor.pushEvent(DropTableEvent(dbName, tbl2Name))
 
     // sleeping 2 secs - we have to do this to ensure there's no call on deletion, unfortunately...
     Thread.sleep(2 * 1000)
     // deletion request should not be added
-    val tblEntity = getEntity(processor.tableType(isHiveTbl),
-      processor.tableUniqueAttribute(dbName, tbl2Name, isHiveTbl2))
+    val tblEntity = getEntity(processor.sparkTableType,
+      processor.sparkTableUniqueAttribute(dbName, tbl2Name))
     tblEntity should not be (null)
   }
 }

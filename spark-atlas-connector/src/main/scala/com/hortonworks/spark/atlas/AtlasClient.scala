@@ -34,25 +34,33 @@ trait AtlasClient extends Logging {
   def updateAtlasTypeDefs(typeDefs: AtlasTypesDef): Unit
 
   final def createEntitiesWithDependencies(
-      entity: AtlasEntityWithDependencies): Unit = this.synchronized {
-    // handle dependencies first
-    if (entity.dependencies.nonEmpty) {
-      val depsHavingAnotherDeps = entity.dependencies.filter(_.dependencies.nonEmpty)
-      val depsHavingNoDeps = entity.dependencies.filterNot(_.dependencies.nonEmpty)
+      entity: SACAtlasReferenceable): Unit = this.synchronized {
+    entity match {
+      case e: SACAtlasEntityWithDependencies =>
+        // handle dependencies first
+        if (e.dependencies.nonEmpty) {
+          val deps = e.dependencies.filter(_.isInstanceOf[SACAtlasEntityWithDependencies])
+            .map(_.asInstanceOf[SACAtlasEntityWithDependencies])
 
-      // we should handle them one by one if they're having additional dependencies
-      depsHavingAnotherDeps.foreach(createEntitiesWithDependencies)
+          val depsHavingAnotherDeps = deps.filter(_.dependencies.nonEmpty)
+          val depsHavingNoDeps = deps.filterNot(_.dependencies.nonEmpty)
 
-      // otherwise, we can handle them at once
-      createEntities(depsHavingNoDeps.map(_.entity))
+          // we should handle them one by one if they're having additional dependencies
+          depsHavingAnotherDeps.foreach(createEntitiesWithDependencies)
+
+          // otherwise, we can handle them at once
+          createEntities(depsHavingNoDeps.map(_.entity))
+        }
+
+        // done with dependencies, process origin entity
+        createEntities(Seq(e.entity))
+
+      case _ => // don't request creation entity for reference
     }
-
-    // done with dependencies, process origin entity
-    createEntities(Seq(entity.entity))
   }
 
   final def createEntitiesWithDependencies(
-      entities: Seq[AtlasEntityWithDependencies]): Unit = this.synchronized {
+      entities: Seq[SACAtlasReferenceable]): Unit = this.synchronized {
     entities.foreach(createEntitiesWithDependencies)
   }
 

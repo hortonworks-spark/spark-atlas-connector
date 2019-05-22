@@ -122,9 +122,9 @@ class MLPipelineEventProcessor(
     val modelDirEntity = external.pathToEntity(path)
 
     val pipelineDirEntity = internal.cachedObjects(s"${uid}_pipelineDirEntity")
-      .asInstanceOf[AtlasEntityWithDependencies]
+      .asInstanceOf[SACAtlasEntityWithDependencies]
     val pipelineEntity = internal.cachedObjects(s"${uid}_pipelineEntity")
-      .asInstanceOf[AtlasEntityWithDependencies]
+      .asInstanceOf[SACAtlasEntityWithDependencies]
     val pipeline_uid = internal.cachedObjects(uid).toString
 
     atlasClient.createEntitiesWithDependencies(Seq(pipelineDirEntity, modelDirEntity))
@@ -139,7 +139,7 @@ class MLPipelineEventProcessor(
 
     val logicalPlan = trainData.queryExecution.analyzed
     var isFiles = false
-    val tableEntities: Seq[AtlasEntityWithDependencies] = logicalPlan.collectLeaves().flatMap {
+    val tableEntities: Seq[SACAtlasReferenceable] = logicalPlan.collectLeaves().flatMap {
       case r: HiveTableRelation => Seq(tableToEntity(r.tableMeta))
       case v: View => Seq(tableToEntity(v.desc))
       case l: LogicalRelation if l.catalogTable.isDefined =>

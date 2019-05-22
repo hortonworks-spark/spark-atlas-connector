@@ -17,8 +17,10 @@
 
 package com.hortonworks.spark.atlas.sql
 
+import com.hortonworks.spark.atlas.types.metadata
+
 import scala.util.Random
-import com.hortonworks.spark.atlas.WithHiveSupport
+import com.hortonworks.spark.atlas.{SACAtlasEntityWithDependencies, WithHiveSupport}
 import com.hortonworks.spark.atlas.utils.SparkUtils
 import org.apache.atlas.model.instance.AtlasEntity
 import org.apache.spark.sql.SaveMode
@@ -28,7 +30,8 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.types.StructType
 import org.scalatest.{FunSuite, Matchers}
 
-
+// This is not leveraging BaseHarvesterSuite, as it doesn't need to be tested with
+// both non-remote HMS and remote HMS cases.
 class CreateDataSourceTableAsSelectHarvesterSuite
     extends FunSuite with Matchers with WithHiveSupport {
 
@@ -42,7 +45,6 @@ class CreateDataSourceTableAsSelectHarvesterSuite
 
   test("saveAsTable should have output entity having table details - parquet") {
     testWithProvider("parquet")
-
   }
 
   test("saveAsTable should have output entity having table details - hive") {
@@ -80,8 +82,9 @@ class CreateDataSourceTableAsSelectHarvesterSuite
 
     val qd = QueryDetail(df.queryExecution, 0L)
     val entities = CommandsHarvester.CreateDataSourceTableAsSelectHarvester.harvest(cmd, qd)
-    val processDeps = entities.head.dependencies
-    val maybeEntity = processDeps.find(e => e.entity.getTypeName == "spark_table").map(_.entity)
+    val processDeps = entities.head.asInstanceOf[SACAtlasEntityWithDependencies].dependencies
+    val maybeEntity = processDeps.find(_.typeName == metadata.TABLE_TYPE_STRING)
+      .map(_.asInstanceOf[SACAtlasEntityWithDependencies].entity)
 
     assert(maybeEntity.isDefined, s"Output entity for table [$destTblName] was not found.")
     assert(maybeEntity.get.getAttribute("name") == destTblName)

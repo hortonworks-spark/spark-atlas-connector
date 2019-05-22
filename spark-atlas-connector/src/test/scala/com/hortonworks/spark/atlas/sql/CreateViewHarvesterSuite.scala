@@ -18,31 +18,31 @@
 package com.hortonworks.spark.atlas.sql
 
 import scala.util.Random
-import org.apache.atlas.AtlasClient
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExecutedCommandExec}
-import org.scalatest.{FunSuite, Matchers}
-import com.hortonworks.spark.atlas.types.external
 import com.hortonworks.spark.atlas._
-import com.hortonworks.spark.atlas.sql.testhelper.ProcessEntityValidator
+import com.hortonworks.spark.atlas.sql.testhelper.BaseHarvesterSuite
+import org.apache.spark.sql.SparkSession
 
-class CreateViewHarvesterSuite
-  extends FunSuite
-  with Matchers
-  with WithHiveSupport
-  with ProcessEntityValidator {
+abstract class BaseCreateViewHarvesterSuite
+  extends BaseHarvesterSuite {
+
   private val sourceTblName = "source_" + Random.nextInt(100000)
   private val destinationViewName = "destination_" + Random.nextInt(100000)
   private val destinationViewName2 = "destination_" + Random.nextInt(100000)
 
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
+  protected override def initializeTestEnvironment(): Unit = {
+    prepareDatabase()
 
-    sparkSession.sql(s"CREATE TABLE $sourceTblName (name string)")
-    sparkSession.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('lucy'), ('tom')")
+    _spark.sql(s"CREATE TABLE $sourceTblName (name string)")
+    _spark.sql(s"INSERT INTO TABLE $sourceTblName VALUES ('lucy'), ('tom')")
+  }
+
+  protected override def cleanupTestEnvironment(): Unit = {
+    cleanupDatabase()
   }
 
   test("CREATE VIEW FROM TABLE") {
-    val qe = sparkSession.sql(s"CREATE VIEW $destinationViewName " +
+    val qe = _spark.sql(s"CREATE VIEW $destinationViewName " +
       s"AS SELECT * FROM $sourceTblName").queryExecution
     val qd = QueryDetail(qe, 0L)
 
@@ -54,22 +54,15 @@ class CreateViewHarvesterSuite
     val entities = CommandsHarvester.CreateViewHarvester.harvest(cmd, qd)
     validateProcessEntity(entities.head, _ => {}, inputs => {
       inputs.size should be (1)
-      val inputEntity = inputs.head.entity
-      inputEntity.getTypeName should be (external.HIVE_TABLE_TYPE_STRING)
-      inputEntity.getAttribute("name") should be (sourceTblName)
-      inputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should be (
-        s"default.$sourceTblName@primary")
+      assertTable(inputs.head, sourceTblName)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      outputEntity.getAttribute("name") should be (destinationViewName)
-      outputEntity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME).toString should
-        endWith (s"default.$destinationViewName")
+      assertTable(outputs.head, destinationViewName)
     })
   }
 
   test("CREATE VIEW without source") {
-    val qe = sparkSession.sql(s"CREATE VIEW $destinationViewName2 " +
+    val qe = _spark.sql(s"CREATE VIEW $destinationViewName2 " +
       s"AS SELECT 1").queryExecution
     val qd = QueryDetail(qe, 0L)
 
@@ -83,10 +76,49 @@ class CreateViewHarvesterSuite
       inputs.size should be (0)
     }, outputs => {
       outputs.size should be (1)
-      val outputEntity = outputs.head.entity
-      AtlasEntityReadHelper.getQualifiedName(outputEntity) should endWith (
-        s"default.$destinationViewName2")
-      outputEntity.getAttribute("name") should be (destinationViewName2)
+      assertTable(outputs.head, destinationViewName2)
     })
   }
+}
+
+class CreateViewHarvesterSuite
+  extends BaseCreateViewHarvesterSuite
+  with WithHiveSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override protected def getSparkSession: SparkSession = sparkSession
+
+  override protected def getDbName: String = "sac"
+
+  override protected def expectSparkTableModels: Boolean = true
+}
+
+class CreateViewHarvesterWithRemoteHMSSuite
+  extends BaseCreateViewHarvesterSuite
+  with WithRemoteHiveMetastoreServiceSupport {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    initializeTestEnvironment()
+  }
+
+  override def afterAll(): Unit = {
+    cleanupTestEnvironment()
+    super.afterAll()
+  }
+
+  override protected def getSparkSession: SparkSession = sparkSession
+
+  override protected def getDbName: String = dbName
+
+  override protected def expectSparkTableModels: Boolean = false
 }

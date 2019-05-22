@@ -90,14 +90,15 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val cmd = node.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
 
     val entities = CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(cmd, qd)
-    val pEntity = entities.head.entity
+    val pEntity = entities.head.asInstanceOf[SACAtlasEntityWithDependencies].entity
 
     val pUid1 = pEntity.getGuid
     val inputs = pEntity.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     inputs.size() should be (1)
 
     val inputTab = inputs.asScala.head
-    val inputEntity = TestUtils.findEntity(entities.head.dependencies, inputTab).get
+    val inputEntity = TestUtils.findEntity(
+      entities.head.asInstanceOf[SACAtlasEntityWithDependencies].dependencies, inputTab).get
 
     // Test for the model training process
     val uri = "hdfs://"
@@ -141,13 +142,14 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
     val cmd = node.cmd.asInstanceOf[InsertIntoHadoopFsRelationCommand]
 
     val entities = CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(cmd, qd)
-    val pEntity1 = entities.head.entity
+    val pEntity1 = entities.head.asInstanceOf[SACAtlasEntityWithDependencies].entity
 
     val inputs = pEntity1.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     inputs.size() should be (1)
 
     val inputTab = inputs.asScala.head
-    val inputEntity = TestUtils.findEntity(entities.head.dependencies, inputTab).get
+    val inputEntity = TestUtils.findEntity(
+      entities.head.asInstanceOf[SACAtlasEntityWithDependencies].dependencies, inputTab).get
 
     // Test for the model training process
     val uri = "hdfs://"
@@ -196,14 +198,15 @@ class MLPipelineWithSaveIntoSuite extends BaseResourceIT with Matchers with With
 
     val qd2 = QueryDetail(qe, 0L)
     val entities2 = CommandsHarvester.InsertIntoHadoopFsRelationHarvester.harvest(cmd2, qd2)
-    val pEntity2 = entities2.head.entity
+    val pEntity2 = entities2.head.asInstanceOf[SACAtlasEntityWithDependencies].entity
 
     // This input is the output of ML scoring job
     val inputs2 = pEntity2.getAttribute("inputs").asInstanceOf[util.Collection[AtlasObjectId]]
     inputs2.size() should be (1)
 
     val input2Tab = inputs2.asScala.head
-    val input2Entity = TestUtils.findEntity(entities2.head.dependencies, input2Tab).get
+    val input2Entity = TestUtils.findEntity(
+      entities2.head.asInstanceOf[SACAtlasEntityWithDependencies].dependencies, input2Tab).get
 
     val logMap2 = Map("sparkPlanDescription" ->
       (s"Spark ML scoring model with pipeline uid: ${pipeline.uid} and model uid: ${model.uid}"))
