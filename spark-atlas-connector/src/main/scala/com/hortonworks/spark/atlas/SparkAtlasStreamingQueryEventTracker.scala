@@ -53,18 +53,26 @@ class SparkAtlasStreamingQueryEventTracker(
     if (!streamQueryHashset.contains(event.progress.runId)) {
       val query = SparkSession.active.streams.get(event.progress.id)
       if (query != null) {
-        query match {
+        val qd = query match {
           case query: StreamingQueryWrapper =>
-            val qd = QueryDetail.fromStreamingQueryListener(query.streamingQuery, event)
-            executionPlanTracker.pushEvent(qd)
-            streamQueryHashset.add(event.progress.runId)
+            Some(QueryDetail.fromStreamingQueryListener(query.streamingQuery, event))
 
           case query: StreamExecution =>
-            val qd = QueryDetail.fromStreamingQueryListener(query, event)
-            executionPlanTracker.pushEvent(qd)
-            streamQueryHashset.add(event.progress.runId)
+            Some(QueryDetail.fromStreamingQueryListener(query, event))
 
-          case _ => logWarn(s"Unexpected type of streaming query: ${query.getClass}")
+          case _ =>
+            logWarn(s"Unexpected type of streaming query: ${query.getClass}")
+            None
+        }
+
+        qd.foreach { q =>
+          if (q.qe != null) {
+            executionPlanTracker.pushEvent(q)
+            streamQueryHashset.add(event.progress.runId)
+          } else {
+            logInfo(s"Can't retrieve query execution information for query ${event.progress.id}" +
+              " - skip and wait for next batch.")
+          }
         }
       } else {
         logWarn(s"Cannot find query ${event.progress.id} from active spark session!")
