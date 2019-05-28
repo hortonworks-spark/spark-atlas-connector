@@ -48,6 +48,13 @@ trait KafkaTopicEntityValidator extends FunSuite {
       expectedQualifiedNames)
   }
 
+  def assertKafkaTopicEntities(
+      topics: Seq[KafkaTopicInformation], entities: Seq[AtlasEntity]): Unit = {
+    assert(
+      topics.map(KafkaTopicInformation.getQualifiedName(_, "primary")).toSet ===
+      entities.map(getStringAttribute(_, "qualifiedName")).toSet)
+  }
+
   def assertEntitiesAreSubsetOfTopics(
       topics: Seq[KafkaTopicInformation], entities: Seq[AtlasEntity]): Unit = {
     TestUtils.assertSubsetOf(

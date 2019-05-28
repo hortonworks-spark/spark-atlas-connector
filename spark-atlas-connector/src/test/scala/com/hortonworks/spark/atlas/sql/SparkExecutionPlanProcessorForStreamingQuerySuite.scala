@@ -183,6 +183,72 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
     }
   }
 
+  test("SAC-253 Kafka source(s) to kafka sink - micro-batch query" +
+    " - activating one topic per each batch") {
+    val topicPrefix = "sparkread0"
+    val brokerAddress = testUtils.brokerAddress
+
+    val customClusterName1 = "customCluster1"
+    val (df1, topicsToRead1WithClusterInfo) =
+      kafkaDfSubscribePattern(topicPrefix, customClusterName1, brokerAddress)
+
+    val customClusterName2 = "customCluster2"
+    val (df2, topicsToRead2WithClusterInfo) =
+      kafkaDfSubscribe(topicPrefix, customClusterName2, brokerAddress)
+
+    val customClusterName3 = "customCluster3"
+    val (df3, topicsToRead3WithClusterInfo) =
+      kafkaDfAssign(topicPrefix, customClusterName3, brokerAddress)
+
+    val topicsInfoToRead = topicsToRead1WithClusterInfo ++ topicsToRead2WithClusterInfo ++
+      topicsToRead3WithClusterInfo
+    val topicsToRead = topicsInfoToRead.map(_.topicName)
+
+    val topicToWrite = "sparkwrite"
+    val topics = topicsToRead ++ Seq(topicToWrite)
+
+    topics.toSet[String].foreach { ti =>
+      testUtils.createTopic(ti, 10, overwrite = true)
+    }
+
+    val (_, _, checkpointDir) = createTempDirectories
+
+    val df = df1.union(df2).union(df3)
+
+    val customClusterNameForWriter = "customCluster4"
+    val query = toKafkaSink(df, brokerAddress, Some(customClusterNameForWriter),
+      topicToWrite, checkpointDir.getAbsolutePath.toString)
+
+    try {
+      topicsInfoToRead.foreach { topicInfo =>
+        sendMessages(Seq(topicInfo.topicName))
+        waitForBatchCompleted(query)
+
+        // clearing tracking entities to verify created entities per batch
+        atlasClient.clearEntities()
+
+        val (queryDetails, entitySet) = processQueryDetails
+        // spark_process, topic to write, topic to read (only one will be captured here)
+        assert(entitySet.size === 3)
+
+        val topicToWriteWithClusterInfo = KafkaTopicInformation(topicToWrite,
+          Some(customClusterNameForWriter))
+
+        val topicsWithClusterInfo = Seq(topicInfo) ++ Seq(topicToWriteWithClusterInfo)
+
+        assertEntitiesKafkaTopicType(topicsWithClusterInfo, entitySet)
+
+        assertEntitySparkProcessType(entitySet, queryDetails, inputs => {
+          assertKafkaTopicEntities(Seq(topicInfo), inputs)
+        }, outputs => {
+          assertKafkaTopicEntities(Seq(topicToWriteWithClusterInfo), outputs)
+        })
+      }
+    } finally {
+      query.stop()
+    }
+  }
+
   test("kafka source to file sink - micro-batch query") {
     val topicPrefix = "sparkread1"
     val brokerAddress = testUtils.brokerAddress

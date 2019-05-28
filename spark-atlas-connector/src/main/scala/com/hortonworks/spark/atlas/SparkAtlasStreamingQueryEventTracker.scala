@@ -39,8 +39,6 @@ class SparkAtlasStreamingQueryEventTracker(
     this(new AtlasClientConf)
   }
 
-  private val streamQueryHashset = new mutable.HashSet[java.util.UUID]
-
   private val executionPlanTracker = new SparkExecutionPlanProcessor(atlasClient, atlasClientConf)
   executionPlanTracker.startThread()
 
@@ -50,38 +48,34 @@ class SparkAtlasStreamingQueryEventTracker(
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {
     logInfo(s"Track running Spark Streaming query in the Spark Atlas: $event")
-    if (!streamQueryHashset.contains(event.progress.runId)) {
-      val query = SparkSession.active.streams.get(event.progress.id)
-      if (query != null) {
-        val qd = query match {
-          case query: StreamingQueryWrapper =>
-            Some(QueryDetail.fromStreamingQueryListener(query.streamingQuery, event))
+    val query = SparkSession.active.streams.get(event.progress.id)
+    if (query != null) {
+      val qd = query match {
+        case query: StreamingQueryWrapper =>
+          Some(QueryDetail.fromStreamingQueryListener(query.streamingQuery, event))
 
-          case query: StreamExecution =>
-            Some(QueryDetail.fromStreamingQueryListener(query, event))
+        case query: StreamExecution =>
+          Some(QueryDetail.fromStreamingQueryListener(query, event))
 
-          case _ =>
-            logWarn(s"Unexpected type of streaming query: ${query.getClass}")
-            None
-        }
-
-        qd.foreach { q =>
-          if (q.qe != null) {
-            executionPlanTracker.pushEvent(q)
-            streamQueryHashset.add(event.progress.runId)
-          } else {
-            logInfo(s"Can't retrieve query execution information for query ${event.progress.id}" +
-              " - skip and wait for next batch.")
-          }
-        }
-      } else {
-        logWarn(s"Cannot find query ${event.progress.id} from active spark session!")
+        case _ =>
+          logWarn(s"Unexpected type of streaming query: ${query.getClass}")
+          None
       }
+
+      qd.foreach { q =>
+        if (q.qe != null) {
+          executionPlanTracker.pushEvent(q)
+        } else {
+          logInfo(s"Can't retrieve query execution information for query ${event.progress.id}" +
+            " - skip and wait for next batch.")
+        }
+      }
+    } else {
+      logWarn(s"Cannot find query ${event.progress.id} from active spark session!")
     }
   }
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
-    streamQueryHashset.remove(event.runId)
     logDebug(s"Tack Spark Streaming query in the Spark Atlas Terminated: $event")
   }
 }
