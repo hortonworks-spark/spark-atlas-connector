@@ -47,7 +47,7 @@ case class QueryDetail(
     executionId: Long,
     query: Option[String] = None,
     sink: Option[SinkProgress] = None,
-    runId: Option[UUID] = None)
+    queryId: Option[UUID] = None)
 
 object QueryDetail {
   def fromQueryExecutionListener(qe: QueryExecution, durationNs: Long): QueryDetail = {
@@ -56,7 +56,7 @@ object QueryDetail {
 
   def fromStreamingQueryListener(qe: StreamExecution, event: QueryProgressEvent): QueryDetail = {
     QueryDetail(qe.lastExecution, AtlasUtils.issueExecutionId(), None,
-      Some(event.progress.sink), Some(qe.runId))
+      Some(event.progress.sink), Some(qe.id))
   }
 }
 
@@ -164,7 +164,7 @@ class SparkExecutionPlanProcessor(
       }
     }
 
-    createReqHelper.requestCreation(entities, qd.runId)
+    createReqHelper.requestCreation(entities, qd.queryId)
   }
 }
 

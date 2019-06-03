@@ -31,8 +31,8 @@ class AtlasEntityCreationRequestHelper(
   private val queryToInputsAndOutputs = new mutable.HashMap[UUID,
     (Set[AtlasObjectId], Set[AtlasObjectId])]()
 
-  def requestCreation(entities: Seq[SACAtlasReferenceable], runId: Option[UUID] = None): Unit = {
-    runId match {
+  def requestCreation(entities: Seq[SACAtlasReferenceable], queryId: Option[UUID] = None): Unit = {
+    queryId match {
       case Some(rid) => updateEntitiesForStreamingQuery(rid, entities)
       case None => updateEntitiesForBatchQuery(entities)
     }
@@ -45,7 +45,7 @@ class AtlasEntityCreationRequestHelper(
   }
 
   private def updateEntitiesForStreamingQuery(
-      runId: UUID,
+      queryId: UUID,
       entities: Seq[SACAtlasReferenceable]): Unit = {
     // the query is streaming, so which partial of source/sink entities can be seen
     // in specific batch - need to accumulate efficiently
@@ -62,7 +62,7 @@ class AtlasEntityCreationRequestHelper(
       AtlasEntityReadHelper.getSeqAtlasObjectIdAttribute(p.entity, "outputs")
     }.toSet
 
-    queryToInputsAndOutputs.get(runId) match {
+    queryToInputsAndOutputs.get(queryId) match {
       case Some((is, os)) if !inputs.subsetOf(is) || !outputs.subsetOf(os) =>
         // The query is streaming, and at least either inputs or outputs is not a
         // subset of accumulated one.
@@ -73,12 +73,12 @@ class AtlasEntityCreationRequestHelper(
         // outputs and always provide accumulated one.
         // If we need to do in our own, we should also accumulate inputs and outputs
         // in SparkCatalogEventProcessor and maintain full of inputs and outputs.
-        // Here we only accumulate inputs/outputs for each streaming query (runId).
+        // Here we only accumulate inputs/outputs for each streaming query (queryId).
 
         createEntities(entities)
 
         // update inputs and outputs as accumulating current one and new inputs/outputs
-        updateInputsAndOutputs(runId, is.union(inputs), os.union(outputs))
+        updateInputsAndOutputs(queryId, is.union(inputs), os.union(outputs))
 
       case Some((_, _)) => // if inputs.subsetOf(is) && outputs.subsetOf(os)
       // we already updated superset of inputs/outputs, skip updating
@@ -88,7 +88,7 @@ class AtlasEntityCreationRequestHelper(
         createEntities(entities)
 
         // update inputs and outputs as new inputs/outputs, as there's nothing to accumulate
-        updateInputsAndOutputs(runId, inputs, outputs)
+        updateInputsAndOutputs(queryId, inputs, outputs)
     }
   }
 
@@ -99,9 +99,9 @@ class AtlasEntityCreationRequestHelper(
   }
 
   private def updateInputsAndOutputs(
-      runId: UUID,
+      queryId: UUID,
       newInputs: Set[AtlasObjectId],
       newOutputs: Set[AtlasObjectId]): Unit = {
-    queryToInputsAndOutputs.put(runId, (newInputs, newOutputs))
+    queryToInputsAndOutputs.put(queryId, (newInputs, newOutputs))
   }
 }

@@ -40,7 +40,7 @@ class AtlasEntityCreationRequestHelperSuite
 
   test("SAC-253 partial sources presented in streaming query") {
     val cluster = "cl1"
-    val runId = UUID.randomUUID()
+    val queryId = UUID.randomUUID()
 
     val topic1 = KafkaTopicInformation("topic1")
     val topic2 = KafkaTopicInformation("topic2")
@@ -53,33 +53,35 @@ class AtlasEntityCreationRequestHelperSuite
     val sink = external.kafkaToEntity(cluster, topicSink)
 
     // source1
-    validateInputsOutputs(runId, Seq(source1), Seq(sink), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source1), Seq(sink), expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // source1, source2
-    validateInputsOutputs(runId, Seq(source1, source2), Seq(sink), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source1, source2), Seq(sink),
+      expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // source2, source3
-    validateInputsOutputs(runId, Seq(source2, source3), Seq(sink), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source2, source3), Seq(sink),
+      expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // source1, source2
-    validateInputsOutputs(runId, Seq(source1, source2), Seq(sink), expectNoCreationRequest = true)
+    validateInputsOutputs(queryId, Seq(source1, source2), Seq(sink), expectNoCreationRequest = true)
 
     client.clearEntities()
 
     // source1, source2, source3
-    validateInputsOutputs(runId, Seq(source1, source2, source3), Seq(sink),
+    validateInputsOutputs(queryId, Seq(source1, source2, source3), Seq(sink),
       expectNoCreationRequest = true)
   }
 
   test("SAC-253 partial sinks presented in streaming query") {
     val cluster = "cl1"
-    val runId = UUID.randomUUID()
+    val queryId = UUID.randomUUID()
 
     val topic1 = KafkaTopicInformation("topic1")
     val topic2 = KafkaTopicInformation("topic2")
@@ -92,37 +94,37 @@ class AtlasEntityCreationRequestHelperSuite
     val sink3 = external.kafkaToEntity(cluster, topic3)
 
     // sink1
-    validateInputsOutputs(runId, Seq(source), Seq(sink1), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source), Seq(sink1), expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // sink1, sink2
-    validateInputsOutputs(runId, Seq(source), Seq(sink1, sink2), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source), Seq(sink1, sink2), expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // sink2, sink3
-    validateInputsOutputs(runId, Seq(source), Seq(sink2, sink3), expectNoCreationRequest = false)
+    validateInputsOutputs(queryId, Seq(source), Seq(sink2, sink3), expectNoCreationRequest = false)
 
     client.clearEntities()
 
     // sink1, sink2
-    validateInputsOutputs(runId, Seq(source), Seq(sink1, sink2), expectNoCreationRequest = true)
+    validateInputsOutputs(queryId, Seq(source), Seq(sink1, sink2), expectNoCreationRequest = true)
 
     client.clearEntities()
 
     // sink1, sink2, sink3
-    validateInputsOutputs(runId, Seq(source), Seq(sink1, sink2, sink3),
+    validateInputsOutputs(queryId, Seq(source), Seq(sink1, sink2, sink3),
       expectNoCreationRequest = true)
   }
 
   private def validateInputsOutputs(
-      runId: UUID,
+      queryId: UUID,
       sources: Seq[SACAtlasEntityWithDependencies],
       sinks: Seq[SACAtlasEntityWithDependencies],
       expectNoCreationRequest: Boolean): Unit = {
     val process = internal.etlProcessToEntity(sources, sinks, Map())
-    sut.requestCreation(Seq(process), Some(runId))
+    sut.requestCreation(Seq(process), Some(queryId))
 
     if (expectNoCreationRequest) {
       // no entities will be created, as both inputs and outputs are subset of
