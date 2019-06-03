@@ -179,9 +179,9 @@ object internal extends Logging {
   }
 
   def etlProcessToEntity(
-                          inputs: Seq[SACAtlasReferenceable],
-                          outputs: Seq[SACAtlasReferenceable],
-                          logMap: Map[String, String]): SACAtlasEntityWithDependencies = {
+      inputs: Seq[SACAtlasReferenceable],
+      outputs: Seq[SACAtlasReferenceable],
+      logMap: Map[String, String]): SACAtlasEntityWithDependencies = {
     val entity = new AtlasEntity(metadata.PROCESS_TYPE_STRING)
 
     val appId = SparkUtils.sparkSession.sparkContext.applicationId
@@ -204,9 +204,9 @@ object internal extends Logging {
   }
 
   def updateMLProcessToEntity(
-                               inputs: Seq[SACAtlasReferenceable],
-                               outputs: Seq[SACAtlasReferenceable],
-                               logMap: Map[String, String]): SACAtlasEntityWithDependencies = {
+      inputs: Seq[SACAtlasReferenceable],
+      outputs: Seq[SACAtlasReferenceable],
+      logMap: Map[String, String]): SACAtlasEntityWithDependencies = {
 
     val model_uid = internal.cachedObjects("model_uid").asInstanceOf[String]
     val modelEntity = internal.cachedObjects(s"${model_uid}_modelEntity").
