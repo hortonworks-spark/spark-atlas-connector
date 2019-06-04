@@ -160,7 +160,9 @@ This doesn't apply to Hive models, which central remote HMS takes care of DDLs a
 
 > SAC doesn't track dropping tables (Spark models).
 
-Same reason as above. If SAC doesn't support some operations on DDL, it would be basically same reason.
+"drop table" event from Spark only provides db and table name, which is NOT sufficient to create qualifierName - especially we separate two types of tables - spark and hive. 
+
+SAC depends on reading the Spark Catalog to get table information but Spark might already dropped the table when SAC notices the table is dropped, so that is NOT consistent. Due to this technical limitation, we have to drop this feature.
 
 > ML entities/events may not be tracked properly.
 
