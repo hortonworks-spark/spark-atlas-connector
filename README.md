@@ -116,16 +116,16 @@ Spark models vs Hive models
 
 SAC classifies table related entities with two different kind of models: Spark / Hive.
 
-We decided to determine which models SAC should use via taking realistic condition: whether Hive Hook can take care of table related entities or not. For creating Hive entities, SAC is not the best one to fill out information on entities - so we let Hive to do its own.
+We decided to determine which models SAC should create based on whether Hive Hook can take care of table related entities or not. For Hive entities, SAC relies on HMS Atlas hook as the source of truth and expects HMS atlas hook to create it.
 
 As SAC cannot check whether the condition is properly made, SAC relies on precondition: if Spark session is connected to the "remote HMS" (via thrift), SAC assumes Hive Hook is already set up in remote HMS and Hive Hook will take care of entities creation.
 
-In other words, SAC assumes table entities are being created in Hive side and just refers these entities via object id:
+In other words, SAC assumes table entities are being created in Hive side and just refers these entities via object id if below conditions are true:
 
-* The value of "spark.sql.catalogImplementation" is set to "hive"
+* SparkSession.builder.enableHiveSupport is set
 * The value of "hive.metastore.uris" is set to non-empty
 
-For other cases, SAC will create necessary table related entities as Spark models (even it uses Hive metastore).
+For other cases, SAC will create necessary table related entities as Spark models.
 
 One exceptional case is HWC - for HWC source and/or sink, SAC will not create table related entities and always refer to Hive table entities via object id.
 
@@ -138,13 +138,13 @@ SAC relies on query listener to retrieve query and examine the impacts. We may n
 
 > All "inputs" and "outputs" in multiple queries are accumulated into single "spark_process" entity when there're multple queries running in single Spark session.
 
-Unfortunately, we got lost on history for this. We assume this approach could concentrate overall impacts on the single Spark process for who ran for when, but it's not pretty clear why application id was taken.
+There're pros and cons regarding which is used for unit of "spark_process". Currently SAC uses "application ID" as unit - this approach could concentrate overall impacts on the single Spark process for who ran for when.
 
-We've filed #261 to investigate changing the unit of "spark_process" entity to query, but it doesn't mean we will change it soon. It will be address only if we see the clear benefits on changing it.
+But we also received other voices on this approach - lineage/relationship graph in "spark_process" are too complicated and confused and less meaningful. It's valid voice, we've filed #261 to investigate changing the unit of "spark_process" entity to query. It doesn't mean we will change it soon. It will be address only if we see the clear benefits on changing it.
 
 > Only part of inputs are tracked in Streaming query.
 
-This is from design choice on "trade-off": Kafka source supports subscribing with "pattern" which SAC cannot enumerate all matching existing topics, or even all possible topics (even it's possible it doesn't make sense, though). 
+This is from design choice on "trade-off": Kafka source supports subscribing with "pattern" and SAC cannot enumerate all matching existing topics, or even all possible topics (even it's possible it doesn't make sense, though).
 
 We found "executed plan" provides actual topics which each (micro) batch read and processed, but as a result, only inputs which participate on (micro) batch are being included as "inputs" in "spark_process" entity. 
 
@@ -156,7 +156,7 @@ We found difficulty to make column entity be consistently "up-to-date" supposing
 
 We haven't found difficulty on table level, but once we collect difficulties on making table entity being consistent as well, we might also consider drop supporting DDL and blindly create the entities whenever they're referenced.
 
-This doesn't apply to Hive models, which central remote HMS takes care of DDLs and Hive Hook will take care of updates.
+This doesn't apply to Hive models, which central remote HMS takes care of DDLs and Hive Atlas Hook will take care of updates.
 
 > SAC doesn't track dropping tables (Spark models).
 
