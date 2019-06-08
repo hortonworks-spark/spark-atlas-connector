@@ -21,15 +21,15 @@ import java.io.File
 import java.net.{URI, URISyntaxException}
 
 import com.hortonworks.spark.atlas.sql.KafkaTopicInformation
-
 import org.apache.atlas.AtlasConstants
 import org.apache.atlas.model.instance.{AtlasEntity, AtlasObjectId}
 import org.apache.commons.lang.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import com.hortonworks.spark.atlas.{SACAtlasEntityReference, SACAtlasEntityWithDependencies, SACAtlasReferenceable, AtlasUtils}
+import com.hortonworks.spark.atlas.{AtlasUtils, SACAtlasEntityReference, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 import com.hortonworks.spark.atlas.utils.{JdbcUtils, SparkUtils}
+import org.apache.spark.sql.SparkSession
 
 
 object external {
@@ -108,23 +108,32 @@ object external {
     }
   }
 
+  private def qualifiedPath(path: String): Path = {
+    val p = new Path(path)
+    val fs = p.getFileSystem(SparkUtils.sparkSession.sparkContext.hadoopConfiguration)
+    p.makeQualified(fs.getUri, fs.getWorkingDirectory)
+  }
+
   private def resolveURI(path: String): URI = {
-    try {
-      val uri = new URI(path)
-      if (uri.getScheme() != null) {
-        return uri
-      }
+    val uri = new URI(path)
+    if (uri.getScheme() != null) {
+      return uri
+    }
+
+    val qUri = qualifiedPath(path).toUri
+    if (qUri.getScheme == "file") {
       // make sure to handle if the path has a fragment (applies to yarn
       // distributed cache)
-      if (uri.getFragment() != null) {
-        val absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI()
-        return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+      if (qUri.getFragment() != null) {
+        val absoluteURI = new File(qUri.getPath()).getAbsoluteFile().toURI()
+        new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
           uri.getFragment())
+      } else {
+        new File(path).getAbsoluteFile().toURI()
       }
-    } catch {
-      case e: URISyntaxException =>
+    } else {
+      qUri
     }
-    new File(path).getAbsoluteFile().toURI()
   }
 
   // ================ HBase entities ======================

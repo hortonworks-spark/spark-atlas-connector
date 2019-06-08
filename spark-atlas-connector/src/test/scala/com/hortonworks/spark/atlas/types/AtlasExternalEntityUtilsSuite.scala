@@ -18,6 +18,7 @@
 package com.hortonworks.spark.atlas.types
 
 import java.nio.file.Files
+import java.util.Locale
 
 import org.apache.atlas.{AtlasClient, AtlasConstants}
 import org.apache.spark.sql.types._
@@ -134,3 +135,27 @@ class AtlasExternalEntityUtilsSuite
 
 }
 
+class AtlasExternalEntityUtilsSuiteWithHDFSAsDefaultFileSystem
+  extends FunSuite
+  with Matchers
+  with WithHDFSSupport {
+
+  test("convert path to entity") {
+    val tempFile = Files.createTempFile("tmp", ".txt").toFile
+    val absPath = tempFile.getAbsolutePath
+
+    // NOTE: WithHDFSSupport sets default file system to HDFS in spark session.
+    // Spark relies on default file system when scheme is not specified,
+    // so we are expecting given path as HDFS path, though we created file in local file system.
+    val pathEntity = external.pathToEntity(absPath)
+
+    pathEntity.entity.getTypeName should be (external.HDFS_PATH_TYPE_STRING)
+    pathEntity.entity.getAttribute("name") should be (absPath.toLowerCase(Locale.ROOT))
+    pathEntity.entity.getAttribute("path") should be (absPath.toLowerCase(Locale.ROOT))
+    pathEntity.entity.getAttribute(AtlasClient.REFERENCEABLE_ATTRIBUTE_NAME) should be (
+      hdfsURI.stripSuffix("/") + absPath)
+
+    pathEntity.dependencies.length should be (0)
+  }
+
+}
