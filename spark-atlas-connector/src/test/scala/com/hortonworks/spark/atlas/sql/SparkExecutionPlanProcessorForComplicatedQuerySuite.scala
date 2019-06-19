@@ -38,26 +38,24 @@ class SparkExecutionPlanProcessorForComplicatedQuerySuite
 
   val atlasClientConf: AtlasClientConf = new AtlasClientConf()
     .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
-  var atlasClient: CreateEntitiesTrackingAtlasClient = _
-  val testHelperQueryListener = new AtlasQueryExecutionListener()
+  var testHelperQueryListener: AtlasQueryExecutionListener = _
 
   val clusterName: String = atlasClientConf.get(AtlasClientConf.CLUSTER_NAME)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    atlasClient = new CreateEntitiesTrackingAtlasClient()
-    testHelperQueryListener.clear()
+    testHelperQueryListener = new AtlasQueryExecutionListener()
     sparkSession.listenerManager.register(testHelperQueryListener)
   }
 
   override def afterAll(): Unit = {
-    atlasClient = null
     sparkSession.listenerManager.unregister(testHelperQueryListener)
     super.afterAll()
   }
 
   test("select tbl1, tbl2 -> save to tbl3 -> select tbl3 -> save to file") {
+    val atlasClient = new CreateEntitiesTrackingAtlasClient()
     val planProcessor = new DirectProcessSparkExecutionPlanProcessor(atlasClient, atlasClientConf)
 
     val rand = new scala.util.Random()
