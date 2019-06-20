@@ -125,7 +125,7 @@ In other words, SAC assumes table entities are being created in Hive side and ju
 * SparkSession.builder.enableHiveSupport is set
 * The value of "hive.metastore.uris" is set to non-empty
 
-For other cases, SAC will create necessary table related entities as Spark models.
+For other cases, SAC will create table related entities as Spark models.
 
 One exceptional case is HWC - for HWC source and/or sink, SAC will not create table related entities and always refer to Hive table entities via object id.
 
@@ -134,7 +134,7 @@ Known Limitations (Design decision)
 
 > SAC only supports SQL/DataFrame API (in other words, SAC doesn't support RDD).
 
-SAC relies on query listener to retrieve query and examine the impacts. We may not investigate on supporting RDD for future unless strongly necessary.
+SAC relies on query listener to retrieve query and examine the impacts.
 
 > All "inputs" and "outputs" in multiple queries are accumulated into single "spark_process" entity when there're multple queries running in single Spark session.
 
