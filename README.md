@@ -116,11 +116,9 @@ Spark models vs Hive models
 
 SAC classifies table related entities with two different kind of models: Spark / Hive.
 
-We decided to determine which models SAC should create based on whether Hive Hook can take care of table related entities or not. For Hive entities, SAC relies on HMS Atlas hook as the source of truth and expects HMS atlas hook to create it.
+We decided to skip sending create events for Hive tables managed by HMS to avoid duplication of those events from Atlas hook for Hive . For Hive entities, Atlas relies on Atlas hook for Hive as the source of truth.
 
-As SAC cannot check whether the condition is properly made, SAC relies on precondition: if Spark session is connected to the "remote HMS" (via thrift), SAC assumes Hive Hook is already set up in remote HMS and Hive Hook will take care of entities creation.
-
-In other words, SAC assumes table entities are being created in Hive side and just refers these entities via object id if below conditions are true:
+SAC assumes table entities are being created in Hive side and just refers these entities via object id if below conditions are true:
 
 * SparkSession.builder.enableHiveSupport is set
 * The value of "hive.metastore.uris" is set to non-empty
