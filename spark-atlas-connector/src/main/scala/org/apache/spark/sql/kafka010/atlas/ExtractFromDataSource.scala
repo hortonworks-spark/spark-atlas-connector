@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010.atlas
 
+import java.util
+
 import scala.collection.mutable
 import scala.util.control.NonFatal
 import org.json4s.NoTypeHints
@@ -230,12 +232,21 @@ object ExtractFromDataSource extends Logging {
   private def populateValuesFromKafkaStreamWriterFactory(
       writer: DataWriterFactory[InternalRow])
     : Option[(Option[String], Map[String, String], StructType)] = {
+    import scala.collection.JavaConverters._
 
     if (isKafkaStreamWriterFactory(writer)) {
       val topic = ReflectionHelper.reflectFieldWithContextClassloader[Option[String]](
         writer, "topic")
       val params = ReflectionHelper
-        .reflectFieldWithContextClassloader[Map[String, String]](writer, "producerParams")
+        .reflectFieldWithContextClassloaderLoosenType(writer, "producerParams")
+        .flatMap {
+          // SPARK-25501
+          case p: util.Map[String, Object] =>
+            Some(p.asScala.map(elem => elem._1 -> elem._2.toString).toMap)
+          // Before SPARK-25501
+          case p: Map[String, String] => Some(p)
+          case _ => None
+        }
       val schema = ReflectionHelper.reflectFieldWithContextClassloader[StructType](writer, "schema")
 
       (topic, params, schema) match {
