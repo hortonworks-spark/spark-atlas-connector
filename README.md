@@ -142,11 +142,11 @@ But we also received other voices on this approach - lineage/relationship graph 
 
 > Only part of inputs are tracked in Streaming query.
 
-This is from design choice on "trade-off": Kafka source supports subscribing with "pattern" and SAC cannot enumerate all matching existing topics, or even all possible topics (even it's possible it doesn't make sense, though).
+This is from design choice on "trade-off": Kafka source supports subscribing with "pattern" and SAC cannot enumerate all matching existing topics, or even all possible topics (even if it was possible, it won't make sense).
 
-We found "executed plan" provides actual topics which each (micro) batch read and processed, but as a result, only inputs which participate on (micro) batch are being included as "inputs" in "spark_process" entity. 
+"executed plan" provides actual topics which each (micro) batch reads and processes, and as a result, only inputs which participate in (micro) batch are included as "inputs" in "spark_process" entity. 
 
-If your query are running long enough that it ingests data from all topics, it would have all topics in "spark_process" entity.
+If your query runs long enough that it ingests data from all topics, it will have all topics in "spark_process" entity.
 
 > SAC doesn't support tracking changes on columns (Spark models).
 
@@ -160,7 +160,7 @@ This doesn't apply to Hive models, which central remote HMS takes care of DDLs a
 
 "drop table" event from Spark only provides db and table name, which is NOT sufficient to create qualifierName - especially we separate two types of tables - spark and hive. 
 
-SAC depends on reading the Spark Catalog to get table information but Spark might already dropped the table when SAC notices the table is dropped, so that is NOT consistent. Due to this technical limitation, we have to drop this feature.
+SAC depends on reading the Spark Catalog to get table information but Spark will have already dropped the table when SAC notices the table is dropped so that will not work. Due to this technical limitation, we have to drop this feature.
 
 > ML entities/events may not be tracked properly.
 
