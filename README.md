@@ -136,9 +136,9 @@ SAC relies on query listener to retrieve query and examine the impacts.
 
 > All "inputs" and "outputs" in multiple queries are accumulated into single "spark_process" entity when there're multple queries running in single Spark session.
 
-There're pros and cons regarding which is used for unit of "spark_process". Currently SAC uses "application ID" as unit - this approach could concentrate overall impacts on the single Spark process for who ran for when.
+"spark_process" maps to an "applicationId" in Spark. This is helpful as it allows admin to track all changes that occurred as part of an application. But it also causes lineage/relationship graph in "spark_process" to be complicated and less meaningful.
 
-But we also received other voices on this approach - lineage/relationship graph in "spark_process" are too complicated and confused and less meaningful. It's valid voice, we've filed #261 to investigate changing the unit of "spark_process" entity to query. It doesn't mean we will change it soon. It will be address only if we see the clear benefits on changing it.
+We've filed #261 to investigate changing the unit of "spark_process" entity to query. It doesn't mean we will change it soon. It will be addressed only if we see clear benefits of changing it.
 
 > Only part of inputs are tracked in Streaming query.
 
@@ -150,17 +150,17 @@ If your query are running long enough that it ingests data from all topics, it w
 
 > SAC doesn't support tracking changes on columns (Spark models).
 
-We found difficulty to make column entity be consistently "up-to-date" supposing multiple spark applications are running and each SAC in spark application are trying to update on Atlas. Due to the difficulty, we dropped supporting column tracking.
-
-We haven't found difficulty on table level, but once we collect difficulties on making table entity being consistent as well, we might also consider drop supporting DDL and blindly create the entities whenever they're referenced.
+We are investigating how to add support for column entity. The main issue we face is how to make this change consistent when multiple spark applications make changes to the same table/column.
 
 This doesn't apply to Hive models, which central remote HMS takes care of DDLs and Hive Atlas Hook will take care of updates.
 
 > SAC doesn't track dropping tables (Spark models).
 
-"drop table" event from Spark only provides db and table name, which is NOT sufficient to create qualifierName - especially we separate two types of tables - spark and hive. 
+"drop table" event from Spark only provides db and table name, which is NOT sufficient to create qualifierName - especially we separate two types of tables - spark and hive.
 
-SAC depends on reading the Spark Catalog to get table information but Spark might already dropped the table when SAC notices the table is dropped, so that is NOT consistent. Due to this technical limitation, we have to drop this feature.
+SAC depends on reading the Spark Catalog to get table information but Spark might already dropped the table when SAC notices the table is dropped, so that is NOT consistent.
+
+We are investigating how to change Spark to provide necessary information via listener, maybe snapshot of information before deletion happens.
 
 > ML entities/events may not be tracked properly.
 
