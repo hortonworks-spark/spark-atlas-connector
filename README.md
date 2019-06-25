@@ -111,6 +111,10 @@ When running on cluster node, you will also need to distribute this keytab, belo
 
 When Spark application is started, it will transparently track the execution plan of submitted SQL/DF transformations, parse the plan and create related entities in Atlas.
 
+Reference
+===
+- Mingjie Tang, Saisai Shao, Weiqing Yang, Yanbo Liang, Yongyang Yu, Bikas Saha, Dongjoon Hyun. [SAC: A System for Big Data Lineage Tracking](https://ieeexplore.ieee.org/abstract/document/8731450/). In IEEE 35th International Conference on Data Engineering (ICDE), 2019
+
 License
 =======
 
