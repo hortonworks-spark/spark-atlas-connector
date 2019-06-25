@@ -113,7 +113,7 @@ When Spark application is started, it will transparently track the execution pla
 
 Reference
 ===
-- Mingjie Tang, Saisai Shao, Weiqing Yang, Yanbo Liang, Yongyang Yu, Bikas Saha, Dongjoon Hyun. [SAC: A System for Big Data Lineage Tracking](https://ieeexplore.ieee.org/abstract/document/8731450/). In IEEE 35th International Conference on Data Engineering (ICDE), 2019
+- Mingjie Tang, Saisai Shao, Weiqing Yang, Yanbo Liang, Yongyang Yu, Bikas Saha, Dongjoon Hyun. [SAC: A System for Big Data Lineage Tracking](http://merlintang.github.io/paper/sac_icde.pdf). In IEEE 35th International Conference on Data Engineering (ICDE), 2019
 
 License
 =======
