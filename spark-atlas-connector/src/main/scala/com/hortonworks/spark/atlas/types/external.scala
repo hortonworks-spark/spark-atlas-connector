@@ -121,6 +121,11 @@ object external {
     }
 
     val qUri = qualifiedPath(path).toUri
+
+    // Path.makeQualified always converts the path as absolute path, but for file scheme
+    // it provides different prefix.
+    // (It provides prefix as "file" instead of "file://", which both are actually valid.)
+    // Given we have been providing it as "file://", we will keep this as it is.
     if (qUri.getScheme == "file") {
       // make sure to handle if the path has a fragment (applies to yarn
       // distributed cache)
