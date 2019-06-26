@@ -111,6 +111,64 @@ When running on cluster node, you will also need to distribute this keytab, belo
 
 When Spark application is started, it will transparently track the execution plan of submitted SQL/DF transformations, parse the plan and create related entities in Atlas.
 
+Spark models vs Hive models
+====
+
+SAC classifies table related entities with two different kind of models: Spark / Hive.
+
+We decided to skip sending create events for Hive tables managed by HMS to avoid duplication of those events from Atlas hook for Hive . For Hive entities, Atlas relies on Atlas hook for Hive as the source of truth.
+
+SAC assumes table entities are being created in Hive side and just refers these entities via object id if below conditions are true:
+
+* SparkSession.builder.enableHiveSupport is set
+* The value of "hive.metastore.uris" is set to non-empty
+
+For other cases, SAC will create table related entities as Spark models.
+
+One exceptional case is HWC - for HWC source and/or sink, SAC will not create table related entities and always refer to Hive table entities via object id.
+
+Known Limitations (Design decision)
+====
+
+> SAC only supports SQL/DataFrame API (in other words, SAC doesn't support RDD).
+
+SAC relies on query listener to retrieve query and examine the impacts.
+
+> All "inputs" and "outputs" in multiple queries are accumulated into single "spark_process" entity when there're multple queries running in single Spark session.
+
+"spark_process" maps to an "applicationId" in Spark. This is helpful as it allows admin to track all changes that occurred as part of an application. But it also causes lineage/relationship graph in "spark_process" to be complicated and less meaningful.
+
+We've filed #261 to investigate changing the unit of "spark_process" entity to query. It doesn't mean we will change it soon. It will be addressed only if we see clear benefits of changing it.
+
+> Only part of inputs are tracked in Streaming query.
+
+This is from design choice on "trade-off": Kafka source supports subscribing with "pattern" and SAC cannot enumerate all matching existing topics, or even all possible topics (even if it was possible, it won't make sense).
+
+"executed plan" provides actual topics which each (micro) batch reads and processes, and as a result, only inputs which participate in (micro) batch are included as "inputs" in "spark_process" entity. 
+
+If your query runs long enough that it ingests data from all topics, it will have all topics in "spark_process" entity.
+
+> SAC doesn't support tracking changes on columns (Spark models).
+
+We are investigating how to add support for column entity. The main issue we face is how to make this change consistent when multiple spark applications make changes to the same table/column.
+
+This doesn't apply to Hive models, which central remote HMS takes care of DDLs and Hive Atlas Hook will take care of updates.
+
+> SAC doesn't track dropping tables (Spark models).
+
+"drop table" event from Spark only provides db and table name, which is NOT sufficient to create qualifierName - especially we separate two types of tables - spark and hive.
+
+SAC depends on reading the Spark Catalog to get table information but Spark will have already dropped the table when SAC notices the table is dropped so that will not work.
+
+We are investigating how to change Spark to provide necessary information via listener, maybe snapshot of information before deletion happens.
+
+> ML entities/events may not be tracked properly.
+
+We are concentrating on making basic features be stable: we are not including ML features on the target of basic features as of now. We will revisit once we are sure to resolve most of issues on basic features.
+
+By the way, we have two patches for tracking ML events: one is a custom patch which could be applied to Spark 2.3/2.4, and another one is a patch which is adopted to Apache Spark but will be available for Spark 3.0. Currently SAC follows custom patch, which is kind of deprecated due to new patch. Maybe we would need to revisit ML features again with Spark 3.0.
+
+
 License
 =======
 
