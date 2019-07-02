@@ -19,7 +19,7 @@ package com.hortonworks.spark.atlas.types
 
 import java.util.Date
 
-import com.hortonworks.spark.atlas.{SACAtlasEntityWithDependencies, SACAtlasReferenceable}
+import com.hortonworks.spark.atlas.{AtlasUtils, SACAtlasEntityWithDependencies, SACAtlasReferenceable}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._

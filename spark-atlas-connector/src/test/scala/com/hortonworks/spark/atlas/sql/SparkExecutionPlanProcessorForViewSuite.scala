@@ -38,7 +38,6 @@ class SparkExecutionPlanProcessorForViewSuite
 
   var atlasClient: CreateEntitiesTrackingAtlasClient = _
   val atlasClientConf: AtlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

@@ -39,6 +39,15 @@ class SparkAtlasStreamingQueryEventTracker(
     this(new AtlasClientConf)
   }
 
+  private val enabled: Boolean = {
+    if (!atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_ENABLED).toBoolean) {
+      logWarn("Spark Atlas Connector is disabled.")
+      false
+    } else {
+      true
+    }
+  }
+
   private val executionPlanTracker = new SparkExecutionPlanProcessor(atlasClient, atlasClientConf)
   executionPlanTracker.startThread()
 
@@ -47,6 +56,10 @@ class SparkAtlasStreamingQueryEventTracker(
   }
 
   override def onQueryProgress(event: QueryProgressEvent): Unit = {
+    if (!enabled) {
+      // No op if SAC is disabled
+      return
+    }
     logInfo(s"Track running Spark Streaming query in the Spark Atlas: $event")
     val query = SparkSession.active.streams.get(event.progress.id)
     if (query != null) {
