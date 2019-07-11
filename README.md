@@ -29,16 +29,15 @@ mvn package -DskipTests
 
 Create Atlas models
 ===================
+NOTE: below steps are only necessary prior to Apache Atlas 2.1.0. Apache Atlas 2.1.0 will include the models. 
 
-You may need to create Atlas models to ensure all necessary models are created before running SAC and pushing metadata changes.
+You may need to create Atlas models for Spark to ensure all necessary models are created before running SAC and pushing metadata changes.
 
 The official and recommended approach for registering models in Apache Atlas is having json model file. We've co-worked with Atlas team to define official Spark models for Apache Atlas which is compatible with SAC.
 
 SAC leverages official Spark models in Apache Atlas, but as of Apache Atlas 2.0.0, it doesn't include the model file yet. Until Apache Atlas publishes new release which includes the model, SAC includes the json model file to apply to Atlas server easily.
 
 Please copy `1100-spark_model.json` to `<ATLAS_HOME>/models/1000-Hadoop` directory and restart Atlas server to take effect.
-
-With the change of approach on registering models, `atlas.client.checkModelInStart` option is removed.
 
 How To Use
 ==========

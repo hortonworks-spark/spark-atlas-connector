@@ -37,14 +37,7 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
     this(new AtlasClientConf)
   }
 
-  private val enabled: Boolean = {
-    if (!atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_ENABLED).toBoolean) {
-      logWarn("Spark Atlas Connector is disabled.")
-      false
-    } else {
-      true
-    }
-  }
+  private val enabled: Boolean = AtlasUtils.isSacEnabled(atlasClientConf)
 
   // Processor to handle DDL related events
   @VisibleForTesting

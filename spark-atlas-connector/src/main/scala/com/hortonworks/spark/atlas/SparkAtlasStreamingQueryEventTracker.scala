@@ -39,14 +39,7 @@ class SparkAtlasStreamingQueryEventTracker(
     this(new AtlasClientConf)
   }
 
-  private val enabled: Boolean = {
-    if (!atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_ENABLED).toBoolean) {
-      logWarn("Spark Atlas Connector is disabled.")
-      false
-    } else {
-      true
-    }
-  }
+  private val enabled: Boolean = AtlasUtils.isSacEnabled(atlasClientConf)
 
   private val executionPlanTracker = new SparkExecutionPlanProcessor(atlasClient, atlasClientConf)
   executionPlanTracker.startThread()
