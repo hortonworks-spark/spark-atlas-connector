@@ -43,8 +43,6 @@ class MLPipelineTrackerIT extends BaseResourceIT with Matchers with WithHiveSupp
 
   // Enable it to run integrated test.
   it("pipeline and pipeline model") {
-    SparkAtlasModel.checkAndCreateTypes(atlasClient)
-
     val uri = "hdfs://"
     val pipelineDir = "tmp/pipeline"
     val modelDir = "tmp/model"

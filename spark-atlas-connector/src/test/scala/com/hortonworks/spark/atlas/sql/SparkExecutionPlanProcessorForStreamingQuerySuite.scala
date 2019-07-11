@@ -42,7 +42,6 @@ class SparkExecutionPlanProcessorForStreamingQuerySuite
   var testUtils: KafkaTestUtils = _
 
   val atlasClientConf: AtlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
   var atlasClient: CreateEntitiesTrackingAtlasClient = _
   val testHelperQueryListener = new AtlasQueryExecutionListener()
   val testHelperStreamingQueryListener = new AtlasStreamingQueryProgressListener()

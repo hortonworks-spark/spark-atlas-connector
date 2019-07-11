@@ -41,7 +41,6 @@ class SparkCatalogEventProcessorSuite extends FunSuite with Matchers with Before
 
   private var sparkSession: SparkSession = _
   private val atlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()

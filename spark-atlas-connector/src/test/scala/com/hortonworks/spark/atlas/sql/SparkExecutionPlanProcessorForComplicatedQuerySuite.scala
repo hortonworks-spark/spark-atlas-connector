@@ -37,7 +37,6 @@ class SparkExecutionPlanProcessorForComplicatedQuerySuite
   import com.hortonworks.spark.atlas.AtlasEntityReadHelper._
 
   val atlasClientConf: AtlasClientConf = new AtlasClientConf()
-    .set(AtlasClientConf.CHECK_MODEL_IN_START.key, "false")
   var testHelperQueryListener: AtlasQueryExecutionListener = _
 
   val clusterName: String = atlasClientConf.get(AtlasClientConf.CLUSTER_NAME)

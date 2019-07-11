@@ -17,7 +17,6 @@
 
 package com.hortonworks.spark.atlas
 
-import scala.util.control.NonFatal
 import com.google.common.annotations.VisibleForTesting
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogEvent
@@ -25,10 +24,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 import com.hortonworks.spark.atlas.sql._
 import com.hortonworks.spark.atlas.ml.MLPipelineEventProcessor
-import com.hortonworks.spark.atlas.types.SparkAtlasModel
 import com.hortonworks.spark.atlas.utils.Logging
-
-import scala.collection.mutable
 
 class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasClientConf)
     extends SparkListener with QueryExecutionListener with Logging {
@@ -41,11 +37,7 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
     this(new AtlasClientConf)
   }
 
-  private var shouldContinue: Boolean = true
-
-  if (!initializeSparkModel()) {
-    shouldContinue = false
-  }
+  private val enabled: Boolean = AtlasUtils.isSacEnabled(atlasClientConf)
 
   // Processor to handle DDL related events
   @VisibleForTesting
@@ -61,8 +53,8 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   mlEventTracker.startThread()
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
-    if (!shouldContinue) {
-      // No op if our tracker is failed to initialize itself
+    if (!enabled) {
+      // No op if SAC is disabled
       return
     }
 
@@ -76,8 +68,8 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
   }
 
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-    if (!shouldContinue) {
-      // No op if our tracker is failed to initialize itself
+    if (!enabled) {
+      // No op if SAC is disabled
       return
     }
 
@@ -94,30 +86,4 @@ class SparkAtlasEventTracker(atlasClient: AtlasClient, atlasClientConf: AtlasCli
     // No-op: SAC is one of the listener.
   }
 
-  private def initializeSparkModel(): Boolean = {
-    if (!atlasClientConf.get(AtlasClientConf.ATLAS_SPARK_ENABLED).toBoolean) {
-      logWarn("Spark Atlas Connector is disabled.")
-      return false
-    }
-    try {
-      val checkModelInStart = atlasClientConf.get(AtlasClientConf.CHECK_MODEL_IN_START).toBoolean
-      if (checkModelInStart) {
-        val restClient = if (!atlasClient.isInstanceOf[RestAtlasClient]) {
-          logWarn("Spark Atlas Model check and creation can only work with REST client, so " +
-            "creating a new REST client")
-          new RestAtlasClient(atlasClientConf)
-        } else {
-          atlasClient
-        }
-
-        SparkAtlasModel.checkAndCreateTypes(restClient)
-      }
-
-      true
-    } catch {
-      case NonFatal(e) =>
-        logError(s"Fail to initialize Atlas client, stop this listener", e)
-        false
-    }
-  }
 }

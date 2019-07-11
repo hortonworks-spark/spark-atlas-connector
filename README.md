@@ -27,26 +27,13 @@ mvn package -DskipTests
 
 `mvn package` will assemble all the required dependencies and package into an uber jar.
 
-Pre-create Atlas models (Recommended)
-=====================================
+Create Atlas models
+===================
+NOTE: below steps are only necessary prior to Apache Atlas 2.1.0. Apache Atlas 2.1.0 will include the models. 
 
-You may need to create Atlas models to ensure all necessary models are created before running SAC and pushing metadata changes. Spark Atlas Connector provides the way to pre-create Atlas models, and it is only needed for the first time.
+SAC leverages official Spark models in Apache Atlas, but as of Apache Atlas 2.0.0, it doesn't include the model file yet. Until Apache Atlas publishes new release which includes the model, SAC includes the json model file to apply to Atlas server easily.
 
-Suppose Spark is installed in `<SPARK_HOME>` directory and `atlas-application.properties` is placed on `<SPARK_HOME>/conf` directory:
-
-```shell
-java -cp "<spark dist>/jars/*:<spark dist>/conf:spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar" com.hortonworks.spark.atlas.types.SparkAtlasModel --interactive-auth
-```
-
-The tool will leverage REST client API to request to Atlas which requires authentication. Auth. information is read from `atlas-application.properties`, which should be stored as plain text.
-(It would be same if you decide to leverage REST client API in SAC itself.)
-
-Given the approach is insecure regardless of security mode of cluster, we strongly encourage you to pass `--interactive-auth` as parameter, which asks you to input username and password of Atlas interactively.
-
-If you would like to let SAC handles it instead, you can set you can set `atlas.client.checkModelInStart=true` in `atlas-application.properties` to let SAC check and create models in Spark Atlas Connector's each startup.
-Please note that it leverages REST API even you configure `atlas.client.type=kafka`, and it would require additional configuration for authentication. (`atlas.client.username` and `atlas.client.password`)
-
-In the meanwhile, we're also working on migrating models into Apache Atlas: once it's done, we no longer require this step and leverage the models Atlas registers for the startup.
+Please copy `1100-spark_model.json` to `<ATLAS_HOME>/models/1000-Hadoop` directory and restart Atlas server to take effect.
 
 How To Use
 ==========
