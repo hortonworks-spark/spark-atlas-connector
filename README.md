@@ -32,7 +32,7 @@ Create Atlas models
 
 You may need to create Atlas models to ensure all necessary models are created before running SAC and pushing metadata changes.
 
-According to Atlas team, the official and recommended approach for registering models in Apache Atlas is having json model file. We've co-worked with Atlas team to define official Spark models for Apache Atlas which is compatible with SAC.
+The official and recommended approach for registering models in Apache Atlas is having json model file. We've co-worked with Atlas team to define official Spark models for Apache Atlas which is compatible with SAC.
 
 SAC leverages official Spark models in Apache Atlas, but as of Apache Atlas 2.0.0, it doesn't include the model file yet. Until Apache Atlas publishes new release which includes the model, SAC includes the json model file to apply to Atlas server easily.
 
