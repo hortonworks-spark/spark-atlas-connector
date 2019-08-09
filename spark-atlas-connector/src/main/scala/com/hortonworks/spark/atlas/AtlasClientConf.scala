@@ -63,7 +63,7 @@ object AtlasClientConf {
 
   val CLIENT_TYPE = ConfigEntry("atlas.client.type", "rest")
   val CLIENT_USERNAME = ConfigEntry("atlas.client.username", "admin")
-  val CLIENT_PASSWORD = ConfigEntry("atlas.client.password", "admin123")
+  val CLIENT_PASSWORD = ConfigEntry("atlas.client.password", "admin")
   val CLIENT_NUM_RETRIES = ConfigEntry("atlas.client.numRetries", "3")
 
   val CLUSTER_NAME = ConfigEntry("atlas.cluster.name", "primary")
