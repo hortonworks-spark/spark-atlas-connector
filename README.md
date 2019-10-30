@@ -25,7 +25,11 @@ To build this project, please execute:
 mvn package -DskipTests
 ```
 
-`mvn package` will assemble all the required dependencies and package into an uber jar.
+`mvn package` will assemble all the required dependencies and package into an uber jar:
+
+    spark-atlas-connector-assembly/target/spark-atlas-connector-assembly-0.1.0-SNAPSHOT.jar
+
+(`spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar` is a thin jar without dependencies)
 
 Create Atlas models
 ===================
@@ -38,7 +42,31 @@ Please copy `1100-spark_model.json` to `<ATLAS_HOME>/models/1000-Hadoop` directo
 How To Use
 ==========
 
-To use it, you will need to make this jar accessible in Spark Driver, also configure
+The connector itself is configured with `atlas-application.properties`.
+
+To get started, you can copy the `atlas-application.properties` from your Atlas server.
+
+## Quick start with Atlas rest client:
+
+Modify your copy of `atlas-application.properties` as shown below.
+
+Set this:
+
+    atlas.client.type=rest
+
+Add credentials. These are the defaults for a vanilla atlas server installation:
+
+    atlas.client.username=admin
+    atlas.client.password=admin
+
+If your Atlas server is not on the same host as where your spark job is run:
+- Replace `atlas.rest.address=http://localhost:21000` with `http://your-atlas-host:21000`
+
+For production use, consider using `atlas.client.type=kafka` instead.
+
+## Spark config
+
+To use SAC on a spark job, you need to include the uber jar for Spark Driver and set these spark confs:
 
 ```
 spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker
@@ -46,18 +74,27 @@ spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTra
 spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
-For example, when you're using spark-shell, you can start the Spark like:
+For example, to run `spark-shell`:
 
 ```shell
-bin/spark-shell --jars spark-atlas-connector_2.11-0.1.0-SNAPSHOT.jar \
+bin/spark-shell --jars spark-atlas-connector-assembly-0.1.0-SNAPSHOT.jar \
 --conf spark.extraListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
 --conf spark.sql.queryExecutionListeners=com.hortonworks.spark.atlas.SparkAtlasEventTracker \
 --conf spark.sql.streaming.streamingQueryListeners=com.hortonworks.spark.atlas.SparkAtlasStreamingQueryEventTracker
 ```
 
-Also make sure atlas configuration file `atlas-application.properties` is in the Driver's classpath. For example, putting this file into `<SPARK_HOME>/conf`.
+If you're using spark with `--deploy-mode=client` (which is the default):
+- Make sure that `atlas-application.properties` is in the Driver's classpath
+   - For example, place it at `<SPARK_HOME>/conf/`.
 
-If you're using cluster mode, please also ship this conf file to the remote Drive using `--files atlas-application.properties`.
+If you're using spark with `--deploy-mode=cluster`:
+- Add this spark arg to copy `atlas-application.properties` to all containers:
+
+   `--files atlas-application.properties`
+
+For `--jars` (and `--files`, if applicable), use the full path to the file.
+- For example, use an `hdfs://` path for the `spark-atlas-connector-assembly-0.1.0-SNAPSHOT
+.jar` if you store the jar on hdfs, etc.
 
 Spark Atlas Connector supports two types of Atlas clients, "kafka" and "rest". You can configure which type of client via setting `atlas.client.type` to whether `kafka` or `rest`.
 The default value is `kafka` which provides stable and secured way of publishing changes. Atlas has embedded Kafka instance so you can test it out in test environment, but it's encouraged to use external kafka cluster in production. If you don't have Kafka cluster in production, you may want to set client to `rest`.
