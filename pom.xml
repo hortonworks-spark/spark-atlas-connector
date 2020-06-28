@@ -65,6 +65,15 @@
   </repositories>
 
   <dependencies>
+
+    <dependency>
+      <groupId>io.delta</groupId>
+      <artifactId>delta-core_${scala.binary.version}</artifactId>
+      <version>0.6.0</version>
+      <scope>provided</scope>
+    </dependency>
+
+
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
@@ -123,7 +132,7 @@
     -->
     <dependency>
       <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-scala_2.11</artifactId>
+      <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
       <version>${jackson.version}</version>
       <scope>test</scope>
     </dependency>
@@ -239,8 +248,8 @@
 
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_2.11</artifactId>
-      <version>1.12.5</version>
+      <artifactId>scalacheck_${scala.binary.version}</artifactId>
+      <version>1.14.3</version>
     </dependency>
 
     <dependency>
