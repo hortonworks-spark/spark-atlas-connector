@@ -41,6 +41,9 @@ object external {
   val S3_OBJECT_TYPE_STRING = "aws_s3_object"
   val S3_PSEUDO_DIR_TYPE_STRING = "aws_s3_pseudo_dir"
   val S3_BUCKET_TYPE_STRING = "aws_s3_bucket"
+  val GS_OBJECT_TYPE_STRING = "gcp_gs_object"
+  val GS_PSEUDO_DIR_TYPE_STRING = "gcp_gs_pseudo_dir"
+  val GS_BUCKET_TYPE_STRING = "gcp_gs_bucket"
 
   private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
 
@@ -94,19 +97,19 @@ object external {
     val objectQualifiedName = dirQualifiedName + objectName
 
     // bucket
-    val bucketEntity = new AtlasEntity(S3_BUCKET_TYPE_STRING)
+    val bucketEntity = new AtlasEntity(GS_BUCKET_TYPE_STRING)
     bucketEntity.setAttribute("name", bucketName)
     bucketEntity.setAttribute("qualifiedName", bucketQualifiedName)
 
     // pseudo dir
-    val dirEntity = new AtlasEntity(S3_PSEUDO_DIR_TYPE_STRING)
+    val dirEntity = new AtlasEntity(GS_PSEUDO_DIR_TYPE_STRING)
     dirEntity.setAttribute("name", dirName)
     dirEntity.setAttribute("qualifiedName", dirQualifiedName)
     dirEntity.setAttribute("objectPrefix", dirQualifiedName)
     dirEntity.setAttribute("bucket", AtlasUtils.entityToReference(bucketEntity))
 
     // object
-    val objectEntity = new AtlasEntity(S3_OBJECT_TYPE_STRING)
+    val objectEntity = new AtlasEntity(GS_OBJECT_TYPE_STRING)
     objectEntity.setAttribute("name", objectName)
     objectEntity.setAttribute("path", path)
     objectEntity.setAttribute("qualifiedName", objectQualifiedName)
