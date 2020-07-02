@@ -22,7 +22,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>com.hortonworks.spark</groupId>
-    <artifactId>spark-atlas-connector-main_2.11</artifactId>
+    <artifactId>spark-atlas-connector-main</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
@@ -33,7 +33,7 @@
   <dependencies>
     <dependency>
       <groupId>com.hortonworks.spark</groupId>
-      <artifactId>spark-atlas-connector_${scala.binary.version}</artifactId>
+      <artifactId>spark-atlas-connector</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

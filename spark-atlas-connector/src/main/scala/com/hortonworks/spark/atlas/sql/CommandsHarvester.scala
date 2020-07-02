@@ -39,6 +39,9 @@ import com.hortonworks.spark.atlas.sql.SparkExecutionPlanProcessor.SinkDataSourc
 import com.hortonworks.spark.atlas.types.{AtlasEntityUtils, external, internal}
 import com.hortonworks.spark.atlas.utils.SparkUtils.sparkSession
 import com.hortonworks.spark.atlas.utils.{Logging, SparkUtils}
+import org.apache.hadoop.fs.Path
+import org.apache.spark.sql.delta.DeltaLog
+import org.apache.spark.sql.delta.sources.DeltaDataSource
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.streaming.SinkProgress
 
@@ -165,6 +168,7 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     }
   }
 
+  // TODO : ADD Support For Detla Table output source
   object SaveIntoDataSourceHarvester extends Harvester[SaveIntoDataSourceCommand] {
     override def harvest(
         node: SaveIntoDataSourceCommand,
@@ -175,6 +179,10 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
         case SHCEntities(shcEntities) => Seq(shcEntities)
         case JDBCEntities(jdbcEntities) => Seq(jdbcEntities)
         case KafkaEntities(kafkaEntities) => kafkaEntities
+        case e if e.dataSource.isInstanceOf[DeltaDataSource] =>
+          val path = node.options.getOrElse("path", "none")
+          val entity = external.pathToEntity(path)
+          Seq(entity)
         case e =>
           logWarn(s"Missing output entities: $e")
           Seq.empty
@@ -239,6 +247,12 @@ object CommandsHarvester extends AtlasEntityUtils with Logging {
     tChildren.flatMap {
       case r: HiveTableRelation => Seq(tableToEntity(r.tableMeta))
       case v: View => Seq(tableToEntity(v.desc))
+      case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _)
+        if fileRelation.getClass.getName.contains("org.apache.spark.sql.delta.DeltaLog") =>
+        if (fileRelation.inputFiles.nonEmpty) {
+          val path = new Path(fileRelation.inputFiles.head).getParent.toString
+          Seq(external.pathToEntity(path))
+        } else Seq.empty
       case LogicalRelation(fileRelation: FileRelation, _, catalogTable, _) =>
         catalogTable.map(tbl => Seq(tableToEntity(tbl))).getOrElse(
           fileRelation.inputFiles.flatMap(file => Seq(external.pathToEntity(file))).toSeq)

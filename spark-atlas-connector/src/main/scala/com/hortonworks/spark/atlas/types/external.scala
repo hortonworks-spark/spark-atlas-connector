@@ -41,8 +41,13 @@ object external {
   val S3_OBJECT_TYPE_STRING = "aws_s3_object"
   val S3_PSEUDO_DIR_TYPE_STRING = "aws_s3_pseudo_dir"
   val S3_BUCKET_TYPE_STRING = "aws_s3_bucket"
+  val GS_OBJECT_TYPE_STRING = "gcp_gs_object"
+  val GS_PSEUDO_DIR_TYPE_STRING = "gcp_gs_pseudo_dir"
+  val GS_BUCKET_TYPE_STRING = "gcp_gs_bucket"
 
   private def isS3Schema(schema: String): Boolean = schema.matches("s3[an]?")
+
+  private def isGSSchema(schema: String): Boolean = schema.matches("gs")
 
   private def extractS3Entity(uri: URI, fsPath: Path): SACAtlasEntityWithDependencies = {
     val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
@@ -81,6 +86,43 @@ object external {
     new SACAtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
   }
 
+  private def extractGSEntity(uri: URI, fsPath: Path): SACAtlasEntityWithDependencies = {
+    val path = Path.getPathWithoutSchemeAndAuthority(fsPath).toString
+
+    val bucketName = uri.getAuthority
+    val bucketQualifiedName = s"gs://${bucketName}"
+    val dirName = path.replaceFirst("[^/]*$", "")
+    val dirQualifiedName = bucketQualifiedName + dirName
+    val objectName = path.replaceFirst("^.*/", "")
+    val objectQualifiedName = dirQualifiedName + objectName
+
+    // bucket
+    val bucketEntity = new AtlasEntity(GS_BUCKET_TYPE_STRING)
+    bucketEntity.setAttribute("name", bucketName)
+    bucketEntity.setAttribute("qualifiedName", bucketQualifiedName)
+
+    // pseudo dir
+    val dirEntity = new AtlasEntity(GS_PSEUDO_DIR_TYPE_STRING)
+    dirEntity.setAttribute("name", dirName)
+    dirEntity.setAttribute("qualifiedName", dirQualifiedName)
+    dirEntity.setAttribute("objectPrefix", dirQualifiedName)
+    dirEntity.setAttribute("bucket", AtlasUtils.entityToReference(bucketEntity))
+
+    // object
+    val objectEntity = new AtlasEntity(GS_OBJECT_TYPE_STRING)
+    objectEntity.setAttribute("name", objectName)
+    objectEntity.setAttribute("path", path)
+    objectEntity.setAttribute("qualifiedName", objectQualifiedName)
+    objectEntity.setAttribute("pseudoDirectory", AtlasUtils.entityToReference(dirEntity))
+
+    // dir entity depends on bucket entity
+    val dirEntityWithDeps = new SACAtlasEntityWithDependencies(dirEntity,
+      Seq(SACAtlasEntityWithDependencies(bucketEntity)))
+
+    // object entity depends on dir entity
+    new SACAtlasEntityWithDependencies(objectEntity, Seq(dirEntityWithDeps))
+  }
+
   def pathToEntity(path: String): SACAtlasEntityWithDependencies = {
     val uri = resolveURI(path)
     val fsPath = new Path(uri)
@@ -96,6 +138,8 @@ object external {
       SACAtlasEntityWithDependencies(entity)
     } else if (isS3Schema(uri.getScheme)) {
       extractS3Entity(uri, fsPath)
+    } else if (isGSSchema(uri.getScheme)) {
+      extractGSEntity(uri, fsPath)
     } else {
       val entity = new AtlasEntity(FS_PATH_TYPE_STRING)
       entity.setAttribute("name",
